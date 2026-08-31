@@ -120,7 +120,7 @@ main{ flex:1; padding:24px 28px; max-width: 980px; }
 .badge{ font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; background:var(--line); color:var(--ink-soft); white-space:nowrap; }
 .badge-הושלם, .badge-פעיל, .badge-סגור-הצלחה, .badge-שולם{ background:var(--teal-soft); color:#0B655F; }
 .badge-בתהליך, .badge-להזמנה, .badge-במגעים, .badge-ממתין-לתשלום{ background:var(--amber-soft); color:#9C6B12; }
-.badge-לביצוע, .badge-לבדיקה, .badge-חדש, .badge-בבדיקה{ background:var(--violet-soft); color:#403DA6; }
+.badge-לביצוע, .badge-לבדיקה, .badge-חדש, .badge-בבדיקה, .badge-אדמין{ background:var(--violet-soft); color:#403DA6; }
 .badge-הופסק, .badge-סגור-נכשל{ background:var(--coral-soft); color:#C7402A; }
 
 .status-switch{ display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }

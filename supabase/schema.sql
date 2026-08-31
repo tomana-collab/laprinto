@@ -82,6 +82,17 @@ create table if not exists trends (
   created_at timestamptz default now()
 );
 
+-- ---------- משתמשים (צוות) ----------
+create table if not exists team_members (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  phone text default '',
+  email text default '',
+  role text default 'עובד',               -- עובד / אדמין (תיוג בלבד — לא מייצר login, ראו הערה ב-README)
+  created_by text,
+  created_at timestamptz default now()
+);
+
 -- ---------- הוצאות ----------
 create table if not exists expenses (
   id uuid primary key default gen_random_uuid(),
@@ -89,6 +100,7 @@ create table if not exists expenses (
   category text default 'תפעול',          -- תפעול / שיווק / משלוחים / ציוד / אחר
   amount numeric default 0,
   supplier_id uuid references suppliers(id) on delete set null,
+  paid_by uuid references team_members(id) on delete set null,
   expense_date date,
   payment_method text default 'אשראי',    -- מזומן / אשראי / העברה בנקאית
   status text default 'ממתין לתשלום',      -- ממתין לתשלום / שולם
@@ -122,6 +134,7 @@ alter table suppliers enable row level security;
 alter table opportunities enable row level security;
 alter table trends enable row level security;
 alter table expenses enable row level security;
+alter table team_members enable row level security;
 
 create policy "authenticated full access" on tasks
   for all to authenticated using (true) with check (true);
@@ -136,4 +149,6 @@ create policy "authenticated full access" on opportunities
 create policy "authenticated full access" on trends
   for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on expenses
+  for all to authenticated using (true) with check (true);
+create policy "authenticated full access" on team_members
   for all to authenticated using (true) with check (true);

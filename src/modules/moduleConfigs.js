@@ -111,13 +111,14 @@ export const MODULES = {
     icon: '💸',
     statusField: 'status',
     statusOptions: ['ממתין לתשלום', 'שולם'],
-    // מביא גם את שם הספק המקושר מטבלת suppliers (supplier_id הוא foreign key)
-    selectQuery: '*, suppliers(name)',
+    // מביא גם את שם הספק (suppliers) ואת שם מי ששילם (team_members) דרך ה-foreign keys
+    selectQuery: '*, suppliers(name), team_members(full_name)',
     fields: [
       { key: 'title', label: 'מה זה', type: 'text', required: true },
       { key: 'category', label: 'קטגוריה', type: 'select', options: ['תפעול', 'שיווק', 'משלוחים', 'ציוד', 'אחר'], default: 'תפעול' },
       { key: 'amount', label: 'סכום (₪)', type: 'number', required: true },
       { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
+      { key: 'paid_by', label: 'מי שילם', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
       { key: 'expense_date', label: 'תאריך', type: 'date' },
       { key: 'payment_method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'אשראי', 'העברה בנקאית'], default: 'אשראי' },
       { key: 'receipt_path', label: 'חשבונית רכישה', type: 'file' },
@@ -131,6 +132,7 @@ export const MODULES = {
       { key: 'title', label: 'מה זה' },
       { key: 'category', label: 'קטגוריה' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
+      { key: 'paid_by', label: 'מי שילם', render: row => row.team_members?.full_name || '—' },
       { key: 'amount', label: 'סכום', render: row => `₪${row.amount}` },
       { key: 'receipt_path', label: 'קובץ', render: row => row.receipt_path ? '📎' : '—' },
     ],
@@ -141,6 +143,22 @@ export const MODULES = {
       { key: 'expense_date', label: 'כל החודשים', type: 'month' },
     ],
   },
+
+  team_members: {
+    key: 'team_members',
+    table: 'team_members',
+    label: 'משתמשים',
+    icon: '👤',
+    titleField: 'full_name',
+    statusField: 'role',
+    statusOptions: ['עובד', 'אדמין'], // עובד = ברירת מחדל למשתמש חדש, מקודמים ידנית לאדמין
+    fields: [
+      { key: 'full_name', label: 'שם מלא', type: 'text', required: true },
+      { key: 'phone', label: 'טלפון', type: 'text' },
+      { key: 'email', label: 'מייל', type: 'text' },
+    ],
+    cardMeta: (row) => [row.phone, row.email].filter(Boolean),
+  },
 }
 
-export const MODULE_ORDER = ['tasks', 'ideas', 'products', 'suppliers', 'opportunities', 'trends', 'expenses']
+export const MODULE_ORDER = ['tasks', 'ideas', 'products', 'suppliers', 'opportunities', 'trends', 'expenses', 'team_members']
