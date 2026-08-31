@@ -1,6 +1,8 @@
 // כל מודול מוגדר כאן: שם טבלה ב-Supabase, השדות שלו, ועמודות הטבלה בתצוגה.
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
+import { formatDate } from '../lib/format'
+
 export const MODULES = {
   tasks: {
     key: 'tasks',
@@ -20,7 +22,7 @@ export const MODULES = {
       { key: 'title', label: 'כותרת' },
       { key: 'assignee', label: 'אחראי', render: row => row.assignee || '—' },
       { key: 'priority', label: 'עדיפות' },
-      { key: 'due_date', label: 'תאריך יעד', render: row => row.due_date || '—' },
+      { key: 'due_date', label: 'תאריך יעד', render: row => formatDate(row.due_date) || '—' },
     ],
   },
 
@@ -158,7 +160,7 @@ export const MODULES = {
     // מוסתר מהתפריט לעובד שאינו אדמין (וגם חסום ב-DB ברמת RLS — ראו supabase/schema.sql)
     adminOnly: true,
     columns: [
-      { key: 'expense_date', label: 'תאריך' },
+      { key: 'expense_date', label: 'תאריך', render: row => formatDate(row.expense_date) || '—' },
       { key: 'title', label: 'מה זה' },
       { key: 'category', label: 'קטגוריה' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
