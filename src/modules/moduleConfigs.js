@@ -103,6 +103,28 @@ export const MODULES = {
     ],
     cardMeta: (row) => [row.source].filter(Boolean),
   },
+
+  expenses: {
+    key: 'expenses',
+    table: 'expenses',
+    label: 'הוצאות',
+    icon: '💸',
+    titleField: 'title',
+    statusField: 'status',
+    statusOptions: ['ממתין לתשלום', 'שולם'],
+    fields: [
+      { key: 'title', label: 'מה זה', type: 'text', required: true },
+      { key: 'category', label: 'קטגוריה', type: 'select', options: ['תפעול', 'שיווק', 'משלוחים', 'ציוד', 'אחר'], default: 'תפעול' },
+      { key: 'amount', label: 'סכום (₪)', type: 'number', required: true },
+      { key: 'vendor', label: 'לגורם / ספק', type: 'text' },
+      { key: 'expense_date', label: 'תאריך', type: 'date' },
+      { key: 'payment_method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'אשראי', 'העברה בנקאית'], default: 'אשראי' },
+      { key: 'notes', label: 'הערות', type: 'textarea' },
+    ],
+    // total/paid/pending מחושבים בצד הלקוח מתוך amount + status
+    isExpense: true,
+    cardMeta: (row) => [row.category, row.vendor, row.expense_date, row.amount ? `₪${row.amount}` : null].filter(Boolean),
+  },
 }
 
-export const MODULE_ORDER = ['tasks', 'ideas', 'products', 'suppliers', 'opportunities', 'trends']
+export const MODULE_ORDER = ['tasks', 'ideas', 'products', 'suppliers', 'opportunities', 'trends', 'expenses']

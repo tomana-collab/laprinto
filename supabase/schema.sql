@@ -82,6 +82,21 @@ create table if not exists trends (
   created_at timestamptz default now()
 );
 
+-- ---------- הוצאות ----------
+create table if not exists expenses (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  category text default 'תפעול',          -- תפעול / שיווק / משלוחים / ציוד / אחר
+  amount numeric default 0,
+  vendor text default '',
+  expense_date date,
+  payment_method text default 'אשראי',    -- מזומן / אשראי / העברה בנקאית
+  status text default 'ממתין לתשלום',      -- ממתין לתשלום / שולם
+  notes text default '',
+  created_by text,
+  created_at timestamptz default now()
+);
+
 -- ============================================================
 -- Row Level Security
 -- כל משתמש מחובר (authenticated) יכול לראות/לערוך הכל.
@@ -93,16 +108,19 @@ alter table products enable row level security;
 alter table suppliers enable row level security;
 alter table opportunities enable row level security;
 alter table trends enable row level security;
+alter table expenses enable row level security;
 
 create policy "authenticated full access" on tasks
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+  for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on ideas
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+  for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on products
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+  for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on suppliers
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+  for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on opportunities
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+  for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on trends
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+  for all to authenticated using (true) with check (true);
+create policy "authenticated full access" on expenses
+  for all to authenticated using (true) with check (true);

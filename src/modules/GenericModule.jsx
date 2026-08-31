@@ -78,6 +78,7 @@ export default function GenericModule({ config }) {
       {error && <div className="err-inline">{error}</div>}
 
       {config.isProduct && <ProductsSummary rows={rows} />}
+      {config.isExpense && <ExpensesSummary rows={rows} />}
 
       {config.statusField && (
         <div className="status-filter">
@@ -152,6 +153,19 @@ function ProductsSummary({ rows }) {
       <div className="summary-card"><span>סה"כ עלויות ליחידה</span><b>₪{totalCost.toFixed(0)}</b></div>
       <div className="summary-card"><span>סה"כ מחירי מכירה</span><b>₪{totalRevenue.toFixed(0)}</b></div>
       <div className="summary-card"><span>סה"כ רווח פוטנציאלי</span><b className={totalProfit >= 0 ? 'pos' : 'neg'}>₪{totalProfit.toFixed(0)}</b></div>
+    </div>
+  )
+}
+
+function ExpensesSummary({ rows }) {
+  const total = rows.reduce((a, r) => a + (r.amount || 0), 0)
+  const paid = rows.filter(r => r.status === 'שולם').reduce((a, r) => a + (r.amount || 0), 0)
+  const pending = total - paid
+  return (
+    <div className="summary-row">
+      <div className="summary-card"><span>סה"כ הוצאות</span><b>₪{total.toFixed(0)}</b></div>
+      <div className="summary-card"><span>שולם</span><b className="pos">₪{paid.toFixed(0)}</b></div>
+      <div className="summary-card"><span>ממתין לתשלום</span><b className="neg">₪{pending.toFixed(0)}</b></div>
     </div>
   )
 }
