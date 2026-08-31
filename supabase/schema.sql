@@ -6,11 +6,11 @@
 create extension if not exists "pgcrypto";
 
 -- ---------- משימות ----------
+-- assignee_id (FK ל-team_members) מתווסף אחרי טבלת team_members, למטה בקובץ
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text default '',
-  assignee text default '',
   priority text default 'רגילה',        -- נמוכה / רגילה / גבוהה
   status text default 'לביצוע',          -- לביצוע / בתהליך / הושלם
   due_date date,
@@ -92,6 +92,8 @@ create table if not exists team_members (
   created_by text,
   created_at timestamptz default now()
 );
+
+alter table tasks add column if not exists assignee_id uuid references team_members(id) on delete set null;
 
 -- ---------- הוצאות ----------
 create table if not exists expenses (
@@ -185,3 +187,56 @@ create policy "team_members admin update" on team_members
   for update to authenticated using ((select is_admin())) with check ((select is_admin()));
 create policy "team_members admin delete" on team_members
   for delete to authenticated using ((select is_admin()));
+
+-- עובד יכול לערוך את עצמו (שם/טלפון), אבל לא לקדם את עצמו לאדמין (מוגן ע"י הטריגר למטה)
+drop policy if exists "team_members self update" on team_members;
+create policy "team_members self update" on team_members
+  for update to authenticated
+  using (lower(email) = lower(auth.email()))
+  with check (lower(email) = lower(auth.email()));
+
+create or replace function protect_team_member_role()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.role is distinct from old.role and not (select is_admin()) then
+    new.role := old.role;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists team_members_protect_role on team_members;
+create trigger team_members_protect_role
+before update on team_members
+for each row execute function protect_team_member_role();
+
+-- ============================================================
+-- הרשמה עצמית (Login.jsx, מצב "הרשמה"): auth.signUp() חסום ברמת ה-DB
+-- למי שהמייל שלו לא כבר קיים ב-team_members. נרשם דרך Authentication →
+-- Hooks → "Before User Created" בדשבורד (לא ניתן להגדיר ב-SQL בלבד).
+-- ============================================================
+create or replace function public.check_team_member_before_signup(event jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_email text := event->'user'->>'email';
+begin
+  if not exists (select 1 from team_members where lower(email) = lower(new_email)) then
+    return jsonb_build_object(
+      'error', jsonb_build_object(
+        'http_code', 403,
+        'message', 'האימייל הזה לא רשום ברשימת המשתמשים. פנה למנהל המערכת שיוסיף אותך קודם בסקשן "משתמשים".'
+      )
+    );
+  end if;
+  return jsonb_build_object();
+end;
+$$;
+
+grant execute on function public.check_team_member_before_signup to supabase_auth_admin;
+revoke execute on function public.check_team_member_before_signup from authenticated, anon, public;

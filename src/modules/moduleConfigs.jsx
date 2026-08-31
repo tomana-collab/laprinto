@@ -11,17 +11,20 @@ export const MODULES = {
     icon: '✓',
     statusField: 'status',
     statusOptions: ['לביצוע', 'בתהליך', 'הושלם'],
+    // מביא גם את שם האחראי (team_members) דרך ה-foreign key
+    selectQuery: '*, team_members(full_name)',
     fields: [
       { key: 'title', label: 'כותרת', type: 'text', required: true },
       { key: 'description', label: 'תיאור', type: 'textarea' },
-      { key: 'assignee', label: 'אחראי', type: 'text' },
+      { key: 'assignee_id', label: 'אחראי', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
       { key: 'priority', label: 'עדיפות', type: 'select', options: ['נמוכה', 'רגילה', 'גבוהה'], default: 'רגילה' },
       { key: 'due_date', label: 'תאריך יעד', type: 'date' },
     ],
     columns: [
       { key: 'title', label: 'כותרת' },
-      { key: 'assignee', label: 'אחראי', render: row => row.assignee || '—' },
+      { key: 'assignee', label: 'אחראי', render: row => row.team_members?.full_name || '—' },
       { key: 'priority', label: 'עדיפות' },
+      { key: 'created_by', label: 'נוצר על ידי', render: row => row.created_by || '—' },
       { key: 'due_date', label: 'תאריך יעד', render: row => formatDate(row.due_date) || '—' },
     ],
   },
