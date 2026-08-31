@@ -8,6 +8,10 @@ export default function GenericModule({ config }) {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null) // row being edited, or {} for new, or null for closed
   const [statusFilter, setStatusFilter] = useState('הכל')
+  const [search, setSearch] = useState('')
+  const [filterValues, setFilterValues] = useState({})
+
+  function setFilter(key, val) { setFilterValues(v => ({ ...v, [key]: val })) }
 
   async function load() {
     setError('')
@@ -76,9 +80,21 @@ export default function GenericModule({ config }) {
 
   if (rows === null) return <div className="loading">טוען {config.label}...</div>
 
-  const filtered = (config.statusField && statusFilter !== 'הכל')
+  let filtered = (config.statusField && statusFilter !== 'הכל')
     ? rows.filter(r => r[config.statusField] === statusFilter)
     : rows
+
+  if (config.searchField && search.trim()) {
+    const q = search.trim().toLowerCase()
+    filtered = filtered.filter(r => (r[config.searchField] || '').toLowerCase().includes(q))
+  }
+
+  for (const f of config.filters || []) {
+    const val = filterValues[f.key]
+    if (!val) continue
+    if (f.type === 'month') filtered = filtered.filter(r => (r[f.key] || '').startsWith(val))
+    else filtered = filtered.filter(r => r[f.key] === val)
+  }
 
   return (
     <div>
@@ -104,40 +120,102 @@ export default function GenericModule({ config }) {
         </div>
       )}
 
-      <div className="list">
-        {filtered.length === 0 && <div className="empty-col">אין רשומות עדיין</div>}
-        {filtered.map(row => (
-          <div key={row.id} className="row-card" onClick={() => setEditing(row)}>
-            <div className="row-top">
-              <b>{row[config.titleField]}</b>
+      {(config.searchField || config.filters) && (
+        <div className="filter-bar">
+          {config.searchField && (
+            <input
+              type="text"
+              className="search-input"
+              placeholder={config.searchLabel || 'חיפוש'}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          )}
+          {(config.filters || []).map(f => (
+            f.type === 'relation' ? (
+              <RelationField
+                key={f.key}
+                value={filterValues[f.key] || ''}
+                onChange={v => setFilter(f.key, v)}
+                relation={f.relation}
+                placeholder={f.label}
+              />
+            ) : f.type === 'month' ? (
+              <input
+                key={f.key}
+                type="month"
+                value={filterValues[f.key] || ''}
+                onChange={e => setFilter(f.key, e.target.value)}
+              />
+            ) : null
+          ))}
+        </div>
+      )}
+
+      {config.viewType === 'table' ? (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                {config.columns.map(c => <th key={c.key}>{c.label}</th>)}
+                {config.statusField && <th>סטטוס</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td className="empty-col" colSpan={config.columns.length + (config.statusField ? 1 : 0)}>אין רשומות עדיין</td></tr>
+              )}
+              {filtered.map(row => (
+                <tr key={row.id} onClick={() => setEditing(row)}>
+                  {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? '—')}</td>)}
+                  {config.statusField && (
+                    <td onClick={e => e.stopPropagation()}>
+                      <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>
+                        {config.statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="list">
+          {filtered.length === 0 && <div className="empty-col">אין רשומות עדיין</div>}
+          {filtered.map(row => (
+            <div key={row.id} className="row-card" onClick={() => setEditing(row)}>
+              <div className="row-top">
+                <b>{row[config.titleField]}</b>
+                {config.statusField && (
+                  <span className={`badge badge-${slug(row[config.statusField])}`}>{row[config.statusField]}</span>
+                )}
+              </div>
+              {row.description && <div className="row-desc">{row.description}</div>}
+              {config.isProduct && (
+                <div className="profit-line">
+                  עלות: ₪{row.cost} · מחיר: ₪{row.price} ·
+                  <b className={row.profit >= 0 ? 'pos' : 'neg'}> רווח: ₪{row.profit} ({row.margin_percent}%)</b>
+                </div>
+              )}
+              <div className="row-meta">
+                {config.cardMeta(row).map((m, i) => <span key={i}>{m}</span>)}
+              </div>
               {config.statusField && (
-                <span className={`badge badge-${slug(row[config.statusField])}`}>{row[config.statusField]}</span>
+                <div className="status-switch small" onClick={e => e.stopPropagation()}>
+                  {config.statusOptions.map(s => (
+                    <button
+                      key={s}
+                      className={row[config.statusField] === s ? 'active' : ''}
+                      onClick={() => handleStatusChange(row.id, s)}
+                    >{s}</button>
+                  ))}
+                </div>
               )}
             </div>
-            {row.description && <div className="row-desc">{row.description}</div>}
-            {config.isProduct && (
-              <div className="profit-line">
-                עלות: ₪{row.cost} · מחיר: ₪{row.price} ·
-                <b className={row.profit >= 0 ? 'pos' : 'neg'}> רווח: ₪{row.profit} ({row.margin_percent}%)</b>
-              </div>
-            )}
-            <div className="row-meta">
-              {config.cardMeta(row).map((m, i) => <span key={i}>{m}</span>)}
-            </div>
-            {config.statusField && (
-              <div className="status-switch small" onClick={e => e.stopPropagation()}>
-                {config.statusOptions.map(s => (
-                  <button
-                    key={s}
-                    className={row[config.statusField] === s ? 'active' : ''}
-                    onClick={() => handleStatusChange(row.id, s)}
-                  >{s}</button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {editing && (
         <EditModal
@@ -210,7 +288,7 @@ function FileField({ value, onChange }) {
   )
 }
 
-function RelationField({ value, onChange, relation }) {
+function RelationField({ value, onChange, relation, placeholder = '— ללא —' }) {
   const [options, setOptions] = useState(null)
 
   useEffect(() => {
@@ -222,7 +300,7 @@ function RelationField({ value, onChange, relation }) {
 
   return (
     <select value={value || ''} onChange={e => onChange(e.target.value || null)}>
-      <option value="">— ללא —</option>
+      <option value="">{placeholder}</option>
       {options.map(o => <option key={o.id} value={o.id}>{o[relation.labelField]}</option>)}
     </select>
   )

@@ -109,7 +109,6 @@ export const MODULES = {
     table: 'expenses',
     label: 'הוצאות',
     icon: '💸',
-    titleField: 'title',
     statusField: 'status',
     statusOptions: ['ממתין לתשלום', 'שולם'],
     // מביא גם את שם הספק המקושר מטבלת suppliers (supplier_id הוא foreign key)
@@ -126,7 +125,21 @@ export const MODULES = {
     ],
     // total/paid/pending מחושבים בצד הלקוח מתוך amount + status
     isExpense: true,
-    cardMeta: (row) => [row.category, row.suppliers?.name, row.expense_date, row.amount ? `₪${row.amount}` : null, row.receipt_path ? '📎' : null].filter(Boolean),
+    viewType: 'table',
+    columns: [
+      { key: 'expense_date', label: 'תאריך' },
+      { key: 'title', label: 'מה זה' },
+      { key: 'category', label: 'קטגוריה' },
+      { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
+      { key: 'amount', label: 'סכום', render: row => `₪${row.amount}` },
+      { key: 'receipt_path', label: 'קובץ', render: row => row.receipt_path ? '📎' : '—' },
+    ],
+    searchField: 'title',
+    searchLabel: 'חיפוש לפי שם',
+    filters: [
+      { key: 'supplier_id', label: 'כל הספקים', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
+      { key: 'expense_date', label: 'כל החודשים', type: 'month' },
+    ],
   },
 }
 
