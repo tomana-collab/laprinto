@@ -126,6 +126,8 @@ export const MODULES = {
     ],
     // total/paid/pending מחושבים בצד הלקוח מתוך amount + status
     isExpense: true,
+    // מוסתר מהתפריט לעובד שאינו אדמין (וגם חסום ב-DB ברמת RLS — ראו supabase/schema.sql)
+    adminOnly: true,
     viewType: 'table',
     columns: [
       { key: 'expense_date', label: 'תאריך' },

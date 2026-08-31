@@ -115,17 +115,40 @@ insert into storage.buckets (id, name, public)
 values ('attachments', 'attachments', false)
 on conflict (id) do nothing;
 
-create policy "attachments authenticated insert" on storage.objects
-  for insert to authenticated with check (bucket_id = 'attachments');
-create policy "attachments authenticated select" on storage.objects
-  for select to authenticated using (bucket_id = 'attachments');
-create policy "attachments authenticated delete" on storage.objects
-  for delete to authenticated using (bucket_id = 'attachments');
+-- ============================================================
+-- הרשאות: is_admin() בודקת אם המשתמש המחובר מקושר (לפי מייל) לשורה
+-- ב-team_members עם role='אדמין'. משמשת גם למדיניות team_members
+-- עצמה (מי יכול לערוך תפקידים) וגם לחסימת expenses/attachments
+-- לעובדים שאינם אדמין.
+-- ============================================================
+create or replace function is_admin()
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from team_members
+    where lower(email) = lower(auth.email()) and role = 'אדמין'
+  );
+$$;
+
+insert into storage.buckets (id, name, public)
+values ('attachments', 'attachments', false)
+on conflict (id) do nothing;
+
+create policy "attachments admin insert" on storage.objects
+  for insert to authenticated with check (bucket_id = 'attachments' and (select is_admin()));
+create policy "attachments admin select" on storage.objects
+  for select to authenticated using (bucket_id = 'attachments' and (select is_admin()));
+create policy "attachments admin delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'attachments' and (select is_admin()));
 
 -- ============================================================
 -- Row Level Security
--- כל משתמש מחובר (authenticated) יכול לראות/לערוך הכל.
--- זה מתאים לצוות סגור וקטן (אתה + שותף) שמתחברים עם login.
+-- ברירת מחדל: כל משתמש מחובר (authenticated) יכול לראות/לערוך הכל.
+-- מתאים לצוות סגור וקטן. חריגים: expenses/attachments (אדמין בלבד),
+-- ועריכת team_members עצמה (רק אדמין קובע מי אדמין).
 -- ============================================================
 alter table tasks enable row level security;
 alter table ideas enable row level security;
@@ -148,7 +171,17 @@ create policy "authenticated full access" on opportunities
   for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on trends
   for all to authenticated using (true) with check (true);
-create policy "authenticated full access" on expenses
-  for all to authenticated using (true) with check (true);
-create policy "authenticated full access" on team_members
-  for all to authenticated using (true) with check (true);
+
+create policy "expenses admin only" on expenses
+  for all to authenticated using ((select is_admin())) with check ((select is_admin()));
+
+-- team_members: כולם רואים את הרשימה, רק אדמין מוסיף/עורך/מוחק
+-- (אחרת עובד יכול לשנות את עצמו לאדמין דרך הטופס)
+create policy "team_members select all" on team_members
+  for select to authenticated using (true);
+create policy "team_members admin insert" on team_members
+  for insert to authenticated with check ((select is_admin()));
+create policy "team_members admin update" on team_members
+  for update to authenticated using ((select is_admin())) with check ((select is_admin()));
+create policy "team_members admin delete" on team_members
+  for delete to authenticated using ((select is_admin()));
