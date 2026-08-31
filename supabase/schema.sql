@@ -1,0 +1,108 @@
+-- ============================================================
+-- Laprinto CRM — סכמת מסד נתונים ל-Supabase
+-- הרץ את כל הקובץ הזה ב- Supabase Dashboard > SQL Editor > New query
+-- ============================================================
+
+create extension if not exists "pgcrypto";
+
+-- ---------- משימות ----------
+create table if not exists tasks (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text default '',
+  assignee text default '',
+  priority text default 'רגילה',        -- נמוכה / רגילה / גבוהה
+  status text default 'לביצוע',          -- לביצוע / בתהליך / הושלם
+  due_date date,
+  created_by text,
+  created_at timestamptz default now()
+);
+
+-- ---------- רעיונות ----------
+create table if not exists ideas (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text default '',
+  tag text default '',
+  created_by text,
+  created_at timestamptz default now()
+);
+
+-- ---------- מוצרים (עם חישוב רווח אוטומטי) ----------
+create table if not exists products (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  status text default 'לבדיקה',           -- לבדיקה / להזמנה / פעיל / הופסק
+  cost numeric default 0,                 -- עלות ליחידה (ספק)
+  extra_expenses numeric default 0,       -- הוצאות נלוות (משלוח, פרסום ליחידה וכו')
+  price numeric default 0,                -- מחיר מכירה
+  supplier text default '',
+  notes text default '',
+  profit numeric generated always as (price - cost - extra_expenses) stored,
+  margin_percent numeric generated always as (
+    case when price > 0 then round(((price - cost - extra_expenses) / price) * 100, 1) else 0 end
+  ) stored,
+  created_by text,
+  created_at timestamptz default now()
+);
+
+-- ---------- ספקים ----------
+create table if not exists suppliers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  contact_person text default '',
+  phone text default '',
+  email text default '',
+  products_supplied text default '',
+  terms text default '',
+  notes text default '',
+  created_by text,
+  created_at timestamptz default now()
+);
+
+-- ---------- הזדמנויות ----------
+create table if not exists opportunities (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text default '',
+  status text default 'חדש',              -- חדש / בבדיקה / במגעים / סגור-הצלחה / סגור-נכשל
+  value numeric default 0,
+  created_by text,
+  created_at timestamptz default now()
+);
+
+-- ---------- טרנדים ----------
+create table if not exists trends (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text default '',
+  link text default '',
+  source text default '',
+  created_by text,
+  created_at timestamptz default now()
+);
+
+-- ============================================================
+-- Row Level Security
+-- כל משתמש מחובר (authenticated) יכול לראות/לערוך הכל.
+-- זה מתאים לצוות סגור וקטן (אתה + שותף) שמתחברים עם login.
+-- ============================================================
+alter table tasks enable row level security;
+alter table ideas enable row level security;
+alter table products enable row level security;
+alter table suppliers enable row level security;
+alter table opportunities enable row level security;
+alter table trends enable row level security;
+
+create policy "authenticated full access" on tasks
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated full access" on ideas
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated full access" on products
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated full access" on suppliers
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated full access" on opportunities
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated full access" on trends
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
