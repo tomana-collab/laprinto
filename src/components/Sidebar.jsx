@@ -38,6 +38,10 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
           ))}
         </nav>
         <div className="sidebar-footer">
+          <button
+            className={`settings-btn ${active === 'settings' ? 'active' : ''}`}
+            onClick={() => { onSelect('settings'); onClose() }}
+          >⚙️ הגדרות</button>
           <div className="user-line">{user?.email}</div>
           <button className="signout" onClick={signOut}>התנתקות</button>
         </div>

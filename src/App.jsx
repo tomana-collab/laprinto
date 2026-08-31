@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
+import Settings from './pages/Settings'
 import Sidebar from './components/Sidebar'
 import GenericModule from './modules/GenericModule'
 import { MODULES } from './modules/moduleConfigs'
@@ -23,7 +24,7 @@ export default function App() {
       />
       <main>
         <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)}>☰ תפריט</button>
-        <GenericModule key={active} config={MODULES[active]} />
+        {active === 'settings' ? <Settings /> : <GenericModule key={active} config={MODULES[active]} />}
       </main>
     </div>
   )
