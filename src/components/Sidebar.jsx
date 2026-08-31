@@ -27,6 +27,14 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
           </div>
         </div>
         <nav>
+          {role === 'אדמין' && (
+            <button
+              className={active === 'dashboard' ? 'active' : ''}
+              onClick={() => { onSelect('dashboard'); onClose() }}
+            >
+              <span className="nav-icon">📊</span> דאשבורד
+            </button>
+          )}
           {visibleModules.map(key => (
             <button
               key={key}
