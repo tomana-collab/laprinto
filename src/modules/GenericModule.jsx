@@ -43,7 +43,11 @@ export default function GenericModule({ config }) {
     for (const fld of config.fields) {
       if (fld.type === 'file' && payload[fld.key] instanceof File) {
         const file = payload[fld.key]
-        const path = `${config.table}/${fld.key}/${crypto.randomUUID()}-${file.name}`
+        // ל-Storage מותרים רק תווי ASCII ב-key, אז שם הקובץ המקורי (שיכול לכלול עברית) לא
+        // נכנס לנתיב — רק הסיומת שלו, כדי למנוע "Invalid key" בהעלאות עם שם עברי/מיוחד
+        const extMatch = file.name.match(/\.([a-zA-Z0-9]+)$/)
+        const ext = extMatch ? `.${extMatch[1]}` : ''
+        const path = `${config.table}/${fld.key}/${crypto.randomUUID()}${ext}`
         const { error: upErr } = await supabase.storage.from('attachments').upload(path, file)
         if (upErr) { setError(upErr.message); return }
         payload[fld.key] = path
