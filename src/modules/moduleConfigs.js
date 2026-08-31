@@ -119,11 +119,12 @@ export const MODULES = {
       { key: 'vendor', label: 'לגורם / ספק', type: 'text' },
       { key: 'expense_date', label: 'תאריך', type: 'date' },
       { key: 'payment_method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'אשראי', 'העברה בנקאית'], default: 'אשראי' },
+      { key: 'receipt_path', label: 'חשבונית רכישה', type: 'file' },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
     // total/paid/pending מחושבים בצד הלקוח מתוך amount + status
     isExpense: true,
-    cardMeta: (row) => [row.category, row.vendor, row.expense_date, row.amount ? `₪${row.amount}` : null].filter(Boolean),
+    cardMeta: (row) => [row.category, row.vendor, row.expense_date, row.amount ? `₪${row.amount}` : null, row.receipt_path ? '📎' : null].filter(Boolean),
   },
 }
 

@@ -92,10 +92,23 @@ create table if not exists expenses (
   expense_date date,
   payment_method text default 'אשראי',    -- מזומן / אשראי / העברה בנקאית
   status text default 'ממתין לתשלום',      -- ממתין לתשלום / שולם
+  receipt_path text,                      -- נתיב הקובץ ב-Storage bucket "attachments"
   notes text default '',
   created_by text,
   created_at timestamptz default now()
 );
+
+-- ---------- Storage: קבצים מצורפים (חשבוניות וכו') ----------
+insert into storage.buckets (id, name, public)
+values ('attachments', 'attachments', false)
+on conflict (id) do nothing;
+
+create policy "attachments authenticated insert" on storage.objects
+  for insert to authenticated with check (bucket_id = 'attachments');
+create policy "attachments authenticated select" on storage.objects
+  for select to authenticated using (bucket_id = 'attachments');
+create policy "attachments authenticated delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'attachments');
 
 -- ============================================================
 -- Row Level Security

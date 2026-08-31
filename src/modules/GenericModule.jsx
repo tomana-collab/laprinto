@@ -32,7 +32,18 @@ export default function GenericModule({ config }) {
     config.fields.forEach(fld => {
       if (fld.type === 'number') payload[fld.key] = payload[fld.key] === '' ? 0 : Number(payload[fld.key])
       if (fld.type === 'date' && payload[fld.key] === '') payload[fld.key] = null
+      if (fld.type === 'file' && payload[fld.key] === '') payload[fld.key] = null
     })
+
+    for (const fld of config.fields) {
+      if (fld.type === 'file' && payload[fld.key] instanceof File) {
+        const file = payload[fld.key]
+        const path = `${config.table}/${fld.key}/${crypto.randomUUID()}-${file.name}`
+        const { error: upErr } = await supabase.storage.from('attachments').upload(path, file)
+        if (upErr) { setError(upErr.message); return }
+        payload[fld.key] = path
+      }
+    }
 
     if (editing && editing.id) {
       const { error } = await supabase.from(config.table).update(payload).eq('id', editing.id)
@@ -170,6 +181,34 @@ function ExpensesSummary({ rows }) {
   )
 }
 
+function FileField({ value, onChange }) {
+  const [busy, setBusy] = useState(false)
+  const isExisting = typeof value === 'string' && value
+  const isPending = value instanceof File
+
+  async function handleView() {
+    setBusy(true)
+    const { data, error } = await supabase.storage.from('attachments').createSignedUrl(value, 120)
+    setBusy(false)
+    if (!error && data) window.open(data.signedUrl, '_blank')
+  }
+
+  return (
+    <div className="file-field">
+      {isExisting && (
+        <div className="file-current">
+          <button type="button" onClick={handleView} disabled={busy}>{busy ? 'טוען...' : '📎 צפייה בקובץ הקיים'}</button>
+          <button type="button" className="file-remove" onClick={() => onChange(null)}>הסרה</button>
+        </div>
+      )}
+      {isPending && <div className="file-current"><span>📎 {value.name} (חדש)</span></div>}
+      {!isExisting && (
+        <input type="file" accept="image/*,application/pdf" onChange={e => onChange(e.target.files[0] || null)} />
+      )}
+    </div>
+  )
+}
+
 function EditModal({ config, initial, onCancel, onSave, onDelete }) {
   const [form, setForm] = useState(() => {
     const f = {}
@@ -193,6 +232,8 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
               <select value={form[fld.key]} onChange={e => set(fld.key, e.target.value)}>
                 {fld.options.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
+            ) : fld.type === 'file' ? (
+              <FileField value={form[fld.key]} onChange={v => set(fld.key, v)} />
             ) : (
               <input
                 type={fld.type === 'number' ? 'number' : fld.type === 'date' ? 'date' : 'text'}

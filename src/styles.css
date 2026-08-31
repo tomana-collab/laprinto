@@ -122,6 +122,11 @@ main{ flex:1; padding:24px 28px; max-width: 980px; }
   font-family:'Assistant',sans-serif; font-size:15px; color:var(--ink); background:#FCFCFD;
 }
 .field textarea{ resize:vertical; min-height:70px; }
+.file-current{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.file-current button{ background:#F5F5F9; border:1.5px solid var(--line); border-radius:8px; padding:8px 12px; font-size:13px; font-weight:700; color:var(--ink); }
+.file-current .file-remove{ background:var(--coral-soft); color:#C7402A; border-color:transparent; }
+.file-current span{ font-size:13px; color:var(--ink-soft); }
+.field input[type="file"]{ padding:8px; font-size:13.5px; }
 .modal-actions{ display:flex; gap:8px; margin-top:18px; }
 .btn{ flex:1; padding:12px; border-radius:12px; border:none; font-weight:700; font-size:14.5px; }
 .btn-primary{ background:var(--ink); color:#fff; }
