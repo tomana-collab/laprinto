@@ -88,7 +88,7 @@ create table if not exists expenses (
   title text not null,
   category text default 'תפעול',          -- תפעול / שיווק / משלוחים / ציוד / אחר
   amount numeric default 0,
-  vendor text default '',
+  supplier_id uuid references suppliers(id) on delete set null,
   expense_date date,
   payment_method text default 'אשראי',    -- מזומן / אשראי / העברה בנקאית
   status text default 'ממתין לתשלום',      -- ממתין לתשלום / שולם

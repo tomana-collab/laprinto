@@ -13,7 +13,7 @@ export default function GenericModule({ config }) {
     setError('')
     const { data, error } = await supabase
       .from(config.table)
-      .select('*')
+      .select(config.selectQuery || '*')
       .order('created_at', { ascending: false })
     if (error) setError(error.message)
     else setRows(data)
@@ -33,6 +33,7 @@ export default function GenericModule({ config }) {
       if (fld.type === 'number') payload[fld.key] = payload[fld.key] === '' ? 0 : Number(payload[fld.key])
       if (fld.type === 'date' && payload[fld.key] === '') payload[fld.key] = null
       if (fld.type === 'file' && payload[fld.key] === '') payload[fld.key] = null
+      if (fld.type === 'relation' && payload[fld.key] === '') payload[fld.key] = null
     })
 
     for (const fld of config.fields) {
@@ -209,6 +210,24 @@ function FileField({ value, onChange }) {
   )
 }
 
+function RelationField({ value, onChange, relation }) {
+  const [options, setOptions] = useState(null)
+
+  useEffect(() => {
+    supabase.from(relation.table).select(`id, ${relation.labelField}`).order(relation.labelField)
+      .then(({ data }) => setOptions(data || []))
+  }, [relation.table, relation.labelField])
+
+  if (options === null) return <div className="loading">טוען...</div>
+
+  return (
+    <select value={value || ''} onChange={e => onChange(e.target.value || null)}>
+      <option value="">— ללא —</option>
+      {options.map(o => <option key={o.id} value={o.id}>{o[relation.labelField]}</option>)}
+    </select>
+  )
+}
+
 function EditModal({ config, initial, onCancel, onSave, onDelete }) {
   const [form, setForm] = useState(() => {
     const f = {}
@@ -234,6 +253,8 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
               </select>
             ) : fld.type === 'file' ? (
               <FileField value={form[fld.key]} onChange={v => set(fld.key, v)} />
+            ) : fld.type === 'relation' ? (
+              <RelationField value={form[fld.key]} onChange={v => set(fld.key, v)} relation={fld.relation} />
             ) : (
               <input
                 type={fld.type === 'number' ? 'number' : fld.type === 'date' ? 'date' : 'text'}

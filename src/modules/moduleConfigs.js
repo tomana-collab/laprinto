@@ -112,11 +112,13 @@ export const MODULES = {
     titleField: 'title',
     statusField: 'status',
     statusOptions: ['ממתין לתשלום', 'שולם'],
+    // מביא גם את שם הספק המקושר מטבלת suppliers (supplier_id הוא foreign key)
+    selectQuery: '*, suppliers(name)',
     fields: [
       { key: 'title', label: 'מה זה', type: 'text', required: true },
       { key: 'category', label: 'קטגוריה', type: 'select', options: ['תפעול', 'שיווק', 'משלוחים', 'ציוד', 'אחר'], default: 'תפעול' },
       { key: 'amount', label: 'סכום (₪)', type: 'number', required: true },
-      { key: 'vendor', label: 'לגורם / ספק', type: 'text' },
+      { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
       { key: 'expense_date', label: 'תאריך', type: 'date' },
       { key: 'payment_method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'אשראי', 'העברה בנקאית'], default: 'אשראי' },
       { key: 'receipt_path', label: 'חשבונית רכישה', type: 'file' },
@@ -124,7 +126,7 @@ export const MODULES = {
     ],
     // total/paid/pending מחושבים בצד הלקוח מתוך amount + status
     isExpense: true,
-    cardMeta: (row) => [row.category, row.vendor, row.expense_date, row.amount ? `₪${row.amount}` : null, row.receipt_path ? '📎' : null].filter(Boolean),
+    cardMeta: (row) => [row.category, row.suppliers?.name, row.expense_date, row.amount ? `₪${row.amount}` : null, row.receipt_path ? '📎' : null].filter(Boolean),
   },
 }
 
