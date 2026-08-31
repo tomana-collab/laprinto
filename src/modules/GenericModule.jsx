@@ -156,70 +156,33 @@ export default function GenericModule({ config }) {
         </div>
       )}
 
-      {config.viewType === 'table' ? (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                {config.columns.map(c => <th key={c.key}>{c.label}</th>)}
-                {config.statusField && <th>סטטוס</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr><td className="empty-col" colSpan={config.columns.length + (config.statusField ? 1 : 0)}>אין רשומות עדיין</td></tr>
-              )}
-              {filtered.map(row => (
-                <tr key={row.id} onClick={() => setEditing(row)}>
-                  {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? '—')}</td>)}
-                  {config.statusField && (
-                    <td onClick={e => e.stopPropagation()}>
-                      <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>
-                        {config.statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="list">
-          {filtered.length === 0 && <div className="empty-col">אין רשומות עדיין</div>}
-          {filtered.map(row => (
-            <div key={row.id} className="row-card" onClick={() => setEditing(row)}>
-              <div className="row-top">
-                <b>{row[config.titleField]}</b>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              {config.columns.map(c => <th key={c.key}>{c.label}</th>)}
+              {config.statusField && <th>סטטוס</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr><td className="empty-col" colSpan={config.columns.length + (config.statusField ? 1 : 0)}>אין רשומות עדיין</td></tr>
+            )}
+            {filtered.map(row => (
+              <tr key={row.id} onClick={() => setEditing(row)}>
+                {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? '—')}</td>)}
                 {config.statusField && (
-                  <span className={`badge badge-${slug(row[config.statusField])}`}>{row[config.statusField]}</span>
+                  <td onClick={e => e.stopPropagation()}>
+                    <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>
+                      {config.statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </td>
                 )}
-              </div>
-              {row.description && <div className="row-desc">{row.description}</div>}
-              {config.isProduct && (
-                <div className="profit-line">
-                  עלות: ₪{row.cost} · מחיר: ₪{row.price} ·
-                  <b className={row.profit >= 0 ? 'pos' : 'neg'}> רווח: ₪{row.profit} ({row.margin_percent}%)</b>
-                </div>
-              )}
-              <div className="row-meta">
-                {config.cardMeta(row).map((m, i) => <span key={i}>{m}</span>)}
-              </div>
-              {config.statusField && (
-                <div className="status-switch small" onClick={e => e.stopPropagation()}>
-                  {config.statusOptions.map(s => (
-                    <button
-                      key={s}
-                      className={row[config.statusField] === s ? 'active' : ''}
-                      onClick={() => handleStatusChange(row.id, s)}
-                    >{s}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {editing && (
         <EditModal
@@ -232,10 +195,6 @@ export default function GenericModule({ config }) {
       )}
     </div>
   )
-}
-
-function slug(s) {
-  return (s || '').replace(/\s/g, '-')
 }
 
 function ProductsSummary({ rows }) {

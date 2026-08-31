@@ -1,4 +1,4 @@
-// כל מודול מוגדר כאן: שם טבלה ב-Supabase, השדות שלו, וסוג התצוגה.
+// כל מודול מוגדר כאן: שם טבלה ב-Supabase, השדות שלו, ועמודות הטבלה בתצוגה.
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
 export const MODULES = {
@@ -7,7 +7,6 @@ export const MODULES = {
     table: 'tasks',
     label: 'משימות',
     icon: '✓',
-    titleField: 'title',
     statusField: 'status',
     statusOptions: ['לביצוע', 'בתהליך', 'הושלם'],
     fields: [
@@ -17,7 +16,12 @@ export const MODULES = {
       { key: 'priority', label: 'עדיפות', type: 'select', options: ['נמוכה', 'רגילה', 'גבוהה'], default: 'רגילה' },
       { key: 'due_date', label: 'תאריך יעד', type: 'date' },
     ],
-    cardMeta: (row) => [row.assignee, row.priority, row.due_date].filter(Boolean),
+    columns: [
+      { key: 'title', label: 'כותרת' },
+      { key: 'assignee', label: 'אחראי', render: row => row.assignee || '—' },
+      { key: 'priority', label: 'עדיפות' },
+      { key: 'due_date', label: 'תאריך יעד', render: row => row.due_date || '—' },
+    ],
   },
 
   ideas: {
@@ -25,13 +29,16 @@ export const MODULES = {
     table: 'ideas',
     label: 'רעיונות',
     icon: '💡',
-    titleField: 'title',
     fields: [
       { key: 'title', label: 'כותרת', type: 'text', required: true },
       { key: 'description', label: 'תיאור', type: 'textarea' },
       { key: 'tag', label: 'תגית', type: 'text' },
     ],
-    cardMeta: (row) => [row.tag].filter(Boolean),
+    columns: [
+      { key: 'title', label: 'כותרת' },
+      { key: 'description', label: 'תיאור', render: row => row.description || '—' },
+      { key: 'tag', label: 'תגית', render: row => row.tag || '—' },
+    ],
   },
 
   products: {
@@ -39,7 +46,6 @@ export const MODULES = {
     table: 'products',
     label: 'מוצרים',
     icon: '📦',
-    titleField: 'name',
     statusField: 'status',
     statusOptions: ['לבדיקה', 'להזמנה', 'פעיל', 'הופסק'],
     fields: [
@@ -52,7 +58,14 @@ export const MODULES = {
     ],
     // profit ו-margin_percent מחושבים אוטומטית ב-DB (generated columns)
     isProduct: true,
-    cardMeta: (row) => [row.supplier].filter(Boolean),
+    columns: [
+      { key: 'name', label: 'שם מוצר' },
+      { key: 'supplier', label: 'ספק', render: row => row.supplier || '—' },
+      { key: 'cost', label: 'עלות', render: row => `₪${row.cost}` },
+      { key: 'price', label: 'מחיר', render: row => `₪${row.price}` },
+      { key: 'profit', label: 'רווח', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
+      { key: 'margin_percent', label: 'מרווח', render: row => `${row.margin_percent}%` },
+    ],
   },
 
   suppliers: {
@@ -60,7 +73,6 @@ export const MODULES = {
     table: 'suppliers',
     label: 'ספקים',
     icon: '🚚',
-    titleField: 'name',
     fields: [
       { key: 'name', label: 'שם הספק', type: 'text', required: true },
       { key: 'contact_person', label: 'איש קשר', type: 'text' },
@@ -70,7 +82,12 @@ export const MODULES = {
       { key: 'terms', label: 'תנאי תשלום/הזמנה', type: 'textarea' },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
-    cardMeta: (row) => [row.contact_person, row.phone].filter(Boolean),
+    columns: [
+      { key: 'name', label: 'שם הספק' },
+      { key: 'contact_person', label: 'איש קשר', render: row => row.contact_person || '—' },
+      { key: 'phone', label: 'טלפון', render: row => row.phone || '—' },
+      { key: 'email', label: 'אימייל', render: row => row.email || '—' },
+    ],
   },
 
   opportunities: {
@@ -78,7 +95,6 @@ export const MODULES = {
     table: 'opportunities',
     label: 'הזדמנויות',
     icon: '🎯',
-    titleField: 'title',
     statusField: 'status',
     statusOptions: ['חדש', 'בבדיקה', 'במגעים', 'סגור-הצלחה', 'סגור-נכשל'],
     fields: [
@@ -86,7 +102,11 @@ export const MODULES = {
       { key: 'description', label: 'תיאור', type: 'textarea' },
       { key: 'value', label: 'שווי משוער (₪)', type: 'number' },
     ],
-    cardMeta: (row) => [row.value ? `₪${row.value}` : null].filter(Boolean),
+    columns: [
+      { key: 'title', label: 'כותרת' },
+      { key: 'description', label: 'תיאור', render: row => row.description || '—' },
+      { key: 'value', label: 'שווי משוער', render: row => row.value ? `₪${row.value}` : '—' },
+    ],
   },
 
   trends: {
@@ -94,14 +114,23 @@ export const MODULES = {
     table: 'trends',
     label: 'טרנדים',
     icon: '📈',
-    titleField: 'title',
     fields: [
       { key: 'title', label: 'כותרת', type: 'text', required: true },
       { key: 'description', label: 'תיאור', type: 'textarea' },
       { key: 'source', label: 'מקור', type: 'text' },
       { key: 'link', label: 'קישור', type: 'text' },
     ],
-    cardMeta: (row) => [row.source].filter(Boolean),
+    columns: [
+      { key: 'title', label: 'כותרת' },
+      { key: 'source', label: 'מקור', render: row => row.source || '—' },
+      {
+        key: 'link',
+        label: 'קישור',
+        render: row => row.link
+          ? <a href={row.link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>קישור</a>
+          : '—',
+      },
+    ],
   },
 
   expenses: {
@@ -128,7 +157,6 @@ export const MODULES = {
     isExpense: true,
     // מוסתר מהתפריט לעובד שאינו אדמין (וגם חסום ב-DB ברמת RLS — ראו supabase/schema.sql)
     adminOnly: true,
-    viewType: 'table',
     columns: [
       { key: 'expense_date', label: 'תאריך' },
       { key: 'title', label: 'מה זה' },
@@ -151,7 +179,6 @@ export const MODULES = {
     table: 'team_members',
     label: 'משתמשים',
     icon: '👤',
-    titleField: 'full_name',
     statusField: 'role',
     statusOptions: ['עובד', 'אדמין'], // עובד = ברירת מחדל למשתמש חדש, מקודמים ידנית לאדמין
     fields: [
@@ -159,7 +186,11 @@ export const MODULES = {
       { key: 'phone', label: 'טלפון', type: 'text' },
       { key: 'email', label: 'מייל', type: 'text' },
     ],
-    cardMeta: (row) => [row.phone, row.email].filter(Boolean),
+    columns: [
+      { key: 'full_name', label: 'שם מלא' },
+      { key: 'phone', label: 'טלפון', render: row => row.phone || '—' },
+      { key: 'email', label: 'מייל', render: row => row.email || '—' },
+    ],
   },
 }
 

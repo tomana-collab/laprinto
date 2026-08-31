@@ -81,9 +81,10 @@ main{ flex:1; padding:24px 28px; max-width: 980px; }
 .summary-card{ background:var(--paper); border-radius:14px; padding:14px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:4px; }
 .summary-card span{ font-size:12px; color:var(--ink-soft); }
 .summary-card b{ font-family:'JetBrains Mono',monospace; font-size:18px; }
-.summary-card b.pos{ color:var(--teal); }
-.summary-card b.neg{ color:var(--coral); }
 @media (max-width:640px){ .summary-row{ grid-template-columns:1fr; } }
+
+.pos{ color:var(--teal); }
+.neg{ color:var(--coral); }
 
 .status-filter{ display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
 .status-filter button{ background:var(--paper); border:1.5px solid var(--line); padding:6px 13px; border-radius:999px; font-size:13px; font-weight:600; color:var(--ink-soft); }
@@ -99,33 +100,13 @@ main{ flex:1; padding:24px 28px; max-width: 980px; }
 .table-wrap{ overflow-x:auto; background:var(--paper); border-radius:14px; box-shadow:var(--shadow); }
 .data-table{ width:100%; border-collapse:collapse; font-size:13.5px; }
 .data-table th{ text-align:right; font-size:12px; color:var(--ink-soft); font-weight:700; padding:12px 14px; border-bottom:1px solid var(--line); white-space:nowrap; }
-.data-table td{ padding:11px 14px; border-bottom:1px solid var(--line); white-space:nowrap; }
+.data-table td{ padding:11px 14px; border-bottom:1px solid var(--line); }
 .data-table tbody tr:last-child td{ border-bottom:none; }
 .data-table tbody tr{ cursor:pointer; }
 .data-table tbody tr:hover{ background:#FAFAFC; }
-.data-table td.empty-col{ cursor:default; white-space:normal; }
+.data-table td.empty-col{ cursor:default; }
 .data-table select{ border:1.5px solid var(--line); border-radius:8px; padding:5px 8px; font-size:12.5px; font-weight:600; background:#FCFCFD; }
 @media (max-width:640px){ .data-table{ font-size:12.5px; } .data-table th, .data-table td{ padding:9px 10px; } }
-
-.list{ display:flex; flex-direction:column; gap:10px; }
-.row-card{ background:var(--paper); border-radius:14px; padding:14px 16px; box-shadow:var(--shadow); cursor:pointer; border:1px solid transparent; }
-.row-card:hover{ border-color:var(--line); }
-.row-top{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:5px; }
-.row-top b{ font-size:15.5px; }
-.row-desc{ font-size:13.5px; color:var(--ink-soft); margin-bottom:8px; line-height:1.5; }
-.row-meta{ display:flex; gap:10px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft); }
-.profit-line{ font-size:13px; color:var(--ink-soft); margin-bottom:8px; }
-.profit-line .pos{ color:var(--teal); }
-.profit-line .neg{ color:var(--coral); }
-.badge{ font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; background:var(--line); color:var(--ink-soft); white-space:nowrap; }
-.badge-הושלם, .badge-פעיל, .badge-סגור-הצלחה, .badge-שולם{ background:var(--teal-soft); color:#0B655F; }
-.badge-בתהליך, .badge-להזמנה, .badge-במגעים, .badge-ממתין-לתשלום{ background:var(--amber-soft); color:#9C6B12; }
-.badge-לביצוע, .badge-לבדיקה, .badge-חדש, .badge-בבדיקה, .badge-אדמין{ background:var(--violet-soft); color:#403DA6; }
-.badge-הופסק, .badge-סגור-נכשל{ background:var(--coral-soft); color:#C7402A; }
-
-.status-switch{ display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
-.status-switch button{ background:#F5F5F9; border:1.5px solid var(--line); border-radius:8px; padding:5px 10px; font-size:11.5px; font-weight:700; }
-.status-switch button.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
 
 /* ---------- modal ---------- */
 .overlay{ position:fixed; inset:0; background:rgba(20,22,35,.5); display:flex; align-items:flex-end; justify-content:center; z-index:40; }
