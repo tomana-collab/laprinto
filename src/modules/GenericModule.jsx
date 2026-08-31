@@ -112,6 +112,7 @@ export default function GenericModule({ config }) {
 
       {config.isProduct && <ProductsSummary rows={rows} />}
       {config.isExpense && <ExpensesSummary rows={rows} />}
+      {config.isExpense && <PaidBySummary rows={rows} />}
 
       {config.statusField && (
         <div className="status-filter">
@@ -220,6 +221,34 @@ function ExpensesSummary({ rows }) {
       <div className="summary-card"><span>סה"כ הוצאות</span><b>₪{total.toFixed(0)}</b></div>
       <div className="summary-card"><span>שולם</span><b className="pos">₪{paid.toFixed(0)}</b></div>
       <div className="summary-card"><span>ממתין לתשלום</span><b className="neg">₪{pending.toFixed(0)}</b></div>
+    </div>
+  )
+}
+
+function PaidBySummary({ rows }) {
+  const totals = {}
+  for (const r of rows) {
+    const name = r.team_members?.full_name || 'לא צוין'
+    totals[name] = (totals[name] || 0) + (r.amount || 0)
+  }
+  const entries = Object.entries(totals).sort((a, b) => b[1] - a[1])
+  if (entries.length === 0) return null
+
+  return (
+    <div className="table-wrap paid-by-summary">
+      <table className="data-table">
+        <thead>
+          <tr><th>מי שילם</th><th>סה"כ ששילם</th></tr>
+        </thead>
+        <tbody>
+          {entries.map(([name, total]) => (
+            <tr key={name}>
+              <td>{name}</td>
+              <td>₪{total.toFixed(0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
