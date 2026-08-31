@@ -193,6 +193,9 @@ export const MODULES = {
       { key: 'phone', label: 'טלפון', render: row => row.phone || '—' },
       { key: 'email', label: 'מייל', render: row => row.email || '—' },
     ],
+    // מציג בטופס העריכה שדה "סיסמת התחברות" שקורא ל-Edge Function ייעודי
+    // (לא כותב ל-team_members עצמה — יוצר/מאפס login אמיתי ב-Supabase Auth)
+    hasLoginAction: true,
   },
 }
 

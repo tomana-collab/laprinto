@@ -154,6 +154,9 @@ main{ flex:1; padding:24px 28px; max-width: 980px; }
   font-family:'Assistant',sans-serif; font-size:15px; color:var(--ink); background:var(--input-bg);
 }
 .field textarea{ resize:vertical; min-height:70px; }
+.password-action-row{ display:flex; gap:8px; }
+.password-action-row input{ flex:1; }
+.password-action-row button{ flex-shrink:0; }
 .file-current{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .file-current button{ background:var(--input-bg); border:1.5px solid var(--line); border-radius:8px; padding:8px 12px; font-size:13px; font-weight:700; color:var(--ink); }
 .file-current .file-remove{ background:var(--coral-soft); color:#C7402A; border-color:transparent; }

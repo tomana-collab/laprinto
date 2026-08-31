@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -269,6 +270,45 @@ function RelationField({ value, onChange, relation, placeholder = '— ללא �
   )
 }
 
+function SetPasswordAction({ email }) {
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  async function handleSet() {
+    setMsg(null)
+    if (!email) { setMsg({ type: 'err', text: 'יש למלא קודם מייל' }); return }
+    if (password.length < 6) { setMsg({ type: 'err', text: 'סיסמה חייבת להכיל לפחות 6 תווים' }); return }
+    setBusy(true)
+    const { data, error } = await supabase.functions.invoke('set-team-member-password', {
+      body: { email, password },
+    })
+    setBusy(false)
+    if (error) {
+      let text = error.message
+      if (error instanceof FunctionsHttpError) {
+        const body = await error.context.json().catch(() => null)
+        if (body?.error) text = body.error
+      }
+      setMsg({ type: 'err', text })
+      return
+    }
+    setMsg({ type: 'ok', text: data?.action === 'created' ? 'נוצר חשבון התחברות חדש' : 'הסיסמה עודכנה' })
+    setPassword('')
+  }
+
+  return (
+    <div className="field">
+      <label>סיסמת התחברות (יוצר/מאפס login בפועל למייל שלמעלה)</label>
+      <div className="password-action-row">
+        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="סיסמה חדשה" />
+        <button type="button" className="btn btn-ghost" onClick={handleSet} disabled={busy}>{busy ? '...' : 'הגדר סיסמה'}</button>
+      </div>
+      {msg && <div className={`settings-msg ${msg.type}`}>{msg.text}</div>}
+    </div>
+  )
+}
+
 function EditModal({ config, initial, onCancel, onSave, onDelete }) {
   const [form, setForm] = useState(() => {
     const f = {}
@@ -305,6 +345,8 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
             )}
           </div>
         ))}
+
+        {config.hasLoginAction && <SetPasswordAction email={form.email} />}
 
         <div className="modal-actions">
           {onDelete && <button className="btn btn-danger" onClick={onDelete}>מחיקה</button>}
