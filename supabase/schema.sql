@@ -94,6 +94,7 @@ create table if not exists team_members (
 );
 
 alter table tasks add column if not exists assignee_id uuid references team_members(id) on delete set null;
+alter table products add column if not exists supplier_id uuid references suppliers(id) on delete set null;
 
 -- ---------- הזמנות ----------
 create table if not exists orders (

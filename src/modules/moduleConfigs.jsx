@@ -53,9 +53,11 @@ export const MODULES = {
     icon: '📦',
     statusField: 'status',
     statusOptions: ['לבדיקה', 'להזמנה', 'פעיל', 'הופסק'],
+    // מביא גם את שם הספק (suppliers) דרך ה-foreign key
+    selectQuery: '*, suppliers(name)',
     fields: [
       { key: 'name', label: 'שם מוצר', type: 'text', required: true },
-      { key: 'supplier', label: 'ספק', type: 'text' },
+      { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
       { key: 'cost', label: 'עלות ליחידה (₪)', type: 'number' },
       { key: 'extra_expenses', label: 'הוצאות נלוות ליחידה (₪)', type: 'number' },
       { key: 'price', label: 'מחיר מכירה (₪)', type: 'number' },
@@ -65,7 +67,7 @@ export const MODULES = {
     isProduct: true,
     columns: [
       { key: 'name', label: 'שם מוצר' },
-      { key: 'supplier', label: 'ספק', render: row => row.supplier || '—' },
+      { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
       { key: 'cost', label: 'עלות', render: row => `₪${row.cost}` },
       { key: 'price', label: 'מחיר', render: row => `₪${row.price}` },
       { key: 'profit', label: 'רווח', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
