@@ -3,6 +3,7 @@ import { useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
 import Settings from './pages/Settings'
 import Dashboard from './pages/Dashboard'
+import Bundles from './pages/Bundles'
 import Sidebar from './components/Sidebar'
 import GenericModule from './modules/GenericModule'
 import { MODULES } from './modules/moduleConfigs'
@@ -27,6 +28,7 @@ export default function App() {
         <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)}>☰ תפריט</button>
         {active === 'settings' ? <Settings />
           : active === 'dashboard' ? <Dashboard />
+          : active === 'bundles' ? <Bundles />
           : <GenericModule key={active} config={MODULES[active]} />}
       </main>
     </div>

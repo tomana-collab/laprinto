@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { MODULE_ORDER, MODULES } from '../modules/moduleConfigs'
 import { useAuth } from '../contexts/AuthContext'
@@ -36,13 +36,22 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
             </button>
           )}
           {visibleModules.map(key => (
-            <button
-              key={key}
-              className={active === key ? 'active' : ''}
-              onClick={() => { onSelect(key); onClose() }}
-            >
-              <span className="nav-icon">{MODULES[key].icon}</span> {MODULES[key].label}
-            </button>
+            <Fragment key={key}>
+              <button
+                className={active === key ? 'active' : ''}
+                onClick={() => { onSelect(key); onClose() }}
+              >
+                <span className="nav-icon">{MODULES[key].icon}</span> {MODULES[key].label}
+              </button>
+              {key === 'products' && (
+                <button
+                  className={active === 'bundles' ? 'active' : ''}
+                  onClick={() => { onSelect('bundles'); onClose() }}
+                >
+                  <span className="nav-icon">🎁</span> מארזים
+                </button>
+              )}
+            </Fragment>
           ))}
         </nav>
         <div className="sidebar-footer">

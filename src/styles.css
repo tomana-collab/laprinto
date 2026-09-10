@@ -167,6 +167,12 @@ main{ flex:1; min-width:0; padding:24px 28px; max-width: 980px; }
   font-family:'Assistant',sans-serif; font-size:15px; color:var(--ink); background:var(--input-bg);
 }
 .field textarea{ resize:vertical; min-height:70px; }
+.bundle-product-list{ max-height:220px; overflow-y:auto; border:1.5px solid var(--line); border-radius:10px; padding:4px; }
+.bundle-product-row{ display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:14px; cursor:pointer; }
+.bundle-product-row:hover{ background:var(--hover-bg); border-radius:8px; }
+.bundle-product-row input{ width:auto; }
+.bundle-product-row span:first-of-type{ flex:1; }
+.bundle-product-cost{ font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--ink-soft); }
 .password-action-row{ display:flex; gap:8px; }
 .password-action-row input{ flex:1; }
 .password-action-row button{ flex-shrink:0; }

@@ -96,6 +96,23 @@ create table if not exists team_members (
 alter table tasks add column if not exists assignee_id uuid references team_members(id) on delete set null;
 alter table products add column if not exists supplier_id uuid references suppliers(id) on delete set null;
 
+-- ---------- מארזים ----------
+create table if not exists bundles (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  price numeric default 0,               -- מחיר מכירה של המארז
+  notes text default '',
+  created_by text,
+  created_at timestamptz default now()
+);
+
+create table if not exists bundle_products (
+  id uuid primary key default gen_random_uuid(),
+  bundle_id uuid not null references bundles(id) on delete cascade,
+  product_id uuid not null references products(id) on delete cascade,
+  unique (bundle_id, product_id)
+);
+
 -- ---------- הזמנות ----------
 create table if not exists orders (
   id uuid primary key default gen_random_uuid(),
@@ -172,6 +189,8 @@ alter table products enable row level security;
 alter table suppliers enable row level security;
 alter table opportunities enable row level security;
 alter table trends enable row level security;
+alter table bundles enable row level security;
+alter table bundle_products enable row level security;
 alter table orders enable row level security;
 alter table expenses enable row level security;
 alter table team_members enable row level security;
@@ -187,6 +206,10 @@ create policy "authenticated full access" on suppliers
 create policy "authenticated full access" on opportunities
   for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on trends
+  for all to authenticated using (true) with check (true);
+create policy "authenticated full access" on bundles
+  for all to authenticated using (true) with check (true);
+create policy "authenticated full access" on bundle_products
   for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on orders
   for all to authenticated using (true) with check (true);
