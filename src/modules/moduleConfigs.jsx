@@ -138,6 +138,30 @@ export const MODULES = {
     ],
   },
 
+  orders: {
+    key: 'orders',
+    table: 'orders',
+    label: 'הזמנות',
+    icon: '🧾',
+    // מביא גם את שם המוצר (products) ואת שם מי שקיבל (team_members) דרך ה-foreign keys
+    selectQuery: '*, products(name), team_members(full_name)',
+    fields: [
+      { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true },
+      { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true },
+      { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true },
+      { key: 'received_by', label: 'מי קיבל', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
+      { key: 'notes', label: 'הערות', type: 'textarea' },
+    ],
+    // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
+    columns: [
+      { key: 'product', label: 'מוצר', render: row => row.products?.name || '—' },
+      { key: 'price', label: 'מחיר ליחידה', render: row => `₪${row.price}` },
+      { key: 'quantity', label: 'כמות' },
+      { key: 'received_by', label: 'מי קיבל', render: row => row.team_members?.full_name || '—' },
+      { key: 'total_amount', label: 'סכום', render: row => `₪${row.total_amount}` },
+    ],
+  },
+
   expenses: {
     key: 'expenses',
     table: 'expenses',
@@ -202,4 +226,4 @@ export const MODULES = {
   },
 }
 
-export const MODULE_ORDER = ['tasks', 'ideas', 'products', 'suppliers', 'opportunities', 'trends', 'expenses', 'team_members']
+export const MODULE_ORDER = ['tasks', 'ideas', 'products', 'orders', 'suppliers', 'opportunities', 'trends', 'expenses', 'team_members']

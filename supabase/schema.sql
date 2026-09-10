@@ -95,6 +95,19 @@ create table if not exists team_members (
 
 alter table tasks add column if not exists assignee_id uuid references team_members(id) on delete set null;
 
+-- ---------- הזמנות ----------
+create table if not exists orders (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid references products(id) on delete set null,
+  quantity numeric default 1,
+  price numeric default 0,               -- מחיר ליחידה
+  received_by uuid references team_members(id) on delete set null,
+  total_amount numeric generated always as (price * quantity) stored,
+  notes text default '',
+  created_by text,
+  created_at timestamptz default now()
+);
+
 -- ---------- הוצאות ----------
 create table if not exists expenses (
   id uuid primary key default gen_random_uuid(),
@@ -158,6 +171,7 @@ alter table products enable row level security;
 alter table suppliers enable row level security;
 alter table opportunities enable row level security;
 alter table trends enable row level security;
+alter table orders enable row level security;
 alter table expenses enable row level security;
 alter table team_members enable row level security;
 
@@ -172,6 +186,8 @@ create policy "authenticated full access" on suppliers
 create policy "authenticated full access" on opportunities
   for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on trends
+  for all to authenticated using (true) with check (true);
+create policy "authenticated full access" on orders
   for all to authenticated using (true) with check (true);
 
 create policy "expenses admin only" on expenses
