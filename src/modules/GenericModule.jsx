@@ -113,6 +113,7 @@ export default function GenericModule({ config }) {
       {config.isProduct && <ProductsSummary rows={rows} />}
       {config.isExpense && <ExpensesSummary rows={rows} />}
       {config.isExpense && <PaidBySummary rows={rows} />}
+      {config.isOrder && <OrdersSummary rows={rows} />}
 
       {config.statusField && (
         <div className="status-filter">
@@ -221,6 +222,18 @@ function ExpensesSummary({ rows }) {
       <div className="summary-card"><span>סה"כ הוצאות</span><b>₪{total.toFixed(0)}</b></div>
       <div className="summary-card"><span>שולם</span><b className="pos">₪{paid.toFixed(0)}</b></div>
       <div className="summary-card"><span>ממתין לתשלום</span><b className="neg">₪{pending.toFixed(0)}</b></div>
+    </div>
+  )
+}
+
+function OrdersSummary({ rows }) {
+  const totalRevenue = rows.reduce((a, r) => a + (r.total_amount || 0), 0)
+  const totalQuantity = rows.reduce((a, r) => a + (r.quantity || 0), 0)
+  return (
+    <div className="summary-row">
+      <div className="summary-card"><span>סה"כ הזמנות</span><b>{rows.length}</b></div>
+      <div className="summary-card"><span>סה"כ יחידות</span><b>{totalQuantity}</b></div>
+      <div className="summary-card"><span>סה"כ הכנסות</span><b className="pos">₪{totalRevenue.toFixed(0)}</b></div>
     </div>
   )
 }

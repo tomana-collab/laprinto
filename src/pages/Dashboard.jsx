@@ -12,9 +12,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      const [tasks, expenses, opportunities, products, suppliers, teamMembers, ideas, trends] = await Promise.all([
+      const [tasks, expenses, orders, opportunities, products, suppliers, teamMembers, ideas, trends] = await Promise.all([
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
+        supabase.from('orders').select('total_amount'),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
@@ -23,13 +24,14 @@ export default function Dashboard() {
         supabase.from('trends').select('id', { count: 'exact', head: true }),
       ])
 
-      const firstError = [tasks, expenses, opportunities, products, suppliers, teamMembers, ideas, trends]
+      const firstError = [tasks, expenses, orders, opportunities, products, suppliers, teamMembers, ideas, trends]
         .find(r => r.error)
       if (firstError) { setError(firstError.error.message); return }
 
       setData({
         tasks: tasks.data,
         expenses: expenses.data,
+        orders: orders.data,
         opportunities: opportunities.data,
         products: products.data,
         suppliersCount: suppliers.count || 0,
@@ -52,7 +54,9 @@ export default function Dashboard() {
   const openOpps = data.opportunities.filter(o => !CLOSED_OPP_STATUSES.includes(o.status))
   const openOppsValue = openOpps.reduce((a, o) => a + (o.value || 0), 0)
 
+  const totalIncome = data.orders.reduce((a, o) => a + (o.total_amount || 0), 0)
   const totalExpenses = data.expenses.reduce((a, e) => a + (e.amount || 0), 0)
+  const profit = totalIncome - totalExpenses
   const paidExpenses = data.expenses.filter(e => e.status === 'שולם').reduce((a, e) => a + (e.amount || 0), 0)
   const pendingExpenses = totalExpenses - paidExpenses
 
@@ -70,6 +74,15 @@ export default function Dashboard() {
   return (
     <div>
       <div className="module-head"><h2>📊 דאשבורד</h2></div>
+
+      <div className="dash-section">
+        <h3>סיכום כספי</h3>
+        <div className="summary-row" style={{ marginBottom: 0 }}>
+          <div className="summary-card"><span>סה"כ הכנסות</span><b className="pos">₪{totalIncome.toFixed(0)}</b></div>
+          <div className="summary-card"><span>סה"כ הוצאות</span><b className="neg">₪{totalExpenses.toFixed(0)}</b></div>
+          <div className="summary-card"><span>רווח</span><b className={profit >= 0 ? 'pos' : 'neg'}>₪{profit.toFixed(0)}</b></div>
+        </div>
+      </div>
 
       <div className="kpi-grid">
         <div className="summary-card"><span>משימות פתוחות</span><b>{openTasks.length}</b></div>

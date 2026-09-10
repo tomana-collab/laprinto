@@ -153,6 +153,7 @@ export const MODULES = {
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
+    isOrder: true,
     columns: [
       { key: 'product', label: 'מוצר', render: row => row.products?.name || '—' },
       { key: 'price', label: 'מחיר ליחידה', render: row => `₪${row.price}` },
