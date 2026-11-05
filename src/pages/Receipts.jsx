@@ -34,10 +34,10 @@ export default function Receipts() {
   }
   useEffect(() => { load() }, [])
 
-  async function handleSave({ supplier_id, doc_number, doc_date, notes, items }) {
+  async function handleSave({ supplier_id, doc_number, doc_date, notes, status, items }) {
     const clean = items.filter(i => i.product_id && Number(i.quantity) > 0)
     if (clean.length === 0) { setError('הוסף לפחות מוצר אחד עם כמות'); return }
-    const fields = { supplier_id: supplier_id || null, doc_number, doc_date, notes }
+    const fields = { supplier_id: supplier_id || null, doc_number, doc_date, notes, status }
     const rows = id => clean.map(i => ({ receipt_id: id, product_id: i.product_id, quantity: Number(i.quantity), unit_cost: Number(i.unit_cost) || 0, discount_percent: Number(i.discount_percent) || 0 }))
 
     if (editing?.id) {
@@ -86,15 +86,16 @@ export default function Receipts() {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>תאריך</th><th>מס׳ תעודה</th><th>ספק</th><th>פריטים</th><th>יחידות</th><th>סה״כ (לפני מע״מ)</th><th>סה״כ כולל מע״מ</th></tr>
+            <tr><th>תאריך</th><th>מס׳ תעודה</th><th>ספק</th><th>סטטוס</th><th>פריטים</th><th>יחידות</th><th>סה״כ (לפני מע״מ)</th><th>סה״כ כולל מע״מ</th></tr>
           </thead>
           <tbody>
-            {receipts.length === 0 && <tr><td className="empty-col" colSpan={7}>אין תעודות עדיין</td></tr>}
+            {receipts.length === 0 && <tr><td className="empty-col" colSpan={8}>אין תעודות עדיין</td></tr>}
             {receipts.map(r => (
               <tr key={r.id} onClick={() => setEditing(r)}>
                 <td>{formatDate(r.doc_date)}</td>
                 <td>{r.doc_number || '—'}</td>
                 <td>{r.suppliers?.name || '—'}</td>
+                <td><span className={r.status === 'בהמתנה לאספקה' ? 'neg' : 'pos'}>{r.status || 'סופק'}</span></td>
                 <td>{r.stock_receipt_items.length}</td>
                 <td>{r.stock_receipt_items.reduce((a, i) => a + Number(i.quantity), 0)}</td>
                 <td>{money(total(r))}</td>
@@ -121,6 +122,7 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
   const [docNumber, setDocNumber] = useState(initial.doc_number || '')
   const [docDate, setDocDate] = useState(initial.doc_date || today())
   const [notes, setNotes] = useState(initial.notes || '')
+  const [status, setStatus] = useState(initial.status || 'סופק')
   const [items, setItems] = useState(() => initial.id && initial.stock_receipt_items.length
     ? initial.stock_receipt_items.map(i => {
         const p = products.find(x => x.id === i.product_id)
@@ -151,6 +153,12 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
           </div>
           <div className="field"><label>מס׳ תעודה</label><input type="text" value={docNumber} onChange={e => setDocNumber(e.target.value)} /></div>
           <div className="field"><label>תאריך</label><input type="date" value={docDate} onChange={e => setDocDate(e.target.value)} /></div>
+          <div className="field"><label>סטטוס אספקה</label>
+            <select value={status} onChange={e => setStatus(e.target.value)}>
+              <option value="סופק">סופק (נכנס למלאי)</option>
+              <option value="בהמתנה לאספקה">בהמתנה לאספקה (הוזמן, עדיין לא הגיע)</option>
+            </select>
+          </div>
           <div className="field"><label>הערות</label><input type="text" value={notes} onChange={e => setNotes(e.target.value)} /></div>
         </div>
 
@@ -188,7 +196,7 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
         <div className="modal-actions">
           {onDelete && <button className="btn btn-danger" onClick={onDelete}>מחיקת תעודה</button>}
           <button className="btn btn-ghost" onClick={onCancel}>ביטול</button>
-          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, items })}>{initial.id ? 'שמירת שינויים' : 'קליטה למלאי'}</button>
+          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, status, items })}>{initial.id ? 'שמירת שינויים' : status === 'סופק' ? 'קליטה למלאי' : 'שמירת הזמנה'}</button>
         </div>
       </div>
     </div>
