@@ -3,10 +3,13 @@ import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { calcProduct, calcOrderLine } from '../lib/pricing'
-import { isCountedOrder } from '../lib/format'
+import { isCountedOrder, ORDER_STATUS_LABELS } from '../lib/format'
+import { useNav } from '../contexts/NavContext'
+import { wpOrderEditUrl } from '../lib/site'
 
-export default function GenericModule({ config }) {
+export default function GenericModule({ config, focusId = null }) {
   const { user } = useAuth()
+  const nav = useNav()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null) // row being edited, or {} for new, or null for closed
@@ -29,6 +32,13 @@ export default function GenericModule({ config }) {
   }
 
   useEffect(() => { load() }, [config.table])
+
+  // מעבר ממודול אחר (למשל הזמנה → מוצר): פותח את הרשומה לעריכה ברגע שהנתונים נטענו
+  useEffect(() => {
+    if (!focusId || !rows) return
+    const row = rows.find(r => r.id === focusId)
+    if (row) setEditing(row)
+  }, [focusId, rows === null])
 
   function emptyForm() {
     const f = {}
@@ -243,7 +253,7 @@ export default function GenericModule({ config }) {
                 )}
                 {g.rows.map(row => (
                   <tr key={row.id} onClick={() => setEditing(row)}>
-                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? '—')}</td>)}
+                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav) : (row[c.key] ?? '—')}</td>)}
                     {config.statusField && (
                       <td onClick={e => e.stopPropagation()}>
                         <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>
@@ -434,6 +444,42 @@ function SetPasswordAction({ email }) {
   )
 }
 
+function OrderDetails({ order }) {
+  const phoneDigits = (order.customer_phone || '').replace(/\D/g, '')
+  // וואטסאפ: מספר ישראלי שמתחיל ב-0 → קידומת 972
+  const waNumber = phoneDigits.startsWith('0') ? `972${phoneDigits.slice(1)}` : phoneDigits
+  const item = (label, value) => (
+    <div style={{ padding: '4px 0' }}>
+      <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 700 }}>{label}</div>
+      <div style={{ whiteSpace: 'pre-wrap' }}>{value || '—'}</div>
+    </div>
+  )
+  return (
+    <div className="summary-card" style={{ display: 'block', margin: '12px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <b>פרטי הזמנה #{order.order_number} מהאתר</b>
+        <a href={wpOrderEditUrl(order.wc_order_id)} target="_blank" rel="noreferrer">פתח באתר ↗</a>
+      </div>
+      <div className="fields-grid" style={{ marginTop: 8 }}>
+        {item('שם המזמין', order.customer_name)}
+        {item('טלפון', phoneDigits
+          ? <span><a href={`tel:${order.customer_phone}`}>{order.customer_phone}</a>{' · '}<a href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer">וואטסאפ</a></span>
+          : null)}
+        {item('אימייל', order.customer_email ? <a href={`mailto:${order.customer_email}`}>{order.customer_email}</a> : null)}
+        {item('סטטוס באתר', ORDER_STATUS_LABELS[order.wc_status] || order.wc_status)}
+        <div className="field full" style={{ margin: 0 }}>{item('כתובת למשלוח', order.shipping_address)}</div>
+        {item('שיטת משלוח', order.shipping_method)}
+        {item('דמי משלוח', order.shipping_total != null ? `₪${order.shipping_total}` : null)}
+        {item('אמצעי תשלום', order.payment_method)}
+        {item('סה"כ ההזמנה (כולל משלוח)', order.order_total != null ? `₪${order.order_total}` : null)}
+        {order.coupons && item('קופון', order.coupons)}
+        <div className="field full" style={{ margin: 0 }}>{item('התאמה אישית', order.personalization)}</div>
+        <div className="field full" style={{ margin: 0 }}>{item('הערת הלקוח', order.customer_note)}</div>
+      </div>
+    </div>
+  )
+}
+
 function ProductBreakdown({ form }) {
   const c = calcProduct(form)
   const row = (label, value, cls) => (
@@ -493,6 +539,7 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
         </div>
 
         {config.isProduct && <ProductBreakdown form={form} />}
+        {config.isOrder && initial.wc_order_id && <OrderDetails order={initial} />}
 
         {config.hasLoginAction && <SetPasswordAction email={form.email} />}
 

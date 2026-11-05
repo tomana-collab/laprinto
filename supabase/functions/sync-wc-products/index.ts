@@ -180,7 +180,27 @@ async function fetchAllWcOrders() {
 
 // כל שורת פריט בהזמנת אתר הופכת לשורה בטבלת orders (מזהה ייחודי: wc_line_item_id).
 // ההזמנה נשמרת עם הסטטוס שלה באתר, כדי שביטולים/החזרים יתעדכנו בסנכרון הבא.
-// הערות ו"מי קיבל" שמולאו ידנית ב-CRM לא נדרסים. לא נשמרים פרטי לקוחות.
+// הערות ו"מי קיבל" שמולאו ידנית ב-CRM לא נדרסים. נשמרים גם פרטי המזמין, כתובת המשלוח,
+// אמצעי התשלום, הערת הלקוח וההתאמה האישית (מטא של שורת הפריט).
+const stripTags = (v: string) => decode(v.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
+
+// התאמה אישית ושאר שדות שהלקוח מילא נשמרים כ-meta של שורת הפריט (מפתחות שמתחילים ב-_ הם פנימיים)
+function lineItemMetaText(li: any): string {
+  return (li.meta_data || [])
+    .filter((m: any) => !String(m.key).startsWith('_'))
+    .map((m: any) => {
+      const key = stripTags(String(m.display_key ?? m.key))
+      const raw = m.display_value ?? m.value
+      const val = stripTags(typeof raw === 'string' ? raw : JSON.stringify(raw))
+      return `${key}: ${val}`
+    })
+    .join('\n')
+}
+
+function addressText(a: any): string {
+  return [a?.address_1, a?.address_2, a?.city, a?.postcode].filter(Boolean).join(', ')
+}
+
 async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats> {
   const wcOrders = await fetchAllWcOrders()
 
@@ -191,6 +211,27 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
 
   const { data: existingRows } = await admin.from('orders').select('wc_line_item_id').not('wc_line_item_id', 'is', null)
   const existingIds = new Set((existingRows || []).map((r: any) => Number(r.wc_line_item_id)))
+
+  // פרטים ברמת ההזמנה — כתובת משלוח אם קיימת, אחרת כתובת החיוב
+  const orderInfo = (o: any) => {
+    const ship = o.shipping?.address_1 ? o.shipping : o.billing
+    const b = o.billing || {}
+    return {
+      customer_name: `${b.first_name || ''} ${b.last_name || ''}`.trim() || `${ship?.first_name || ''} ${ship?.last_name || ''}`.trim(),
+      customer_phone: b.phone || ship?.phone || '',
+      customer_email: b.email || '',
+      shipping_address: [
+        `${ship?.first_name || ''} ${ship?.last_name || ''}`.trim(),
+        addressText(ship),
+      ].filter(Boolean).join(' · '),
+      shipping_method: (o.shipping_lines || []).map((l: any) => l.method_title).filter(Boolean).join(', '),
+      payment_method: o.payment_method_title || o.payment_method || '',
+      customer_note: o.customer_note || '',
+      coupons: (o.coupon_lines || []).map((c: any) => c.code).join(', '),
+      shipping_total: Math.round((Number(o.shipping_total || 0) + Number(o.shipping_tax || 0)) * 100) / 100,
+      order_total: Number(o.total) || 0,
+    }
+  }
 
   const rows: any[] = []
   for (const o of wcOrders) {
@@ -204,6 +245,8 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
         wc_status: o.status,
         product_name: decode(String(li.name || '')),
         sku: li.sku || '',
+        ...orderInfo(o),
+        personalization: lineItemMetaText(li),
         product_id: productByWcId.get(li.product_id) ?? null,
         quantity: qty,
         // מחיר ליחידה כולל מע"מ, אחרי הנחות/קופונים

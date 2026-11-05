@@ -3,6 +3,7 @@
 
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrderLine } from '../lib/pricing'
+import { wpProductEditUrl } from '../lib/site'
 
 export const MODULES = {
   tasks: {
@@ -185,7 +186,7 @@ export const MODULES = {
     label: 'הזמנות',
     icon: '🧾',
     // מביא גם את המוצר (שם/קישור) ואת מי שקיבל דרך ה-foreign keys
-    selectQuery: '*, products(name, product_url, cost_with_vat, extra_expenses), team_members(full_name)',
+    selectQuery: '*, products(name, product_url, wc_product_id, cost_with_vat, extra_expenses), team_members(full_name)',
     orderBy: 'order_date',
     fields: [
       { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true },
@@ -201,8 +202,8 @@ export const MODULES = {
     syncBody: { target: 'orders' },
     syncButtonLabel: '↻ סנכרן הזמנות מהאתר',
     syncNoun: 'שורות הזמנה',
-    searchField: ['product_name', 'sku', 'order_number'],
-    searchLabel: 'חיפוש לפי מוצר, מק"ט או מס\' הזמנה',
+    searchField: ['product_name', 'sku', 'order_number', 'customer_name', 'customer_phone'],
+    searchLabel: 'חיפוש לפי מוצר, מק"ט, הזמנה או מזמין',
     filters: [
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
       { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: ORDER_STATUS_LABELS },
@@ -210,23 +211,30 @@ export const MODULES = {
     columns: [
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
       { key: 'order_number', label: 'הזמנה', render: row => row.order_number ? `#${row.order_number}` : '—' },
+      { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
       {
+        // לחיצה על שם המוצר פותחת אותו לעריכה בתוך ה-CRM
         key: 'product',
         label: 'מוצר',
-        render: row => {
+        render: (row, nav) => {
           const name = row.products?.name || row.product_name || '—'
-          return row.products?.product_url
-            ? <a href={row.products.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{name}</a>
+          return row.product_id
+            ? <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); nav.openRecord('products', row.product_id) }}>{name}</a>
             : name
         },
       },
       {
+        // לחיצה על המק"ט פותחת את עריכת המוצר באתר האמיתי (wp-admin)
         key: 'sku',
         label: 'מק"ט',
-        render: row => row.sku && row.products?.product_url
-          ? <a href={row.products.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{row.sku}</a>
-          : (row.sku || '—'),
+        render: row => {
+          const href = wpProductEditUrl(row.products?.wc_product_id)
+          return row.sku && href
+            ? <a href={href} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{row.sku}</a>
+            : (row.sku || '—')
+        },
       },
+      { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },
       { key: 'quantity', label: 'כמות' },
       { key: 'price', label: 'מחיר ליחידה', render: row => `₪${row.price}` },
       { key: 'received_by', label: 'מי קיבל', render: row => row.team_members?.full_name || '—' },

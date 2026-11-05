@@ -149,6 +149,18 @@ create table if not exists orders (
   product_name text,
   sku text default '',
   order_date timestamptz default now(),
+  -- פרטי מזמין והזמנה (נמשכים בסנכרון)
+  customer_name text,
+  customer_phone text,
+  customer_email text,
+  shipping_address text,
+  shipping_method text,
+  payment_method text,
+  customer_note text,
+  personalization text,
+  coupons text,
+  shipping_total numeric,
+  order_total numeric,
   notes text default '',
   created_by text,
   created_at timestamptz default now()
