@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatDate, formatDateTime, isCountedOrder } from '../lib/format'
-import { calcOrderLine } from '../lib/pricing'
+import { calcOrder } from '../lib/pricing'
+import { groupOrders } from '../lib/orders'
 
 const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
 const CLOSED_OPP_STATUSES = ['סגור-הצלחה', 'סגור-נכשל']
@@ -16,7 +17,7 @@ export default function Dashboard() {
       const [tasks, expenses, orders, opportunities, products, suppliers, teamMembers, ideas, trends] = await Promise.all([
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
-        supabase.from('orders').select('total_amount, quantity, order_date, order_number, sku, product_name, wc_status, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
+        supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
@@ -61,7 +62,8 @@ export default function Dashboard() {
   const monthPrefix = new Date().toISOString().slice(0, 7)
   const monthSales = sales.filter(o => (o.order_date || '').startsWith(monthPrefix))
   const monthIncome = monthSales.reduce((a, o) => a + (o.total_amount || 0), 0)
-  const recentSales = sales.slice(0, 10)
+  // הזמנה עם כמה פריטים מוצגת כשורה אחת
+  const recentSales = groupOrders(sales).slice(0, 10)
   const totalExpenses = data.expenses.reduce((a, e) => a + (e.amount || 0), 0)
   const profit = totalIncome - totalExpenses
   const paidExpenses = data.expenses.filter(e => e.status === 'שולם').reduce((a, e) => a + (e.amount || 0), 0)
@@ -102,16 +104,19 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {recentSales.map((o, i) => {
-                  const name = o.products?.name || o.product_name || '—'
+                  const c = calcOrder(o)
                   return (
                     <tr key={i} style={{ cursor: 'default' }}>
                       <td>{formatDateTime(o.order_date) || '—'}</td>
                       <td>{o.order_number ? `#${o.order_number}` : '—'}</td>
-                      <td>{o.products?.product_url ? <a href={o.products.product_url} target="_blank" rel="noreferrer">{name}</a> : name}</td>
+                      <td>{o.lines.map(l => {
+                        const name = l.products?.name || l.product_name || '—'
+                        return <div key={l.id}>{l.products?.product_url ? <a href={l.products.product_url} target="_blank" rel="noreferrer">{name}</a> : name}</div>
+                      })}</td>
                       <td>{o.sku || '—'}</td>
                       <td>{o.quantity}</td>
-                      <td>₪{o.total_amount}</td>
-                      <td>{(() => { const { profit } = calcOrderLine(o); return profit === null ? '—' : <span className={profit >= 0 ? 'pos' : 'neg'}>₪{profit}</span> })()}</td>
+                      <td>₪{c.sale}</td>
+                      <td>{c.profit === null ? '—' : <span className={c.profit >= 0 ? 'pos' : 'neg'}>₪{c.profit}</span>}</td>
                     </tr>
                   )
                 })}

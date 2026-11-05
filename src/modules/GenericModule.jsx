@@ -2,10 +2,11 @@ import { Fragment, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { calcProduct, calcOrderLine } from '../lib/pricing'
+import { calcProduct, calcOrder } from '../lib/pricing'
+import { groupOrders } from '../lib/orders'
 import { isCountedOrder, ORDER_STATUS_LABELS } from '../lib/format'
 import { useNav } from '../contexts/NavContext'
-import { wpOrderEditUrl } from '../lib/site'
+import { wpOrderEditUrl, wpProductEditUrl } from '../lib/site'
 
 export default function GenericModule({ config, focusId = null }) {
   const { user } = useAuth()
@@ -40,6 +41,9 @@ export default function GenericModule({ config, focusId = null }) {
     if (row) setEditing(row)
   }, [focusId, rows === null])
 
+  // שדות manualOnly (מסונכרנים מהאתר) לא ניתנים לעריכה בהזמנת אתר
+  const fieldsFor = rec => config.fields.filter(f => !(f.manualOnly && rec?.wc_order_id))
+
   function emptyForm() {
     const f = {}
     config.fields.forEach(fld => { f[fld.key] = fld.default || '' })
@@ -48,14 +52,14 @@ export default function GenericModule({ config, focusId = null }) {
 
   async function handleSave(form) {
     const payload = { ...form }
-    config.fields.forEach(fld => {
+    fieldsFor(editing).forEach(fld => {
       if (fld.type === 'number') payload[fld.key] = payload[fld.key] === '' ? 0 : Number(payload[fld.key])
       if (fld.type === 'date' && payload[fld.key] === '') payload[fld.key] = null
       if (fld.type === 'file' && payload[fld.key] === '') payload[fld.key] = null
       if (fld.type === 'relation' && payload[fld.key] === '') payload[fld.key] = null
     })
 
-    for (const fld of config.fields) {
+    for (const fld of fieldsFor(editing)) {
       if (fld.type === 'file' && payload[fld.key] instanceof File) {
         const file = payload[fld.key]
         // ל-Storage מותרים רק תווי ASCII ב-key, אז שם הקובץ המקורי (שיכול לכלול עברית) לא
@@ -70,7 +74,9 @@ export default function GenericModule({ config, focusId = null }) {
     }
 
     if (editing && editing.id) {
-      const { error } = await supabase.from(config.table).update(payload).eq('id', editing.id)
+      // הזמנה מאוחדת: העדכון חל על כל שורות הפריט שלה
+      const ids = editing.line_ids || [editing.id]
+      const { error } = await supabase.from(config.table).update(payload).in('id', ids)
       if (error) { setError(error.message); return }
     } else {
       payload.created_by = user?.email || ''
@@ -105,7 +111,8 @@ export default function GenericModule({ config, focusId = null }) {
   }
 
   async function handleDelete(id) {
-    const { error } = await supabase.from(config.table).delete().eq('id', id)
+    const ids = editing?.line_ids || [id]
+    const { error } = await supabase.from(config.table).delete().in('id', ids)
     if (error) { setError(error.message); return }
     setEditing(null)
     load()
@@ -120,9 +127,12 @@ export default function GenericModule({ config, focusId = null }) {
   if (rows === null && error) return <div className="err-inline">שגיאה בטעינת {config.label}: {error}</div>
   if (rows === null) return <div className="loading">טוען {config.label}...</div>
 
+  // הזמנות: שורות פריט מאותה הזמנת אתר מאוחדות להזמנה אחת
+  const viewRows = config.groupOrders ? groupOrders(rows) : rows
+
   let filtered = (config.statusField && statusFilter !== 'הכל')
-    ? rows.filter(r => r[config.statusField] === statusFilter)
-    : rows
+    ? viewRows.filter(r => r[config.statusField] === statusFilter)
+    : viewRows
 
   if (config.searchField && search.trim()) {
     const q = search.trim().toLowerCase()
@@ -170,10 +180,10 @@ export default function GenericModule({ config, focusId = null }) {
 
       {error && <div className="err-inline">{error}</div>}
 
-      {config.isProduct && <ProductsSummary rows={rows} />}
-      {config.isExpense && <ExpensesSummary rows={rows} />}
-      {config.isExpense && <PaidBySummary rows={rows} />}
-      {config.isOrder && <OrdersSummary rows={rows} />}
+      {config.isProduct && <ProductsSummary rows={viewRows} />}
+      {config.isExpense && <ExpensesSummary rows={viewRows} />}
+      {config.isExpense && <PaidBySummary rows={viewRows} />}
+      {config.isOrder && <OrdersSummary rows={viewRows} />}
 
       {config.statusField && (
         <div className="status-filter">
@@ -214,7 +224,7 @@ export default function GenericModule({ config, focusId = null }) {
                 onChange={e => setFilter(f.key, e.target.value)}
               >
                 <option value="">{f.label}</option>
-                {[...new Set(rows.map(r => r[f.key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(v => (
+                {[...new Set(viewRows.map(r => r[f.key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(v => (
                   <option key={v} value={v}>{f.labels?.[v] || v}</option>
                 ))}
               </select>
@@ -314,17 +324,19 @@ function OrdersSummary({ rows: allRows }) {
   const totalRevenue = rows.reduce((a, r) => a + (r.total_amount || 0), 0)
   const totalQuantity = rows.reduce((a, r) => a + (r.quantity || 0), 0)
   // רווח נטו רק על שורות עם עלות ידועה (מקושרות למוצר שהוזנה לו עלות)
-  const lines = rows.map(calcOrderLine)
+  const lines = rows.map(calcOrder)
   const known = lines.filter(l => l.profit !== null)
   const totalProfit = known.reduce((a, l) => a + l.profit, 0)
   const unknownCount = lines.length - known.length
+  const totalDiscount = lines.reduce((a, l) => a + l.discount, 0)
   return (
     <div className="summary-row">
       <div className="summary-card"><span>סה"כ הזמנות</span><b>{rows.length}</b></div>
       <div className="summary-card"><span>סה"כ יחידות</span><b>{totalQuantity}</b></div>
-      <div className="summary-card"><span>סה"כ הכנסות</span><b className="pos">₪{totalRevenue.toFixed(0)}</b></div>
+      <div className="summary-card"><span>סה"כ הכנסות (אחרי קופונים)</span><b className="pos">₪{totalRevenue.toFixed(0)}</b></div>
+      {totalDiscount > 0 && <div className="summary-card"><span>הנחות קופונים</span><b className="neg">−₪{totalDiscount.toFixed(0)}</b></div>}
       <div className="summary-card">
-        <span>רווח נטו{unknownCount > 0 ? ` (${unknownCount} שורות בלי עלות)` : ''}</span>
+        <span>רווח נטו{unknownCount > 0 ? ` (${unknownCount} הזמנות בלי עלות)` : ''}</span>
         <b className={totalProfit >= 0 ? 'pos' : 'neg'}>₪{totalProfit.toFixed(0)}</b>
       </div>
     </div>
@@ -444,6 +456,73 @@ function SetPasswordAction({ email }) {
   )
 }
 
+function OrderPanel({ order }) {
+  return (
+    <>
+      {order.wc_order_id && <OrderDetails order={order} />}
+      <OrderLines order={order} />
+      <OrderBreakdown order={order} />
+    </>
+  )
+}
+
+// כל הפריטים בהזמנה (מוצר ב-CRM, מק"ט באתר, כמות, מכירה, עלות ורווח לכל פריט)
+function OrderLines({ order }) {
+  const nav = useNav()
+  const lines = order.lines || [order]
+  return (
+    <div className="table-wrap" style={{ margin: '12px 0' }}>
+      <table className="data-table">
+        <thead>
+          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מחיר ליחידה</th><th>הנחת קופון</th><th>מכירה</th><th>עלות</th><th>רווח לפני עמלה</th></tr>
+        </thead>
+        <tbody>
+          {lines.map(l => {
+            const name = l.products?.name || l.product_name || '—'
+            const c = calcOrder({ lines: [l] })
+            const href = wpProductEditUrl(l.products?.wc_product_id)
+            return (
+              <tr key={l.id} style={{ cursor: 'default' }}>
+                <td>{l.product_id
+                  ? <a href="#" onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
+                  : name}</td>
+                <td>{l.sku && href ? <a href={href} target="_blank" rel="noreferrer">{l.sku}</a> : (l.sku || '—')}</td>
+                <td>{l.quantity}</td>
+                <td>₪{l.price}</td>
+                <td>{Number(l.discount_amount) > 0 ? <span className="neg">−₪{l.discount_amount}</span> : '—'}</td>
+                <td>₪{c.sale}</td>
+                <td>{c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`}</td>
+                <td>{c.cost === null ? '—' : <span className={c.sale - c.cost >= 0 ? 'pos' : 'neg'}>₪{Math.round((c.sale - c.cost) * 100) / 100}</span>}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// חישוב הרווח שלב אחר שלב, כולל הנחת הקופון שהלקוח קיבל
+function OrderBreakdown({ order }) {
+  const c = calcOrder(order)
+  const row = (label, value, cls, bold) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontWeight: bold ? 700 : 400 }}>
+      <span>{label}</span><b className={cls}>{value}</b>
+    </div>
+  )
+  return (
+    <div className="summary-card" style={{ display: 'block', margin: '12px 0', maxWidth: 520 }}>
+      {row('מחיר מכירה לפני הנחה', `₪${c.before}`)}
+      {c.discount > 0 && row(`הנחת קופון${order.coupons ? ` (${order.coupons})` : ''}`, `−₪${c.discount}`, 'neg')}
+      {row('מכירה בפועל (מה שהלקוח שילם על המוצרים)', `₪${c.sale}`)}
+      {row('עלות כולל מע"מ והוצאות נלוות', c.cost === null ? `חסרה עלות: ${c.missing.join(', ')}` : `−₪${c.cost}`)}
+      {row('עמלת סליקה (0.75% + מע"מ)', `−₪${c.fee}`)}
+      <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '6px 0' }} />
+      {row('רווח נטו', c.profit === null ? '—' : `₪${c.profit}`, c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
+    </div>
+  )
+}
+
 function OrderDetails({ order }) {
   const phoneDigits = (order.customer_phone || '').replace(/\D/g, '')
   // וואטסאפ: מספר ישראלי שמתחיל ב-0 → קידומת 972
@@ -460,7 +539,7 @@ function OrderDetails({ order }) {
         <b>פרטי הזמנה #{order.order_number} מהאתר</b>
         <a href={wpOrderEditUrl(order.wc_order_id)} target="_blank" rel="noreferrer">פתח באתר ↗</a>
       </div>
-      <div className="fields-grid" style={{ marginTop: 8 }}>
+      <div className="fields-grid cols-4" style={{ marginTop: 8 }}>
         {item('שם המזמין', order.customer_name)}
         {item('טלפון', phoneDigits
           ? <span><a href={`tel:${order.customer_phone}`}>{order.customer_phone}</a>{' · '}<a href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer">וואטסאפ</a></span>
@@ -500,9 +579,11 @@ function ProductBreakdown({ form }) {
 }
 
 function EditModal({ config, initial, onCancel, onSave, onDelete }) {
+  // שדות manualOnly (מסונכרנים מהאתר) לא ניתנים לעריכה בהזמנת אתר
+  const fieldsFor = config.fields.filter(f => !(f.manualOnly && initial.wc_order_id))
   const [form, setForm] = useState(() => {
     const f = {}
-    config.fields.forEach(fld => { f[fld.key] = initial[fld.key] ?? fld.default ?? '' })
+    fieldsFor.forEach(fld => { f[fld.key] = initial[fld.key] ?? fld.default ?? '' })
     return f
   })
 
@@ -510,11 +591,13 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
-      <div className="modal">
-        <h2>{initial.id ? 'עריכה' : `${config.label.slice(0, -1) || config.label} חדש`}</h2>
+      <div className={`modal${config.modalWide ? ' wide' : ''}`}>
+        <h2>{initial.id ? (initial.order_number ? `הזמנה #${initial.order_number}` : 'עריכה') : `${config.label.slice(0, -1) || config.label} חדש`}</h2>
+
+        {config.isOrder && initial.id && <OrderPanel order={initial} />}
 
         <div className="fields-grid">
-        {config.fields.map(fld => (
+        {fieldsFor.map(fld => (
           <div className={`field${fld.type === 'textarea' || fld.type === 'file' ? ' full' : ''}`} key={fld.key}>
             <label>{fld.label}</label>
             {fld.type === 'textarea' ? (
@@ -539,7 +622,6 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
         </div>
 
         {config.isProduct && <ProductBreakdown form={form} />}
-        {config.isOrder && initial.wc_order_id && <OrderDetails order={initial} />}
 
         {config.hasLoginAction && <SetPasswordAction email={form.email} />}
 

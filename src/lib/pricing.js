@@ -22,15 +22,29 @@ export function calcProduct({ cost, supplier_discount_percent, extra_expenses, p
   return { costAfterDiscount, costWithVat, clearingFee, extra, profit, margin }
 }
 
-// רווחיות לשורת הזמנה: מכירה (כולל מע"מ) פחות עלות כולל מע"מ והוצאות נלוות, פחות עמלת סליקה.
+// עלות שורת פריט אחת (עלות כולל מע"מ + הוצאות נלוות, כפול כמות), או null אם חסרה עלות.
 // העלות נלקחת מהמוצר כפי שהיא היום (cost_with_vat מחושב ב-DB אחרי הנחת ספק) — לא עלות היסטורית.
-// מחזיר cost/profit = null אם ההזמנה לא מקושרת למוצר או שלא הוזנה עלות, כדי לא להציג רווח מטעה.
-export function calcOrderLine(row) {
-  const sale = Number(row.total_amount) || 0
-  const qty = Number(row.quantity) || 0
+export function lineCost(line) {
+  const p = line.products
+  if (!p || !(Number(p.cost_with_vat) > 0)) return null
+  return r2((Number(p.cost_with_vat) + (Number(p.extra_expenses) || 0)) * (Number(line.quantity) || 0))
+}
+
+// רווחיות להזמנה שלמה (order.lines = כל שורות הפריט; בלי lines — שורה בודדת).
+//   מכירה לפני הנחה  = מכירה בפועל + הנחת קופון
+//   מכירה בפועל      = סכום השורות כפי ששולם (כבר אחרי קופון)
+//   רווח נטו         = מכירה בפועל - עלות (כולל מע"מ והוצאות נלוות) - עמלת סליקה על הסכום ששולם
+// cost/profit = null אם לפחות מוצר אחד לא מקושר או שלא הוזנה לו עלות (כדי לא להציג רווח מטעה).
+export function calcOrder(order) {
+  const lines = order.lines || [order]
+  const sale = r2(lines.reduce((a, l) => a + (Number(l.total_amount) || 0), 0))
+  const discount = r2(lines.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0))
   const fee = r2(sale * CLEARING_RATE * (1 + VAT_RATE))
-  const p = row.products
-  if (!p || !(Number(p.cost_with_vat) > 0)) return { sale, fee, cost: null, profit: null }
-  const cost = r2((Number(p.cost_with_vat) + (Number(p.extra_expenses) || 0)) * qty)
-  return { sale, fee, cost, profit: r2(sale - cost - fee) }
+  const costs = lines.map(lineCost)
+  const missing = lines.filter((_, i) => costs[i] === null).map(l => l.products?.name || l.product_name || '?')
+  const cost = missing.length ? null : r2(costs.reduce((a, c) => a + c, 0))
+  return {
+    sale, discount, before: r2(sale + discount), fee, cost, missing,
+    profit: cost === null ? null : r2(sale - cost - fee),
+  }
 }

@@ -159,6 +159,7 @@ create table if not exists orders (
   customer_note text,
   personalization text,
   coupons text,
+  discount_amount numeric default 0,      -- הנחת קופון בש"ח לשורה (כולל מע"מ)
   shipping_total numeric,
   order_total numeric,
   notes text default '',

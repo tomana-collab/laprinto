@@ -195,3 +195,8 @@ main{ flex:1; min-width:0; padding:24px 28px; max-width: 980px; }
 .fields-grid{ display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
 .fields-grid .field.full{ grid-column:1 / -1; }
 @media (max-width:420px){ .fields-grid{ grid-template-columns:1fr; } }
+/* חלון עריכה רחב על כל הדף (הזמנות): מציג את כל הפרטים בלי לצמצם */
+.modal.wide{ max-width:min(1500px, 97vw); width:97vw; }
+.fields-grid.cols-4{ grid-template-columns:repeat(4, 1fr); }
+@media (max-width:900px){ .fields-grid.cols-4{ grid-template-columns:1fr 1fr; } }
+@media (max-width:420px){ .fields-grid.cols-4{ grid-template-columns:1fr; } }

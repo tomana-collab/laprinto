@@ -249,8 +249,12 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
         personalization: lineItemMetaText(li),
         product_id: productByWcId.get(li.product_id) ?? null,
         quantity: qty,
-        // מחיר ליחידה כולל מע"מ, אחרי הנחות/קופונים
+        // מחיר ליחידה כולל מע"מ, אחרי הנחות/קופונים (li.total הוא אחרי קופון; li.subtotal לפני)
         price: Math.round(((Number(li.total) + Number(li.total_tax || 0)) / qty) * 100) / 100,
+        // הנחת הקופון בש"ח לכל השורה (כולל מע"מ)
+        discount_amount: Math.max(0, Math.round(
+          ((Number(li.subtotal || li.total) + Number(li.subtotal_tax || li.total_tax || 0))
+            - (Number(li.total) + Number(li.total_tax || 0))) * 100) / 100),
         created_by: 'WooCommerce Sync',
       })
     }

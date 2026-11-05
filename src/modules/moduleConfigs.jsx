@@ -2,7 +2,7 @@
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
-import { calcOrderLine } from '../lib/pricing'
+import { calcOrder } from '../lib/pricing'
 import { wpProductEditUrl } from '../lib/site'
 
 export const MODULES = {
@@ -185,13 +185,17 @@ export const MODULES = {
     table: 'orders',
     label: 'הזמנות',
     icon: '🧾',
-    // מביא גם את המוצר (שם/קישור) ואת מי שקיבל דרך ה-foreign keys
+    // מביא גם את המוצר (שם/קישור/עלות) ואת מי שקיבל דרך ה-foreign keys
     selectQuery: '*, products(name, product_url, wc_product_id, cost_with_vat, extra_expenses), team_members(full_name)',
     orderBy: 'order_date',
+    // שורות פריט של אותה הזמנת אתר מאוחדות להזמנה אחת (src/lib/orders.js); חלון העריכה רחב על כל הדף
+    groupOrders: true,
+    modalWide: true,
     fields: [
-      { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true },
-      { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true },
-      { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true },
+      // מוצר/מחיר/כמות מסונכרנים מהאתר — מוצגים לעריכה רק בהזמנה ידנית
+      { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true, manualOnly: true },
+      { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true, manualOnly: true },
+      { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true, manualOnly: true },
       { key: 'received_by', label: 'מי קיבל', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
@@ -208,53 +212,77 @@ export const MODULES = {
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
       { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: ORDER_STATUS_LABELS },
     ],
+    // מספר הזמנה ופרטים מלאים — בתוך חלון העריכה בלבד
     columns: [
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
-      { key: 'order_number', label: 'הזמנה', render: row => row.order_number ? `#${row.order_number}` : '—' },
       { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
       {
-        // לחיצה על שם המוצר פותחת אותו לעריכה בתוך ה-CRM
+        // לחיצה על שם מוצר פותחת אותו לעריכה בתוך ה-CRM. כמה פריטים = כל אחד בשורה משלו
         key: 'product',
         label: 'מוצר',
-        render: (row, nav) => {
-          const name = row.products?.name || row.product_name || '—'
-          return row.product_id
-            ? <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); nav.openRecord('products', row.product_id) }}>{name}</a>
-            : name
-        },
+        render: (row, nav) => row.lines.map(l => {
+          const name = l.products?.name || l.product_name || '—'
+          const label = Number(l.quantity) > 1 ? `${name} ×${l.quantity}` : name
+          return (
+            <div key={l.id}>
+              {l.product_id
+                ? <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); nav.openRecord('products', l.product_id) }}>{label}</a>
+                : label}
+            </div>
+          )
+        }),
       },
       {
-        // לחיצה על המק"ט פותחת את עריכת המוצר באתר האמיתי (wp-admin)
+        // לחיצה על מק"ט פותחת את עריכת המוצר באתר האמיתי (wp-admin)
         key: 'sku',
         label: 'מק"ט',
+        render: row => row.lines.map(l => {
+          const href = wpProductEditUrl(l.products?.wc_product_id)
+          return (
+            <div key={l.id}>
+              {l.sku && href
+                ? <a href={href} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{l.sku}</a>
+                : (l.sku || '—')}
+            </div>
+          )
+        }),
+      },
+      {
+        // מספר המוצרים (שורות פריט) בהזמנה; בסוגריים סך היחידות אם יש כמות גדולה מ-1
+        key: 'items_count',
+        label: 'כמות מוצרים',
         render: row => {
-          const href = wpProductEditUrl(row.products?.wc_product_id)
-          return row.sku && href
-            ? <a href={href} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{row.sku}</a>
-            : (row.sku || '—')
+          const units = row.lines.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
+          return row.lines.length + (units > row.lines.length ? ` (${units} יח')` : '')
         },
       },
       { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },
-      { key: 'quantity', label: 'כמות' },
-      { key: 'price', label: 'מחיר ליחידה', render: row => `₪${row.price}` },
-      { key: 'received_by', label: 'מי קיבל', render: row => row.team_members?.full_name || '—' },
       { key: 'wc_status', label: 'סטטוס באתר', render: row => row.wc_status ? (ORDER_STATUS_LABELS[row.wc_status] || row.wc_status) : 'ידנית' },
-      { key: 'total_amount', label: 'מכירה', render: row => `₪${row.total_amount}` },
+      // מכירה = הסכום ששולם בפועל, כבר אחרי הנחת קופון
+      { key: 'total_amount', label: 'מכירה', render: row => `₪${calcOrder(row).sale}` },
+      {
+        key: 'discount',
+        label: 'הנחת קופון',
+        render: row => {
+          const { discount } = calcOrder(row)
+          return discount > 0 ? <span className="neg" title={row.coupons || ''}>−₪{discount}</span> : '—'
+        },
+      },
       {
         key: 'cost',
         label: 'עלות (כולל מע"מ)',
         render: row => {
-          const { cost } = calcOrderLine(row)
-          return cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${cost}`
+          const { cost, missing } = calcOrder(row)
+          return cost === null ? <span title={`חסרה עלות: ${missing.join(', ')}`}>—</span> : `₪${cost}`
         },
       },
-      { key: 'fee', label: 'עמלת סליקה', render: row => `₪${calcOrderLine(row).fee}` },
-      // רווח נטו בסוף: מכירה - עלות - עמלה
+      { key: 'fee', label: 'עמלת סליקה', render: row => `₪${calcOrder(row).fee}` },
+      // רווח נטו בסוף: מכירה (אחרי קופון) - עלות - עמלה
       {
         key: 'profit',
         label: 'רווח נטו',
         render: row => {
-          const { profit } = calcOrderLine(row)
+          const { profit } = calcOrder(row)
           return profit === null ? '—' : <span className={profit >= 0 ? 'pos' : 'neg'}>₪{profit}</span>
         },
       },
