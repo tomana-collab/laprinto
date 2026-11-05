@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
+import { calcProduct } from '../lib/pricing'
 
 export default function GenericModule({ config }) {
   const { user } = useAuth()
@@ -419,6 +420,25 @@ function SetPasswordAction({ email }) {
   )
 }
 
+function ProductBreakdown({ form }) {
+  const c = calcProduct(form)
+  const row = (label, value, cls) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+      <span>{label}</span><b className={cls}>{value}</b>
+    </div>
+  )
+  return (
+    <div className="summary-card" style={{ display: 'block', margin: '12px 0' }}>
+      {row('עלות אחרי הנחת ספק', `₪${c.costAfterDiscount}`)}
+      {row('עלות כולל מע"מ 18%', `₪${c.costWithVat}`)}
+      {row('עמלת סליקה (0.75% + מע"מ)', `₪${c.clearingFee}`)}
+      {c.extra > 0 && row('הוצאות נלוות', `₪${c.extra}`)}
+      <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '6px 0' }} />
+      {row('רווח סופי', `₪${c.profit} (${c.margin}%)`, c.profit >= 0 ? 'pos' : 'neg')}
+    </div>
+  )
+}
+
 function EditModal({ config, initial, onCancel, onSave, onDelete }) {
   const [form, setForm] = useState(() => {
     const f = {}
@@ -455,6 +475,8 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
             )}
           </div>
         ))}
+
+        {config.isProduct && <ProductBreakdown form={form} />}
 
         {config.hasLoginAction && <SetPasswordAction email={form.email} />}
 

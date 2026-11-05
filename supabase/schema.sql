@@ -46,18 +46,20 @@ create table if not exists products (
   regular_price numeric,
   sale_price numeric,
   synced_at timestamptz,
-  -- מע"מ ועמלות לחישוב רווח נקי
-  vat_percent numeric not null default 18,
-  fee_percent numeric not null default 0,
-  fee_fixed numeric not null default 0,
-  net_price numeric generated always as (round(price / (1 + vat_percent / 100), 2)) stored,
+  -- קישור לאתר הספק + הנחת ספק (%)
+  supplier_url text default '',
+  supplier_discount_percent numeric not null default 0,
+  -- נוסחת רווח: עלות אחרי הנחה, + מע"מ 18%, עמלת סליקה 0.75% + מע"מ, ואז רווח סופי
+  cost_after_discount numeric generated always as (round(cost * (1 - supplier_discount_percent / 100), 2)) stored,
+  cost_with_vat numeric generated always as (round(cost * (1 - supplier_discount_percent / 100) * 1.18, 2)) stored,
+  clearing_fee numeric generated always as (round(price * 0.0075 * 1.18, 2)) stored,
   profit numeric generated always as (
-    round(price / (1 + vat_percent / 100) - (price * fee_percent / 100 + fee_fixed) - cost - extra_expenses, 2)
+    round(price - cost * (1 - supplier_discount_percent / 100) * 1.18 - price * 0.0075 * 1.18 - extra_expenses, 2)
   ) stored,
   margin_percent numeric generated always as (
     case when price > 0 then round(
-      (price / (1 + vat_percent / 100) - (price * fee_percent / 100 + fee_fixed) - cost - extra_expenses)
-      / (price / (1 + vat_percent / 100)) * 100, 1) else 0 end
+      (price - cost * (1 - supplier_discount_percent / 100) * 1.18 - price * 0.0075 * 1.18 - extra_expenses) / price * 100,
+    1) else 0 end
   ) stored,
   created_by text,
   created_at timestamptz default now()

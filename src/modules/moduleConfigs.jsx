@@ -58,16 +58,16 @@ export const MODULES = {
     fields: [
       { key: 'name', label: 'שם מוצר', type: 'text', required: true },
       { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
-      { key: 'cost', label: 'עלות ליחידה (₪)', type: 'number' },
+      { key: 'supplier_url', label: 'קישור למוצר באתר הספק', type: 'text' },
+      { key: 'cost', label: 'עלות ליחידה מהספק (₪, לפני מע"מ)', type: 'number' },
+      { key: 'supplier_discount_percent', label: 'הנחת ספק (%)', type: 'number', default: 0 },
       { key: 'extra_expenses', label: 'הוצאות נלוות ליחידה (₪)', type: 'number' },
-      { key: 'price', label: 'מחיר מכירה כולל מע"מ (₪) — מסונכרן מהאתר', type: 'number' },
-      { key: 'vat_percent', label: 'מע"מ (%)', type: 'number', default: 18 },
-      { key: 'fee_percent', label: 'עמלת סליקה (% מהמחיר)', type: 'number', default: 0 },
-      { key: 'fee_fixed', label: 'עמלה קבועה לעסקה (₪)', type: 'number', default: 0 },
+      { key: 'price', label: 'מחיר מכירה באתר (₪) — מסונכרן מהאתר', type: 'number' },
       { key: 'product_url', label: 'קישור למוצר באתר', type: 'text' },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
-    // net_price, profit ו-margin_percent מחושבים אוטומטית ב-DB (generated columns)
+    // cost_with_vat, clearing_fee, profit ו-margin_percent מחושבים אוטומטית ב-DB (generated columns)
+    // ובטופס העריכה מוצג פירוט החישוב החי (src/lib/pricing.js)
     isProduct: true,
     // חילוק הטבלה לקבוצות לפי קטגוריה (מסונכרנת מהאתר)
     groupBy: { key: 'category', empty: 'ללא קטגוריה' },
@@ -88,9 +88,17 @@ export const MODULES = {
           ? <span>₪{row.price} <s style={{ opacity: 0.55 }}>₪{row.regular_price}</s></span>
           : `₪${row.price}`
       ) },
-      { key: 'net_price', label: 'ללא מע"מ', render: row => `₪${row.net_price}` },
+      { key: 'cost_with_vat', label: 'עלות כולל מע"מ', render: row => `₪${row.cost_with_vat}` },
+      { key: 'clearing_fee', label: 'עמלת סליקה', render: row => `₪${row.clearing_fee}` },
       { key: 'profit', label: 'רווח נקי', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
       { key: 'margin_percent', label: 'מרווח', render: row => `${row.margin_percent}%` },
+      {
+        key: 'supplier_url',
+        label: 'אתר ספק',
+        render: row => row.supplier_url
+          ? <a href={row.supplier_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>פתח</a>
+          : '—',
+      },
       {
         key: 'product_url',
         label: 'באתר',
