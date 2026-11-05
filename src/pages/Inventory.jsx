@@ -1,0 +1,133 @@
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../supabaseClient'
+import { useNav } from '../contexts/NavContext'
+
+const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
+
+// מצב מלאי: מלאי שלילי = נמכר יותר ממה שנקלט, כלומר צריך להזמין מהספק.
+function status(r) {
+  if (r.stock < 0) return { key: 'order', text: `חסר ${num(-r.stock)} — להזמין מהספק`, cls: 'neg' }
+  if (r.stock === 0) return { key: 'out', text: 'אזל', cls: 'neg' }
+  if (r.stock_min > 0 && r.stock <= r.stock_min) return { key: 'low', text: 'מלאי נמוך', cls: 'neg' }
+  return { key: 'ok', text: 'במלאי', cls: 'pos' }
+}
+
+export default function Inventory() {
+  const { openRecord } = useNav()
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState('all')
+  const [q, setQ] = useState('')
+  const [counting, setCounting] = useState(null) // שורה לספירת מלאי
+
+  async function load() {
+    setError('')
+    const [p, s] = await Promise.all([
+      supabase.from('products').select('id, name, sku, category, opening_stock, stock_min, suppliers(name)').order('name'),
+      supabase.from('product_stock').select('*'),
+    ])
+    const err = [p, s].find(x => x.error)
+    if (err) { setError(err.error.message); setRows([]); return }
+    const st = new Map(s.data.map(x => [x.product_id, x]))
+    setRows(p.data.map(pr => {
+      const x = st.get(pr.id) || {}
+      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, stock_min: Number(pr.stock_min) || 0 }
+    }))
+  }
+  useEffect(() => { load() }, [])
+
+  // ספירת מלאי: המשתמש מזין כמה יש בפועל, ואנחנו מחשבים מלאי פתיחה כך שהמלאי הנוכחי יתאים
+  async function saveCount(row, actual, min) {
+    const opening = Number(actual) - row.received + row.sold
+    const { error: e } = await supabase.from('products').update({ opening_stock: opening, stock_min: Number(min) || 0 }).eq('id', row.id)
+    if (e) { setError(e.message); return }
+    setCounting(null); load()
+  }
+
+  const shown = useMemo(() => (rows || []).filter(r => {
+    if (filter !== 'all' && status(r).key !== filter) return false
+    const t = q.trim().toLowerCase()
+    return !t || r.name.toLowerCase().includes(t) || (r.sku || '').toLowerCase().includes(t)
+  }), [rows, filter, q])
+
+  if (rows === null) return <div className="loading">טוען מלאי...</div>
+
+  const toOrder = rows.filter(r => r.stock < 0)
+  const inStock = rows.filter(r => r.stock > 0)
+
+  return (
+    <div>
+      <div className="module-head"><h2>📦 מלאי</h2></div>
+      {error && <div className="err-inline">{error}</div>}
+
+      <div className="summary-row">
+        <div className="summary-card"><span>מוצרים במלאי</span><b>{inStock.length}</b></div>
+        <div className="summary-card"><span>מוצרים שחסרים — להזמין מהספק</span><b className={toOrder.length ? 'neg' : ''}>{toOrder.length}</b></div>
+        <div className="summary-card"><span>יחידות להזמנה</span><b>{num(toOrder.reduce((a, r) => a - r.stock, 0))}</b></div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
+        <select value={filter} onChange={e => setFilter(e.target.value)}>
+          <option value="all">הכל</option>
+          <option value="order">חסר — להזמין</option>
+          <option value="out">אזל</option>
+          <option value="low">מלאי נמוך</option>
+          <option value="ok">במלאי</option>
+        </select>
+      </div>
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr><th>מוצר</th><th>מק״ט</th><th>ספק</th><th>מלאי פתיחה</th><th>נקלט</th><th>נמכר</th><th>מלאי נוכחי</th><th>מצב</th></tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={8}>אין מוצרים</td></tr>}
+            {shown.map(r => {
+              const s = status(r)
+              return (
+                <tr key={r.id} onClick={() => setCounting(r)}>
+                  <td><a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); openRecord('products', r.id) }}>{r.name}</a></td>
+                  <td>{r.sku || '—'}</td>
+                  <td>{r.suppliers?.name || '—'}</td>
+                  <td>{num(r.opening)}</td>
+                  <td>{num(r.received)}</td>
+                  <td>{num(r.sold)}</td>
+                  <td><b className={s.cls}>{num(r.stock)}</b></td>
+                  <td><span className={s.cls}>{s.text}</span></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginTop: 10 }}>
+        מלאי נוכחי = מלאי פתיחה + מה שנקלט בתעודות − מה שנמכר (הזמנות בטיפול/הושלמו, מתאריך תחילת המעקב). לחיצה על שורה = ספירת מלאי.
+      </p>
+
+      {counting && <CountModal row={counting} onCancel={() => setCounting(null)} onSave={saveCount} />}
+    </div>
+  )
+}
+
+function CountModal({ row, onCancel, onSave }) {
+  const [actual, setActual] = useState(row.stock)
+  const [min, setMin] = useState(row.stock_min || 0)
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div className="modal">
+        <h2>ספירת מלאי</h2>
+        <p>{row.name}{row.sku ? ` · ${row.sku}` : ''}</p>
+        <div className="field"><label>כמות בפועל במחסן</label>
+          <input type="number" value={actual} onChange={e => setActual(e.target.value)} /></div>
+        <div className="field"><label>התראת מלאי נמוך מתחת ל־</label>
+          <input type="number" min="0" value={min} onChange={e => setMin(e.target.value)} /></div>
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onCancel}>ביטול</button>
+          <button className="btn btn-primary" onClick={() => onSave(row, actual, min)}>שמירה</button>
+        </div>
+      </div>
+    </div>
+  )
+}

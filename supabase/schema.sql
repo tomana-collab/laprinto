@@ -321,3 +321,6 @@ $$;
 
 grant execute on function public.check_team_member_before_signup to supabase_auth_admin;
 revoke execute on function public.check_team_member_before_signup from authenticated, anon, public;
+
+-- ---------- מלאי ותעודות ספק ----------
+-- ראה supabase/migrations/2026-11-07-inventory.sql (מוסיף עמודות מלאי ל-products, טבלאות תעודות ו-view product_stock)

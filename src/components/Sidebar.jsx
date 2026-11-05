@@ -51,6 +51,22 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
                   <span className="nav-icon">🎁</span> מארזים
                 </button>
               )}
+              {key === 'products' && (
+                <>
+                  <button
+                    className={active === 'inventory' ? 'active' : ''}
+                    onClick={() => { onSelect('inventory'); onClose() }}
+                  >
+                    <span className="nav-icon">📦</span> מלאי
+                  </button>
+                  <button
+                    className={active === 'receipts' ? 'active' : ''}
+                    onClick={() => { onSelect('receipts'); onClose() }}
+                  >
+                    <span className="nav-icon">📥</span> קליטת תעודות
+                  </button>
+                </>
+              )}
             </Fragment>
           ))}
         </nav>

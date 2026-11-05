@@ -4,6 +4,8 @@ import Login from './pages/Login'
 import Settings from './pages/Settings'
 import Dashboard from './pages/Dashboard'
 import Bundles from './pages/Bundles'
+import Receipts from './pages/Receipts'
+import Inventory from './pages/Inventory'
 import Sidebar from './components/Sidebar'
 import GenericModule from './modules/GenericModule'
 import { MODULES } from './modules/moduleConfigs'
@@ -35,6 +37,8 @@ export default function App() {
         {active === 'settings' ? <Settings />
           : active === 'dashboard' ? <Dashboard />
           : active === 'bundles' ? <Bundles />
+          : active === 'receipts' ? <Receipts />
+          : active === 'inventory' ? <Inventory />
           : <GenericModule key={active} config={MODULES[active]} focusId={focus?.module === active ? focus.id : null} />}
       </main>
     </div>
