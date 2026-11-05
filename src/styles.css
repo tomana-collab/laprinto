@@ -80,7 +80,7 @@ button{ font-family:'Assistant',sans-serif; cursor:pointer; }
 .signout{ width:100%; background:#232739; color:#fff; border:none; padding:9px; border-radius:9px; font-weight:600; font-size:13px; }
 .sidebar-scrim{ display:none; }
 
-main{ flex:1; min-width:0; padding:24px 28px; max-width: 980px; }
+main{ flex:1; min-width:0; padding:24px 28px; }
 .mobile-menu-btn{ display:none; }
 
 @media (max-width: 860px){
