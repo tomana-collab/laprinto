@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { formatDate } from '../lib/format'
+import { formatDate, formatDateTime, isCountedOrder } from '../lib/format'
 
 const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
 const CLOSED_OPP_STATUSES = ['סגור-הצלחה', 'סגור-נכשל']
@@ -15,7 +15,7 @@ export default function Dashboard() {
       const [tasks, expenses, orders, opportunities, products, suppliers, teamMembers, ideas, trends] = await Promise.all([
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
-        supabase.from('orders').select('total_amount'),
+        supabase.from('orders').select('total_amount, quantity, order_date, order_number, sku, product_name, wc_status, products(name, product_url)').order('order_date', { ascending: false }),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
@@ -54,7 +54,13 @@ export default function Dashboard() {
   const openOpps = data.opportunities.filter(o => !CLOSED_OPP_STATUSES.includes(o.status))
   const openOppsValue = openOpps.reduce((a, o) => a + (o.value || 0), 0)
 
-  const totalIncome = data.orders.reduce((a, o) => a + (o.total_amount || 0), 0)
+  // ביטולים/החזרים/ממתינות לתשלום לא נספרים כהכנסה
+  const sales = data.orders.filter(isCountedOrder)
+  const totalIncome = sales.reduce((a, o) => a + (o.total_amount || 0), 0)
+  const monthPrefix = new Date().toISOString().slice(0, 7)
+  const monthSales = sales.filter(o => (o.order_date || '').startsWith(monthPrefix))
+  const monthIncome = monthSales.reduce((a, o) => a + (o.total_amount || 0), 0)
+  const recentSales = sales.slice(0, 10)
   const totalExpenses = data.expenses.reduce((a, e) => a + (e.amount || 0), 0)
   const profit = totalIncome - totalExpenses
   const paidExpenses = data.expenses.filter(e => e.status === 'שולם').reduce((a, e) => a + (e.amount || 0), 0)
@@ -78,10 +84,39 @@ export default function Dashboard() {
       <div className="dash-section">
         <h3>סיכום כספי</h3>
         <div className="summary-row" style={{ marginBottom: 0 }}>
+          <div className="summary-card"><span>מכירות החודש</span><b className="pos">₪{monthIncome.toFixed(0)}</b></div>
           <div className="summary-card"><span>סה"כ הכנסות</span><b className="pos">₪{totalIncome.toFixed(0)}</b></div>
           <div className="summary-card"><span>סה"כ הוצאות</span><b className="neg">₪{totalExpenses.toFixed(0)}</b></div>
           <div className="summary-card"><span>רווח</span><b className={profit >= 0 ? 'pos' : 'neg'}>₪{profit.toFixed(0)}</b></div>
         </div>
+      </div>
+
+      <div className="dash-section">
+        <h3>מכירות אחרונות</h3>
+        {recentSales.length === 0 ? <div className="empty-col">אין מכירות עדיין — סנכרן הזמנות בדף ההזמנות</div> : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr><th>תאריך</th><th>הזמנה</th><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>סכום</th></tr>
+              </thead>
+              <tbody>
+                {recentSales.map((o, i) => {
+                  const name = o.products?.name || o.product_name || '—'
+                  return (
+                    <tr key={i} style={{ cursor: 'default' }}>
+                      <td>{formatDateTime(o.order_date) || '—'}</td>
+                      <td>{o.order_number ? `#${o.order_number}` : '—'}</td>
+                      <td>{o.products?.product_url ? <a href={o.products.product_url} target="_blank" rel="noreferrer">{name}</a> : name}</td>
+                      <td>{o.sku || '—'}</td>
+                      <td>{o.quantity}</td>
+                      <td>₪{o.total_amount}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="kpi-grid">

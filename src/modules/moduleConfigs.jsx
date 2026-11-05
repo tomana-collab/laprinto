@@ -1,7 +1,7 @@
 // כל מודול מוגדר כאן: שם טבלה ב-Supabase, השדות שלו, ועמודות הטבלה בתצוגה.
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
-import { formatDate } from '../lib/format'
+import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 
 export const MODULES = {
   tasks: {
@@ -71,27 +71,20 @@ export const MODULES = {
     isProduct: true,
     // חילוק הטבלה לקבוצות לפי קטגוריה (מסונכרנת מהאתר)
     groupBy: { key: 'category', empty: 'ללא קטגוריה' },
-    searchField: 'name',
-    searchLabel: 'חיפוש לפי שם מוצר',
+    searchField: ['name', 'sku'],
+    searchLabel: 'חיפוש לפי שם או מק"ט',
     filters: [
       { key: 'category', label: 'כל הקטגוריות', type: 'values' },
     ],
     // כפתור "סנכרן מהאתר" — קורא ל-Edge Function sync-wc-products
     syncFunction: 'sync-wc-products',
+    syncBody: { target: 'products' },
+    syncNoun: 'מוצרים',
     columns: [
       { key: 'name', label: 'שם מוצר' },
+      { key: 'sku', label: 'מק"ט', render: row => row.sku || '—' },
       { key: 'subcategory', label: 'תת-קטגוריה', render: row => row.subcategory || '—' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
-      { key: 'cost', label: 'עלות', render: row => `₪${row.cost}` },
-      { key: 'price', label: 'מחיר באתר', render: row => (
-        row.sale_price != null && row.regular_price != null && row.sale_price < row.regular_price
-          ? <span>₪{row.price} <s style={{ opacity: 0.55 }}>₪{row.regular_price}</s></span>
-          : `₪${row.price}`
-      ) },
-      { key: 'cost_with_vat', label: 'עלות כולל מע"מ', render: row => `₪${row.cost_with_vat}` },
-      { key: 'clearing_fee', label: 'עמלת סליקה', render: row => `₪${row.clearing_fee}` },
-      { key: 'profit', label: 'רווח נקי', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
-      { key: 'margin_percent', label: 'מרווח', render: row => `${row.margin_percent}%` },
       {
         key: 'supplier_url',
         label: 'אתר ספק',
@@ -106,6 +99,17 @@ export const MODULES = {
           ? <a href={row.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>פתח</a>
           : '—',
       },
+      { key: 'cost', label: 'עלות', render: row => `₪${row.cost}` },
+      { key: 'price', label: 'מחיר באתר', render: row => (
+        row.sale_price != null && row.regular_price != null && row.sale_price < row.regular_price
+          ? <span>₪{row.price} <s style={{ opacity: 0.55 }}>₪{row.regular_price}</s></span>
+          : `₪${row.price}`
+      ) },
+      { key: 'cost_with_vat', label: 'עלות כולל מע"מ', render: row => `₪${row.cost_with_vat}` },
+      { key: 'clearing_fee', label: 'עמלת סליקה', render: row => `₪${row.clearing_fee}` },
+      // רווח בסוף: שורת התוצאה
+      { key: 'profit', label: 'רווח', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
+      { key: 'margin_percent', label: 'מרווח', render: row => `${row.margin_percent}%` },
     ],
   },
 
@@ -179,8 +183,9 @@ export const MODULES = {
     table: 'orders',
     label: 'הזמנות',
     icon: '🧾',
-    // מביא גם את שם המוצר (products) ואת שם מי שקיבל (team_members) דרך ה-foreign keys
-    selectQuery: '*, products(name), team_members(full_name)',
+    // מביא גם את המוצר (שם/קישור) ואת מי שקיבל דרך ה-foreign keys
+    selectQuery: '*, products(name, product_url), team_members(full_name)',
+    orderBy: 'order_date',
     fields: [
       { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true },
       { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true },
@@ -190,11 +195,35 @@ export const MODULES = {
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
     isOrder: true,
+    // כפתור "סנכרן הזמנות מהאתר" — אותה Edge Function, target=orders
+    syncFunction: 'sync-wc-products',
+    syncBody: { target: 'orders' },
+    syncButtonLabel: '↻ סנכרן הזמנות מהאתר',
+    syncNoun: 'שורות הזמנה',
+    searchField: ['product_name', 'sku', 'order_number'],
+    searchLabel: 'חיפוש לפי מוצר, מק"ט או מס\' הזמנה',
+    filters: [
+      { key: 'order_date', label: 'כל החודשים', type: 'month' },
+      { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: ORDER_STATUS_LABELS },
+    ],
     columns: [
-      { key: 'product', label: 'מוצר', render: row => row.products?.name || '—' },
-      { key: 'price', label: 'מחיר ליחידה', render: row => `₪${row.price}` },
+      { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
+      { key: 'order_number', label: 'הזמנה', render: row => row.order_number ? `#${row.order_number}` : '—' },
+      {
+        key: 'product',
+        label: 'מוצר',
+        render: row => {
+          const name = row.products?.name || row.product_name || '—'
+          return row.products?.product_url
+            ? <a href={row.products.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{name}</a>
+            : name
+        },
+      },
+      { key: 'sku', label: 'מק"ט', render: row => row.sku || '—' },
       { key: 'quantity', label: 'כמות' },
+      { key: 'price', label: 'מחיר ליחידה', render: row => `₪${row.price}` },
       { key: 'received_by', label: 'מי קיבל', render: row => row.team_members?.full_name || '—' },
+      { key: 'wc_status', label: 'סטטוס באתר', render: row => row.wc_status ? (ORDER_STATUS_LABELS[row.wc_status] || row.wc_status) : 'ידנית' },
       { key: 'total_amount', label: 'סכום', render: row => `₪${row.total_amount}` },
     ],
   },

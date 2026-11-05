@@ -40,6 +40,7 @@ create table if not exists products (
   notes text default '',
   -- נתוני אתר (סנכרון מ-WooCommerce, ראו supabase/functions/sync-wc-products)
   wc_product_id bigint unique,
+  sku text default '',                    -- מק"ט באתר
   category text default '',               -- קטגוריה ראשית באתר
   subcategory text default '',            -- תת-קטגוריה באתר
   product_url text default '',
@@ -140,6 +141,14 @@ create table if not exists orders (
   price numeric default 0,               -- מחיר ליחידה
   received_by uuid references team_members(id) on delete set null,
   total_amount numeric generated always as (price * quantity) stored,
+  -- הזמנות מהאתר (סנכרון WooCommerce): שורת פריט = שורה
+  wc_order_id bigint,
+  wc_line_item_id bigint unique,
+  order_number text,
+  wc_status text,                        -- ריק = הזמנה ידנית
+  product_name text,
+  sku text default '',
+  order_date timestamptz default now(),
   notes text default '',
   created_by text,
   created_at timestamptz default now()

@@ -3,6 +3,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { calcProduct } from '../lib/pricing'
+import { isCountedOrder } from '../lib/format'
 
 export default function GenericModule({ config }) {
   const { user } = useAuth()
@@ -22,7 +23,7 @@ export default function GenericModule({ config }) {
     const { data, error } = await supabase
       .from(config.table)
       .select(config.selectQuery || '*')
-      .order('created_at', { ascending: false })
+      .order(config.orderBy || 'created_at', { ascending: false })
     if (error) setError(error.message)
     else setRows(data)
   }
@@ -77,7 +78,7 @@ export default function GenericModule({ config }) {
     setSyncing(true)
     setSyncMsg('')
     setError('')
-    const { data, error } = await supabase.functions.invoke(config.syncFunction)
+    const { data, error } = await supabase.functions.invoke(config.syncFunction, { body: config.syncBody || {} })
     setSyncing(false)
     if (error) {
       let msg = error.message
@@ -88,7 +89,8 @@ export default function GenericModule({ config }) {
       setError(msg)
       return
     }
-    setSyncMsg(`סונכרנו ${data.total} מוצרים מהאתר: ${data.inserted} חדשים, ${data.updated} עודכנו${data.errors?.length ? `, ${data.errors.length} שגיאות` : ''}`)
+    const r = data?.[config.syncBody?.target || 'products'] || {}
+    setSyncMsg(`סונכרנו ${r.total ?? 0} ${config.syncNoun || 'רשומות'} מהאתר: ${r.inserted ?? 0} חדשות, ${r.updated ?? 0} עודכנו${r.errors?.length ? `, ${r.errors.length} שגיאות (${r.errors[0]})` : ''}`)
     load()
   }
 
@@ -114,7 +116,8 @@ export default function GenericModule({ config }) {
 
   if (config.searchField && search.trim()) {
     const q = search.trim().toLowerCase()
-    filtered = filtered.filter(r => (r[config.searchField] || '').toLowerCase().includes(q))
+    const searchFields = [].concat(config.searchField)
+    filtered = filtered.filter(r => searchFields.some(f => String(r[f] || '').toLowerCase().includes(q)))
   }
 
   for (const f of config.filters || []) {
@@ -146,7 +149,7 @@ export default function GenericModule({ config }) {
         <div style={{ display: 'flex', gap: 8 }}>
           {config.syncFunction && (
             <button className="btn-add" onClick={handleSync} disabled={syncing}>
-              {syncing ? 'מסנכרן...' : '↻ סנכרן מהאתר'}
+              {syncing ? 'מסנכרן...' : (config.syncButtonLabel || '↻ סנכרן מהאתר')}
             </button>
           )}
           <button className="btn-add" onClick={() => setEditing(emptyForm())}>+ חדש</button>
@@ -202,7 +205,7 @@ export default function GenericModule({ config }) {
               >
                 <option value="">{f.label}</option>
                 {[...new Set(rows.map(r => r[f.key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(v => (
-                  <option key={v} value={v}>{v}</option>
+                  <option key={v} value={v}>{f.labels?.[v] || v}</option>
                 ))}
               </select>
             ) : f.type === 'month' ? (
@@ -295,7 +298,9 @@ function ExpensesSummary({ rows }) {
   )
 }
 
-function OrdersSummary({ rows }) {
+function OrdersSummary({ rows: allRows }) {
+  // ביטולים/החזרים/ממתינות לתשלום לא נספרים כמכירה
+  const rows = allRows.filter(isCountedOrder)
   const totalRevenue = rows.reduce((a, r) => a + (r.total_amount || 0), 0)
   const totalQuantity = rows.reduce((a, r) => a + (r.quantity || 0), 0)
   return (
@@ -453,8 +458,9 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
       <div className="modal">
         <h2>{initial.id ? 'עריכה' : `${config.label.slice(0, -1) || config.label} חדש`}</h2>
 
+        <div className="fields-grid">
         {config.fields.map(fld => (
-          <div className="field" key={fld.key}>
+          <div className={`field${fld.type === 'textarea' || fld.type === 'file' ? ' full' : ''}`} key={fld.key}>
             <label>{fld.label}</label>
             {fld.type === 'textarea' ? (
               <textarea value={form[fld.key]} onChange={e => set(fld.key, e.target.value)} />
@@ -475,6 +481,7 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
             )}
           </div>
         ))}
+        </div>
 
         {config.isProduct && <ProductBreakdown form={form} />}
 

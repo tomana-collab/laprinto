@@ -1,5 +1,7 @@
-// Edge Function: מושך את כל המוצרים המפורסמים מ-WooCommerce (laprinto.co.il) ומסנכרן
-// לטבלת products. מעדכן רק נתוני אתר (שם, מחירים, קישור) — לעולם לא נוגע בעלות,
+// Edge Function: מסנכרן מ-WooCommerce (laprinto.co.il) לטבלאות products ו-orders.
+// גוף הבקשה: { target: 'products' | 'orders' | 'all' } (ברירת מחדל: products).
+//
+// מוצרים: מושך את כל המוצרים המפורסמים ומסנכרן לטבלת products. מעדכן רק נתוני אתר (שם, מחירים, קישור) — לעולם לא נוגע בעלות,
 // הוצאות נלוות, ספק, הערות או סטטוס של מוצר קיים.
 //
 // מי יכול להפעיל:
@@ -102,27 +104,14 @@ function resolveCategory(wcCats: any[] | undefined, catMap: Map<number, WcCat>) 
   return { category: rootName, subcategory: deepName === rootName ? '' : deepName }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
-  if (!(await authorized(req))) return json({ error: 'לא מורשה' }, 401)
+type Stats = { total: number; inserted: number; updated: number; errors: string[] }
 
-  if (!WC_SITE_URL || !WC_KEY || !WC_SECRET) {
-    return json({ error: 'חסרים WC_SITE_URL / WC_CONSUMER_KEY / WC_CONSUMER_SECRET ב-secrets של הפרויקט' }, 500)
-  }
+async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Stats> {
+  const wcProducts = await fetchAllWcProducts()
+  const catMap = await fetchAllWcCategories()
 
-  let wcProducts: any[]
-  let catMap: Map<number, WcCat>
-  try {
-    wcProducts = await fetchAllWcProducts()
-    catMap = await fetchAllWcCategories()
-  } catch (e) {
-    return json({ error: (e as Error).message }, 502)
-  }
-
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
   const { data: existing, error: existingErr } = await admin.from('products').select('id, name, wc_product_id')
-  if (existingErr) return json({ error: existingErr.message }, 500)
+  if (existingErr) throw new Error(existingErr.message)
 
   const byWcId = new Map<number, any>()
   const unlinkedByName = new Map<string, any>()
@@ -141,6 +130,7 @@ Deno.serve(async (req) => {
     const siteData = {
       wc_product_id: wc.id,
       name,
+      sku: wc.sku || '',
       product_url: wc.permalink || '',
       ...resolveCategory(wc.categories, catMap),
       price: num(wc.price) ?? 0, // המחיר הנוכחי באתר (מבצע אם פעיל), כולל מע"מ
@@ -172,5 +162,90 @@ Deno.serve(async (req) => {
     })
   }
 
-  return json({ ok: errors.length === 0, total: wcProducts.length, inserted, updated, errors })
+  return { total: wcProducts.length, inserted, updated, errors }
+}
+
+async function fetchAllWcOrders() {
+  const auth = 'Basic ' + btoa(`${WC_KEY}:${WC_SECRET}`)
+  const all: any[] = []
+  for (let page = 1; page <= 50; page++) {
+    const url = `${WC_SITE_URL}/wp-json/wc/v3/orders?per_page=100&page=${page}&status=any&orderby=date&order=desc`
+    const res = await fetch(url, { headers: { Authorization: auth } })
+    if (!res.ok) throw new Error(`WooCommerce (הזמנות) החזיר ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    all.push(...(await res.json()))
+    if (page >= Number(res.headers.get('x-wp-totalpages') || 1)) break
+  }
+  return all
+}
+
+// כל שורת פריט בהזמנת אתר הופכת לשורה בטבלת orders (מזהה ייחודי: wc_line_item_id).
+// ההזמנה נשמרת עם הסטטוס שלה באתר, כדי שביטולים/החזרים יתעדכנו בסנכרון הבא.
+// הערות ו"מי קיבל" שמולאו ידנית ב-CRM לא נדרסים. לא נשמרים פרטי לקוחות.
+async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats> {
+  const wcOrders = await fetchAllWcOrders()
+
+  const { data: products, error: pErr } = await admin.from('products').select('id, wc_product_id').not('wc_product_id', 'is', null)
+  if (pErr) throw new Error(pErr.message)
+  const productByWcId = new Map<number, string>()
+  for (const p of products || []) productByWcId.set(Number(p.wc_product_id), p.id)
+
+  const { data: existingRows } = await admin.from('orders').select('wc_line_item_id').not('wc_line_item_id', 'is', null)
+  const existingIds = new Set((existingRows || []).map((r: any) => Number(r.wc_line_item_id)))
+
+  const rows: any[] = []
+  for (const o of wcOrders) {
+    for (const li of o.line_items || []) {
+      const qty = Number(li.quantity) || 1
+      rows.push({
+        wc_order_id: o.id,
+        wc_line_item_id: li.id,
+        order_number: String(o.number ?? o.id),
+        order_date: o.date_created_gmt ? `${o.date_created_gmt}Z` : o.date_created,
+        wc_status: o.status,
+        product_name: decode(String(li.name || '')),
+        sku: li.sku || '',
+        product_id: productByWcId.get(li.product_id) ?? null,
+        quantity: qty,
+        // מחיר ליחידה כולל מע"מ, אחרי הנחות/קופונים
+        price: Math.round(((Number(li.total) + Number(li.total_tax || 0)) / qty) * 100) / 100,
+        created_by: 'WooCommerce Sync',
+      })
+    }
+  }
+
+  const errors: string[] = []
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await admin.from('orders').upsert(rows.slice(i, i + 200), { onConflict: 'wc_line_item_id' })
+    if (error) errors.push(error.message)
+  }
+
+  const inserted = rows.filter(r => !existingIds.has(r.wc_line_item_id)).length
+  return { total: rows.length, inserted, updated: rows.length - inserted, errors }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (!(await authorized(req))) return json({ error: 'לא מורשה' }, 401)
+
+  if (!WC_SITE_URL || !WC_KEY || !WC_SECRET) {
+    return json({ error: 'חסרים WC_SITE_URL / WC_CONSUMER_KEY / WC_CONSUMER_SECRET ב-secrets של הפרויקט' }, 500)
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const target = body?.target || 'products'
+  if (!['products', 'orders', 'all'].includes(target)) return json({ error: 'target לא תקין' }, 400)
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+  const result: Record<string, Stats> = {}
+  try {
+    // מוצרים קודם, כדי שהזמנות יקושרו למוצרים חדשים באותה ריצה
+    if (target === 'products' || target === 'all') result.products = await syncProducts(admin)
+    if (target === 'orders' || target === 'all') result.orders = await syncOrders(admin)
+  } catch (e) {
+    return json({ error: (e as Error).message }, 502)
+  }
+
+  const ok = Object.values(result).every(r => r.errors.length === 0)
+  return json({ ok, ...result })
 })
