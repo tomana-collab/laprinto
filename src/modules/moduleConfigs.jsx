@@ -60,18 +60,36 @@ export const MODULES = {
       { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
       { key: 'cost', label: 'עלות ליחידה (₪)', type: 'number' },
       { key: 'extra_expenses', label: 'הוצאות נלוות ליחידה (₪)', type: 'number' },
-      { key: 'price', label: 'מחיר מכירה (₪)', type: 'number' },
+      { key: 'price', label: 'מחיר מכירה כולל מע"מ (₪) — מסונכרן מהאתר', type: 'number' },
+      { key: 'vat_percent', label: 'מע"מ (%)', type: 'number', default: 18 },
+      { key: 'fee_percent', label: 'עמלת סליקה (% מהמחיר)', type: 'number', default: 0 },
+      { key: 'fee_fixed', label: 'עמלה קבועה לעסקה (₪)', type: 'number', default: 0 },
+      { key: 'product_url', label: 'קישור למוצר באתר', type: 'text' },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
-    // profit ו-margin_percent מחושבים אוטומטית ב-DB (generated columns)
+    // net_price, profit ו-margin_percent מחושבים אוטומטית ב-DB (generated columns)
     isProduct: true,
+    // כפתור "סנכרן מהאתר" — קורא ל-Edge Function sync-wc-products
+    syncFunction: 'sync-wc-products',
     columns: [
       { key: 'name', label: 'שם מוצר' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
       { key: 'cost', label: 'עלות', render: row => `₪${row.cost}` },
-      { key: 'price', label: 'מחיר', render: row => `₪${row.price}` },
-      { key: 'profit', label: 'רווח', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
+      { key: 'price', label: 'מחיר באתר', render: row => (
+        row.sale_price != null && row.regular_price != null && row.sale_price < row.regular_price
+          ? <span>₪{row.price} <s style={{ opacity: 0.55 }}>₪{row.regular_price}</s></span>
+          : `₪${row.price}`
+      ) },
+      { key: 'net_price', label: 'ללא מע"מ', render: row => `₪${row.net_price}` },
+      { key: 'profit', label: 'רווח נקי', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
       { key: 'margin_percent', label: 'מרווח', render: row => `${row.margin_percent}%` },
+      {
+        key: 'product_url',
+        label: 'באתר',
+        render: row => row.product_url
+          ? <a href={row.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>פתח</a>
+          : '—',
+      },
     ],
   },
 

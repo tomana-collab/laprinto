@@ -35,12 +35,27 @@ create table if not exists products (
   status text default 'לבדיקה',           -- לבדיקה / להזמנה / פעיל / הופסק
   cost numeric default 0,                 -- עלות ליחידה (ספק)
   extra_expenses numeric default 0,       -- הוצאות נלוות (משלוח, פרסום ליחידה וכו')
-  price numeric default 0,                -- מחיר מכירה
+  price numeric default 0,                -- מחיר מכירה כולל מע"מ (מסונכרן מ-WooCommerce)
   supplier text default '',
   notes text default '',
-  profit numeric generated always as (price - cost - extra_expenses) stored,
+  -- נתוני אתר (סנכרון מ-WooCommerce, ראו supabase/functions/sync-wc-products)
+  wc_product_id bigint unique,
+  product_url text default '',
+  regular_price numeric,
+  sale_price numeric,
+  synced_at timestamptz,
+  -- מע"מ ועמלות לחישוב רווח נקי
+  vat_percent numeric not null default 18,
+  fee_percent numeric not null default 0,
+  fee_fixed numeric not null default 0,
+  net_price numeric generated always as (round(price / (1 + vat_percent / 100), 2)) stored,
+  profit numeric generated always as (
+    round(price / (1 + vat_percent / 100) - (price * fee_percent / 100 + fee_fixed) - cost - extra_expenses, 2)
+  ) stored,
   margin_percent numeric generated always as (
-    case when price > 0 then round(((price - cost - extra_expenses) / price) * 100, 1) else 0 end
+    case when price > 0 then round(
+      (price / (1 + vat_percent / 100) - (price * fee_percent / 100 + fee_fixed) - cost - extra_expenses)
+      / (price / (1 + vat_percent / 100)) * 100, 1) else 0 end
   ) stored,
   created_by text,
   created_at timestamptz default now()

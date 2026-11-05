@@ -11,6 +11,8 @@ export default function GenericModule({ config }) {
   const [statusFilter, setStatusFilter] = useState('הכל')
   const [search, setSearch] = useState('')
   const [filterValues, setFilterValues] = useState({})
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
 
   function setFilter(key, val) { setFilterValues(v => ({ ...v, [key]: val })) }
 
@@ -70,6 +72,25 @@ export default function GenericModule({ config }) {
     load()
   }
 
+  async function handleSync() {
+    setSyncing(true)
+    setSyncMsg('')
+    setError('')
+    const { data, error } = await supabase.functions.invoke(config.syncFunction)
+    setSyncing(false)
+    if (error) {
+      let msg = error.message
+      if (error instanceof FunctionsHttpError) {
+        const body = await error.context.json().catch(() => null)
+        if (body?.error) msg = body.error
+      }
+      setError(msg)
+      return
+    }
+    setSyncMsg(`סונכרנו ${data.total} מוצרים מהאתר: ${data.inserted} חדשים, ${data.updated} עודכנו${data.errors?.length ? `, ${data.errors.length} שגיאות` : ''}`)
+    load()
+  }
+
   async function handleDelete(id) {
     const { error } = await supabase.from(config.table).delete().eq('id', id)
     if (error) { setError(error.message); return }
@@ -105,8 +126,17 @@ export default function GenericModule({ config }) {
     <div>
       <div className="module-head">
         <h2>{config.icon} {config.label}</h2>
-        <button className="btn-add" onClick={() => setEditing(emptyForm())}>+ חדש</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {config.syncFunction && (
+            <button className="btn-add" onClick={handleSync} disabled={syncing}>
+              {syncing ? 'מסנכרן...' : '↻ סנכרן מהאתר'}
+            </button>
+          )}
+          <button className="btn-add" onClick={() => setEditing(emptyForm())}>+ חדש</button>
+        </div>
       </div>
+
+      {syncMsg && <div className="summary-row" style={{ padding: '8px 12px' }}>{syncMsg}</div>}
 
       {error && <div className="err-inline">{error}</div>}
 
