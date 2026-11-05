@@ -69,10 +69,18 @@ export const MODULES = {
     ],
     // net_price, profit ו-margin_percent מחושבים אוטומטית ב-DB (generated columns)
     isProduct: true,
+    // חילוק הטבלה לקבוצות לפי קטגוריה (מסונכרנת מהאתר)
+    groupBy: { key: 'category', empty: 'ללא קטגוריה' },
+    searchField: 'name',
+    searchLabel: 'חיפוש לפי שם מוצר',
+    filters: [
+      { key: 'category', label: 'כל הקטגוריות', type: 'values' },
+    ],
     // כפתור "סנכרן מהאתר" — קורא ל-Edge Function sync-wc-products
     syncFunction: 'sync-wc-products',
     columns: [
       { key: 'name', label: 'שם מוצר' },
+      { key: 'subcategory', label: 'תת-קטגוריה', render: row => row.subcategory || '—' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
       { key: 'cost', label: 'עלות', render: row => `₪${row.cost}` },
       { key: 'price', label: 'מחיר באתר', render: row => (

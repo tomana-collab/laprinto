@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
@@ -123,6 +123,21 @@ export default function GenericModule({ config }) {
     else filtered = filtered.filter(r => r[f.key] === val)
   }
 
+  // חילוק לקבוצות (למשל מוצרים לפי קטגוריה): קבוצות ממוינות לפי שם, "ללא קטגוריה" בסוף
+  let groups = [{ title: null, rows: filtered }]
+  if (config.groupBy) {
+    const { key, empty } = config.groupBy
+    const byKey = new Map()
+    for (const r of filtered) {
+      const k = r[key] || empty
+      if (!byKey.has(k)) byKey.set(k, [])
+      byKey.get(k).push(r)
+    }
+    groups = [...byKey.entries()]
+      .sort(([a], [b]) => (a === empty) - (b === empty) || a.localeCompare(b, 'he'))
+      .map(([title, rs]) => ({ title, rows: rs }))
+  }
+
   return (
     <div>
       <div className="module-head">
@@ -178,6 +193,17 @@ export default function GenericModule({ config }) {
                 relation={f.relation}
                 placeholder={f.label}
               />
+            ) : f.type === 'values' ? (
+              <select
+                key={f.key}
+                value={filterValues[f.key] || ''}
+                onChange={e => setFilter(f.key, e.target.value)}
+              >
+                <option value="">{f.label}</option>
+                {[...new Set(rows.map(r => r[f.key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
             ) : f.type === 'month' ? (
               <input
                 key={f.key}
@@ -202,17 +228,28 @@ export default function GenericModule({ config }) {
             {filtered.length === 0 && (
               <tr><td className="empty-col" colSpan={config.columns.length + (config.statusField ? 1 : 0)}>אין רשומות עדיין</td></tr>
             )}
-            {filtered.map(row => (
-              <tr key={row.id} onClick={() => setEditing(row)}>
-                {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? '—')}</td>)}
-                {config.statusField && (
-                  <td onClick={e => e.stopPropagation()}>
-                    <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>
-                      {config.statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </td>
+            {groups.map(g => (
+              <Fragment key={g.title ?? 'all'}>
+                {g.title !== null && (
+                  <tr className="group-row">
+                    <td colSpan={config.columns.length + (config.statusField ? 1 : 0)}>
+                      <b>{g.title}</b> <span style={{ opacity: 0.6 }}>({g.rows.length})</span>
+                    </td>
+                  </tr>
                 )}
-              </tr>
+                {g.rows.map(row => (
+                  <tr key={row.id} onClick={() => setEditing(row)}>
+                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? '—')}</td>)}
+                    {config.statusField && (
+                      <td onClick={e => e.stopPropagation()}>
+                        <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>
+                          {config.statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>

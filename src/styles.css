@@ -186,3 +186,7 @@ main{ flex:1; min-width:0; padding:24px 28px; max-width: 980px; }
 .btn-primary{ background:var(--ink); color:#fff; }
 .btn-ghost{ background:var(--line); color:var(--ink); }
 .btn-danger{ background:var(--coral-soft); color:#C7402A; }
+
+/* שורת כותרת קבוצה בטבלה (למשל קטגוריה במוצרים) */
+.data-table tbody tr.group-row{ cursor:default; }
+.data-table tbody tr.group-row td{ background:color-mix(in srgb, var(--violet) 8%, transparent); color:var(--violet); font-size:13px; padding:9px 14px; }

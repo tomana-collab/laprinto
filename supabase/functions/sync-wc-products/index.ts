@@ -68,6 +68,40 @@ async function fetchAllWcProducts() {
   return all
 }
 
+type WcCat = { id: number; name: string; slug: string; parent: number }
+
+async function fetchAllWcCategories(): Promise<Map<number, WcCat>> {
+  const auth = 'Basic ' + btoa(`${WC_KEY}:${WC_SECRET}`)
+  const map = new Map<number, WcCat>()
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetch(`${WC_SITE_URL}/wp-json/wc/v3/products/categories?per_page=100&page=${page}`, {
+      headers: { Authorization: auth },
+    })
+    if (!res.ok) throw new Error(`WooCommerce (קטגוריות) החזיר ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const batch: WcCat[] = await res.json()
+    batch.forEach(c => map.set(c.id, c))
+    if (page >= Number(res.headers.get('x-wp-totalpages') || 1)) break
+  }
+  return map
+}
+
+// בוחר את הקטגוריה העמוקה ביותר של המוצר ומחזיר אותה + השורש שלה
+function resolveCategory(wcCats: any[] | undefined, catMap: Map<number, WcCat>) {
+  const depth = (id: number) => {
+    let d = 0
+    for (let c = catMap.get(id); c && c.parent && d < 10; c = catMap.get(c.parent)) d++
+    return d
+  }
+  const real = (wcCats || []).filter(c => c.slug !== 'uncategorized')
+  if (!real.length) return { category: '', subcategory: '' }
+  const deepest = real.reduce((a, b) => (depth(b.id) > depth(a.id) ? b : a))
+  let root = catMap.get(deepest.id)
+  for (let i = 0; root && root.parent && catMap.get(root.parent) && i < 10; i++) root = catMap.get(root.parent)
+  const rootName = decode(root?.name || deepest.name)
+  const deepName = decode(deepest.name)
+  return { category: rootName, subcategory: deepName === rootName ? '' : deepName }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -78,8 +112,10 @@ Deno.serve(async (req) => {
   }
 
   let wcProducts: any[]
+  let catMap: Map<number, WcCat>
   try {
     wcProducts = await fetchAllWcProducts()
+    catMap = await fetchAllWcCategories()
   } catch (e) {
     return json({ error: (e as Error).message }, 502)
   }
@@ -106,6 +142,7 @@ Deno.serve(async (req) => {
       wc_product_id: wc.id,
       name,
       product_url: wc.permalink || '',
+      ...resolveCategory(wc.categories, catMap),
       price: num(wc.price) ?? 0, // המחיר הנוכחי באתר (מבצע אם פעיל), כולל מע"מ
       regular_price: num(wc.regular_price),
       sale_price: num(wc.sale_price),

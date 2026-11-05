@@ -40,6 +40,8 @@ create table if not exists products (
   notes text default '',
   -- נתוני אתר (סנכרון מ-WooCommerce, ראו supabase/functions/sync-wc-products)
   wc_product_id bigint unique,
+  category text default '',               -- קטגוריה ראשית באתר
+  subcategory text default '',            -- תת-קטגוריה באתר
   product_url text default '',
   regular_price numeric,
   sale_price numeric,
