@@ -5,6 +5,7 @@ import { formatDate } from '../lib/format'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const label = p => `${p.sku ? p.sku + ' · ' : ''}${p.name}`
+const netCost = i => (Number(i.unit_cost) || 0) * (1 - (Number(i.discount_percent) || 0) / 100)
 const money = n => '₪' + (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
 // קליטת תעודות ספק: כל תעודה מוסיפה כמות למלאי של המוצרים שבה.
@@ -20,9 +21,9 @@ export default function Receipts() {
     setError('')
     const [r, p, s] = await Promise.all([
       supabase.from('stock_receipts')
-        .select('*, suppliers(name), stock_receipt_items(id, product_id, quantity, unit_cost, products(name, sku))')
+        .select('*, suppliers(name), stock_receipt_items(id, product_id, quantity, unit_cost, discount_percent, products(name, sku))')
         .order('doc_date', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('products').select('id, name, sku, cost').order('name'),
+      supabase.from('products').select('id, name, sku, cost, supplier_discount_percent').order('name'),
       supabase.from('suppliers').select('id, name').order('name'),
     ])
     const err = [r, p, s].find(x => x.error)
@@ -34,18 +35,31 @@ export default function Receipts() {
   async function handleSave({ supplier_id, doc_number, doc_date, notes, items }) {
     const clean = items.filter(i => i.product_id && Number(i.quantity) > 0)
     if (clean.length === 0) { setError('הוסף לפחות מוצר אחד עם כמות'); return }
-    const { data, error: e1 } = await supabase.from('stock_receipts')
-      .insert({ supplier_id: supplier_id || null, doc_number, doc_date, notes, created_by: user?.email || '' })
-      .select('id').single()
-    if (e1) { setError(e1.message); return }
-    const { error: e2 } = await supabase.from('stock_receipt_items').insert(
-      clean.map(i => ({ receipt_id: data.id, product_id: i.product_id, quantity: Number(i.quantity), unit_cost: Number(i.unit_cost) || 0 }))
-    )
-    if (e2) {
-      await supabase.from('stock_receipts').delete().eq('id', data.id)
-      setError(e2.message); return
+    const fields = { supplier_id: supplier_id || null, doc_number, doc_date, notes }
+    const rows = id => clean.map(i => ({ receipt_id: id, product_id: i.product_id, quantity: Number(i.quantity), unit_cost: Number(i.unit_cost) || 0, discount_percent: Number(i.discount_percent) || 0 }))
+
+    if (editing?.id) {
+      // עריכה: מוסיפים את השורות החדשות ורק אחר כך מוחקים את הישנות, כדי לא לאבד נתונים אם ההוספה נכשלת
+      const oldIds = editing.stock_receipt_items.map(i => i.id)
+      const { error: e0 } = await supabase.from('stock_receipts').update(fields).eq('id', editing.id)
+      if (e0) { setError(e0.message); return }
+      const { error: e2 } = await supabase.from('stock_receipt_items').insert(rows(editing.id))
+      if (e2) { setError(e2.message); return }
+      if (oldIds.length) {
+        const { error: e3 } = await supabase.from('stock_receipt_items').delete().in('id', oldIds)
+        if (e3) { setError(e3.message); return }
+      }
+    } else {
+      const { data, error: e1 } = await supabase.from('stock_receipts')
+        .insert({ ...fields, created_by: user?.email || '' }).select('id').single()
+      if (e1) { setError(e1.message); return }
+      const { error: e2 } = await supabase.from('stock_receipt_items').insert(rows(data.id))
+      if (e2) {
+        await supabase.from('stock_receipts').delete().eq('id', data.id)
+        setError(e2.message); return
+      }
     }
-    setEditing(null); load()
+    setError(''); setEditing(null); load()
   }
 
   async function handleDelete(id) {
@@ -57,7 +71,7 @@ export default function Receipts() {
 
   if (receipts === null) return <div className="loading">טוען תעודות...</div>
 
-  const total = r => r.stock_receipt_items.reduce((a, i) => a + i.quantity * (i.unit_cost || 0), 0)
+  const total = r => r.stock_receipt_items.reduce((a, i) => a + i.quantity * netCost(i), 0)
 
   return (
     <div>
@@ -100,52 +114,31 @@ export default function Receipts() {
 }
 
 function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete }) {
-  const readOnly = !!initial.id
   const [supplierId, setSupplierId] = useState(initial.supplier_id || '')
   const [docNumber, setDocNumber] = useState(initial.doc_number || '')
   const [docDate, setDocDate] = useState(initial.doc_date || today())
   const [notes, setNotes] = useState(initial.notes || '')
-  const [items, setItems] = useState([{ text: '', product_id: '', quantity: 1, unit_cost: '' }])
+  const [items, setItems] = useState(() => initial.id && initial.stock_receipt_items.length
+    ? initial.stock_receipt_items.map(i => {
+        const p = products.find(x => x.id === i.product_id)
+        return { text: p ? label(p) : (i.products?.name || ''), product_id: i.product_id, quantity: i.quantity, unit_cost: i.unit_cost ?? '', discount_percent: i.discount_percent || '' }
+      })
+    : [{ text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])
 
   const byLabel = new Map(products.map(p => [label(p), p]))
   const setItem = (idx, patch) => setItems(list => list.map((it, i) => i === idx ? { ...it, ...patch } : it))
 
   function pick(idx, text) {
     const p = byLabel.get(text)
-    setItem(idx, { text, product_id: p?.id || '', ...(p && !items[idx].unit_cost ? { unit_cost: p.cost || '' } : {}) })
+    setItem(idx, { text, product_id: p?.id || '', ...(p && !items[idx].unit_cost ? { unit_cost: p.cost || '', discount_percent: p.supplier_discount_percent || '' } : {}) })
   }
 
-  if (readOnly) {
-    return (
-      <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
-        <div className="modal">
-          <h2>תעודה {initial.doc_number || ''} · {formatDate(initial.doc_date)}</h2>
-          <p style={{ color: 'var(--ink-soft)', fontSize: 13.5 }}>ספק: {initial.suppliers?.name || '—'}{initial.notes ? ` · ${initial.notes}` : ''}</p>
-          <table className="data-table">
-            <thead><tr><th>מק״ט</th><th>מוצר</th><th>כמות</th><th>עלות ליחידה</th></tr></thead>
-            <tbody>
-              {initial.stock_receipt_items.map(i => (
-                <tr key={i.id} style={{ cursor: 'default' }}>
-                  <td>{i.products?.sku || '—'}</td><td>{i.products?.name}</td><td>{i.quantity}</td><td>{money(i.unit_cost)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="modal-actions">
-            <button className="btn btn-danger" onClick={onDelete}>מחיקת תעודה</button>
-            <button className="btn btn-ghost" onClick={onCancel}>סגירה</button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * (Number(i.unit_cost) || 0), 0)
+  const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * netCost(i), 0)
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
       <div className="modal wide" style={{ maxWidth: 900 }}>
-        <h2>תעודה חדשה</h2>
+        <h2>{initial.id ? `עריכת תעודה ${initial.doc_number || ''}` : 'תעודה חדשה'}</h2>
         <div className="fields-grid cols-4">
           <div className="field"><label>ספק</label>
             <select value={supplierId} onChange={e => setSupplierId(e.target.value)}>
@@ -160,7 +153,7 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
 
         <datalist id="receipt-products">{products.map(p => <option key={p.id} value={label(p)} />)}</datalist>
         <table className="data-table">
-          <thead><tr><th style={{ width: '55%' }}>מוצר (מק״ט / שם)</th><th>כמות</th><th>עלות ליחידה (לפני מע״מ)</th><th /></tr></thead>
+          <thead><tr><th style={{ width: '55%' }}>מוצר (מק״ט / שם)</th><th>כמות</th><th>עלות ליחידה (לפני מע״מ)</th><th>הנחה %</th><th>אחרי הנחה</th><th /></tr></thead>
           <tbody>
             {items.map((it, idx) => (
               <tr key={idx} style={{ cursor: 'default' }}>
@@ -171,6 +164,8 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
                 </td>
                 <td><input type="number" min="0" value={it.quantity} onChange={e => setItem(idx, { quantity: e.target.value })} style={{ width: 80 }} /></td>
                 <td><input type="number" min="0" step="0.01" value={it.unit_cost} onChange={e => setItem(idx, { unit_cost: e.target.value })} style={{ width: 110 }} /></td>
+                <td><input type="number" min="0" max="100" step="0.1" value={it.discount_percent} onChange={e => setItem(idx, { discount_percent: e.target.value })} style={{ width: 80 }} /></td>
+                <td>{money(netCost(it))}</td>
                 <td><button type="button" className="btn-ghost" style={{ border: 'none', borderRadius: 8, padding: '4px 10px' }}
                   onClick={() => setItems(l => l.length > 1 ? l.filter((_, i) => i !== idx) : l)}>✕</button></td>
               </tr>
@@ -178,12 +173,13 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
           </tbody>
         </table>
         <button type="button" className="btn-add" style={{ marginTop: 10 }}
-          onClick={() => setItems(l => [...l, { text: '', product_id: '', quantity: 1, unit_cost: '' }])}>+ שורה</button>
+          onClick={() => setItems(l => [...l, { text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])}>+ שורה</button>
 
         <p style={{ marginTop: 14 }}>סה״כ תעודה: <b>{money(total)}</b> (לפני מע״מ)</p>
         <div className="modal-actions">
+          {onDelete && <button className="btn btn-danger" onClick={onDelete}>מחיקת תעודה</button>}
           <button className="btn btn-ghost" onClick={onCancel}>ביטול</button>
-          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, items })}>קליטה למלאי</button>
+          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, items })}>{initial.id ? 'שמירת שינויים' : 'קליטה למלאי'}</button>
         </div>
       </div>
     </div>

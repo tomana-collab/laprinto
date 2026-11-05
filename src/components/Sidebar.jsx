@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient'
 import { MODULE_ORDER, MODULES } from '../modules/moduleConfigs'
 import { useAuth } from '../contexts/AuthContext'
 
+const DEV_GROUP = ['ideas', 'opportunities', 'trends']
+
 export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
   const { user, signOut } = useAuth()
   const [role, setRole] = useState(null) // null עד שנטען, כדי לא להבזיק תפריטים אדמין לפני שידוע שהם מותרים
@@ -13,7 +15,22 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
       .then(({ data }) => setRole(data?.role || null))
   }, [user?.email])
 
-  const visibleModules = MODULE_ORDER.filter(key => !MODULES[key].adminOnly || role === 'אדמין')
+  const [devOpen, setDevOpen] = useState(false)
+  const devActive = DEV_GROUP.includes(active)
+  const visibleModules = MODULE_ORDER.filter(key => (!MODULES[key].adminOnly || role === 'אדמין') && !DEV_GROUP.includes(key))
+  const navButton = key => (
+    <button key={key} className={active === key ? 'active' : ''} onClick={() => { onSelect(key); onClose() }}>
+      <span className="nav-icon">{MODULES[key].icon}</span> {MODULES[key].label}
+    </button>
+  )
+  const devGroup = (
+    <Fragment key="dev-group">
+      <button className={`nav-group ${devOpen || devActive ? 'open' : ''}`} onClick={() => setDevOpen(o => !o)}>
+        <span className="nav-icon">🚀</span> פיתוח העסק <span className="chev">◀</span>
+      </button>
+      {(devOpen || devActive) && <div className="nav-sub">{DEV_GROUP.map(navButton)}</div>}
+    </Fragment>
+  )
 
   return (
     <>
@@ -37,6 +54,7 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
           )}
           {visibleModules.map(key => (
             <Fragment key={key}>
+              {key === 'products' && devGroup}
               <button
                 className={active === key ? 'active' : ''}
                 onClick={() => { onSelect(key); onClose() }}
