@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDate } from '../lib/format'
 import { VAT_RATE } from '../lib/pricing'
+import { useSort, sortRows, SortTh } from '../lib/sort'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const label = p => `${p.sku ? p.sku + ' · ' : ''}${p.name}`
@@ -17,6 +18,7 @@ export default function Receipts() {
   const [products, setProducts] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [error, setError] = useState('')
+  const [sort, onSort] = useSort()
   const [editing, setEditing] = useState(null) // {} חדשה | תעודה קיימת (צפייה/מחיקה)
 
   async function load() {
@@ -74,6 +76,12 @@ export default function Receipts() {
   if (receipts === null) return <div className="loading">טוען תעודות...</div>
 
   const total = r => r.stock_receipt_items.reduce((a, i) => a + i.quantity * netCost(i), 0)
+  const units = r => r.stock_receipt_items.reduce((a, i) => a + Number(i.quantity), 0)
+  const sorted = sortRows(receipts, {
+    date: r => r.doc_date || '', doc: r => r.doc_number || '', supplier: r => r.suppliers?.name || '',
+    status: r => r.status || 'סופק', items: r => r.stock_receipt_items.length, units,
+    total, totalVat: r => withVat(total(r)),
+  }, sort)
 
   return (
     <div>
@@ -86,11 +94,20 @@ export default function Receipts() {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>תאריך</th><th>מס׳ תעודה</th><th>ספק</th><th>סטטוס</th><th>פריטים</th><th>יחידות</th><th>סה״כ (לפני מע״מ)</th><th>סה״כ כולל מע״מ</th></tr>
+            <tr>
+              <SortTh k="date" sort={sort} onSort={onSort}>תאריך</SortTh>
+              <SortTh k="doc" sort={sort} onSort={onSort}>מס׳ תעודה</SortTh>
+              <SortTh k="supplier" sort={sort} onSort={onSort}>ספק</SortTh>
+              <SortTh k="status" sort={sort} onSort={onSort}>סטטוס</SortTh>
+              <SortTh k="items" sort={sort} onSort={onSort}>פריטים</SortTh>
+              <SortTh k="units" sort={sort} onSort={onSort}>יחידות</SortTh>
+              <SortTh k="total" sort={sort} onSort={onSort}>סה״כ (לפני מע״מ)</SortTh>
+              <SortTh k="totalVat" sort={sort} onSort={onSort}>סה״כ כולל מע״מ</SortTh>
+            </tr>
           </thead>
           <tbody>
             {receipts.length === 0 && <tr><td className="empty-col" colSpan={8}>אין תעודות עדיין</td></tr>}
-            {receipts.map(r => (
+            {sorted.map(r => (
               <tr key={r.id} onClick={() => setEditing(r)}>
                 <td>{formatDate(r.doc_date)}</td>
                 <td>{r.doc_number || '—'}</td>

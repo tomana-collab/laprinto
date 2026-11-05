@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
+import { useSort, sortRows, SortTh } from '../lib/sort'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -20,6 +21,7 @@ export default function Inventory() {
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('all')
   const [q, setQ] = useState('')
+  const [sort, onSort] = useSort()
   const [counting, setCounting] = useState(null) // שורה לספירת מלאי
 
   async function load() {
@@ -33,7 +35,7 @@ export default function Inventory() {
     const st = new Map(s.data.map(x => [x.product_id, x]))
     setRows(p.data.map(pr => {
       const x = st.get(pr.id) || {}
-      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, stock_min: Number(pr.stock_min) || 0 }
+      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, stock_min: Number(pr.stock_min) || 0 }
     }))
   }
   useEffect(() => { load() }, [])
@@ -47,7 +49,8 @@ export default function Inventory() {
   }
 
   const shown = useMemo(() => (rows || []).filter(r => {
-    if (filter !== 'all' && status(r).key !== filter) return false
+    if (filter === 'sold') { if (!(r.sold_total > 0)) return false }
+    else if (filter !== 'all' && status(r).key !== filter) return false
     const t = q.trim().toLowerCase()
     return !t || r.name.toLowerCase().includes(t) || (r.sku || '').toLowerCase().includes(t)
   }), [rows, filter, q])
@@ -72,6 +75,7 @@ export default function Inventory() {
         <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
         <select value={filter} onChange={e => setFilter(e.target.value)}>
           <option value="all">הכל</option>
+          <option value="sold">נמכר (נמכרו יחידות)</option>
           <option value="order">חסר — להזמין</option>
           <option value="incoming">הוזמן, בהמתנה לאספקה</option>
           <option value="out">אזל</option>
@@ -83,11 +87,26 @@ export default function Inventory() {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>מוצר</th><th>מק״ט</th><th>ספק</th><th>מלאי פתיחה</th><th>נקלט</th><th>נמכר</th><th>בהמתנה לאספקה</th><th>מלאי נוכחי</th><th>מצב</th></tr>
+            <tr>
+              <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
+              <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
+              <SortTh k="supplier" sort={sort} onSort={onSort}>ספק</SortTh>
+              <SortTh k="opening" sort={sort} onSort={onSort}>מלאי פתיחה</SortTh>
+              <SortTh k="received" sort={sort} onSort={onSort}>נקלט</SortTh>
+              <SortTh k="sold_total" sort={sort} onSort={onSort}>נמכר (סה״כ הזמנות)</SortTh>
+              <SortTh k="sold" sort={sort} onSort={onSort}>ירד מהמלאי</SortTh>
+              <SortTh k="incoming" sort={sort} onSort={onSort}>בהמתנה לאספקה</SortTh>
+              <SortTh k="stock" sort={sort} onSort={onSort}>מלאי נוכחי</SortTh>
+              <SortTh k="status" sort={sort} onSort={onSort}>מצב</SortTh>
+            </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={9}>אין מוצרים</td></tr>}
-            {shown.map(r => {
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={10}>אין מוצרים</td></tr>}
+            {sortRows(shown, {
+              name: r => r.name, sku: r => r.sku || '', supplier: r => r.suppliers?.name || '',
+              opening: r => r.opening, received: r => r.received, sold_total: r => r.sold_total,
+              sold: r => r.sold, incoming: r => r.incoming, stock: r => r.stock, status: r => status(r).text,
+            }, sort).map(r => {
               const s = status(r)
               return (
                 <tr key={r.id} onClick={() => setCounting(r)}>
@@ -96,6 +115,7 @@ export default function Inventory() {
                   <td>{r.suppliers?.name || '—'}</td>
                   <td>{num(r.opening)}</td>
                   <td>{num(r.received)}</td>
+                  <td><b>{num(r.sold_total)}</b></td>
                   <td>{num(r.sold)}</td>
                   <td>{r.incoming ? num(r.incoming) : '—'}</td>
                   <td><b className={s.cls}>{num(r.stock)}</b></td>
@@ -107,7 +127,7 @@ export default function Inventory() {
         </table>
       </div>
       <p style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginTop: 10 }}>
-        מלאי נוכחי = מלאי פתיחה + מה שנקלט בתעודות שסופקו − מה שנמכר (הזמנות בטיפול/הושלמו, מתאריך תחילת המעקב). לחיצה על שורה = ספירת מלאי.
+        מלאי נוכחי = מלאי פתיחה + מה שנקלט בתעודות שסופקו − מה שנמכר מתאריך תחילת המעקב. "נמכר (סה״כ הזמנות)" סופר את כל ההזמנות שבטיפול/הושלמו, גם מלפני תחילת המעקב; "ירד מהמלאי" הוא החלק שמנוכה מהמלאי. לחיצה על שורה = ספירת מלאי.
       </p>
 
       {counting && <CountModal row={counting} onCancel={() => setCounting(null)} onSave={saveCount} />}
