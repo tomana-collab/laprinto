@@ -48,14 +48,14 @@ alter table products add column margin_percent numeric generated always as (
 ) stored;
 
 -- ============================================================
--- אופציונלי: סנכרון אוטומטי כל שעה (pg_cron + pg_net).
+-- אופציונלי: סנכרון אוטומטי פעם ביום ב-03:00 שעון ישראל (~00:00 UTC) (pg_cron + pg_net).
 -- דורש: Database > Extensions > להפעיל pg_cron ו-pg_net, ולהגדיר
 -- SYNC_SECRET כ-secret של ה-Edge Function. מחליפים את שני הערכים
 -- בשורות למטה לפני ההרצה (לא להשאיר סוד בקובץ שנשמר ב-git).
 -- ============================================================
 -- select cron.schedule(
---   'sync-wc-products-hourly',
---   '0 * * * *',
+--   'sync-wc-products-daily',
+--   '0 0 * * *',
 --   $$
 --   select net.http_post(
 --     url := 'https://oicyoddiruiryktaupem.supabase.co/functions/v1/sync-wc-products',

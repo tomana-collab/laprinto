@@ -104,6 +104,7 @@ export default function GenericModule({ config }) {
     load()
   }
 
+  if (rows === null && error) return <div className="err-inline">שגיאה בטעינת {config.label}: {error}</div>
   if (rows === null) return <div className="loading">טוען {config.label}...</div>
 
   let filtered = (config.statusField && statusFilter !== 'הכל')
