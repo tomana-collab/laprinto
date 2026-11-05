@@ -2,6 +2,7 @@
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
+import { calcOrderLine } from '../lib/pricing'
 
 export const MODULES = {
   tasks: {
@@ -184,7 +185,7 @@ export const MODULES = {
     label: 'הזמנות',
     icon: '🧾',
     // מביא גם את המוצר (שם/קישור) ואת מי שקיבל דרך ה-foreign keys
-    selectQuery: '*, products(name, product_url), team_members(full_name)',
+    selectQuery: '*, products(name, product_url, cost_with_vat, extra_expenses), team_members(full_name)',
     orderBy: 'order_date',
     fields: [
       { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true },
@@ -219,12 +220,36 @@ export const MODULES = {
             : name
         },
       },
-      { key: 'sku', label: 'מק"ט', render: row => row.sku || '—' },
+      {
+        key: 'sku',
+        label: 'מק"ט',
+        render: row => row.sku && row.products?.product_url
+          ? <a href={row.products.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{row.sku}</a>
+          : (row.sku || '—'),
+      },
       { key: 'quantity', label: 'כמות' },
       { key: 'price', label: 'מחיר ליחידה', render: row => `₪${row.price}` },
       { key: 'received_by', label: 'מי קיבל', render: row => row.team_members?.full_name || '—' },
       { key: 'wc_status', label: 'סטטוס באתר', render: row => row.wc_status ? (ORDER_STATUS_LABELS[row.wc_status] || row.wc_status) : 'ידנית' },
-      { key: 'total_amount', label: 'סכום', render: row => `₪${row.total_amount}` },
+      { key: 'total_amount', label: 'מכירה', render: row => `₪${row.total_amount}` },
+      {
+        key: 'cost',
+        label: 'עלות (כולל מע"מ)',
+        render: row => {
+          const { cost } = calcOrderLine(row)
+          return cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${cost}`
+        },
+      },
+      { key: 'fee', label: 'עמלת סליקה', render: row => `₪${calcOrderLine(row).fee}` },
+      // רווח נטו בסוף: מכירה - עלות - עמלה
+      {
+        key: 'profit',
+        label: 'רווח נטו',
+        render: row => {
+          const { profit } = calcOrderLine(row)
+          return profit === null ? '—' : <span className={profit >= 0 ? 'pos' : 'neg'}>₪{profit}</span>
+        },
+      },
     ],
   },
 

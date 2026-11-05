@@ -21,3 +21,16 @@ export function calcProduct({ cost, supplier_discount_percent, extra_expenses, p
 
   return { costAfterDiscount, costWithVat, clearingFee, extra, profit, margin }
 }
+
+// רווחיות לשורת הזמנה: מכירה (כולל מע"מ) פחות עלות כולל מע"מ והוצאות נלוות, פחות עמלת סליקה.
+// העלות נלקחת מהמוצר כפי שהיא היום (cost_with_vat מחושב ב-DB אחרי הנחת ספק) — לא עלות היסטורית.
+// מחזיר cost/profit = null אם ההזמנה לא מקושרת למוצר או שלא הוזנה עלות, כדי לא להציג רווח מטעה.
+export function calcOrderLine(row) {
+  const sale = Number(row.total_amount) || 0
+  const qty = Number(row.quantity) || 0
+  const fee = r2(sale * CLEARING_RATE * (1 + VAT_RATE))
+  const p = row.products
+  if (!p || !(Number(p.cost_with_vat) > 0)) return { sale, fee, cost: null, profit: null }
+  const cost = r2((Number(p.cost_with_vat) + (Number(p.extra_expenses) || 0)) * qty)
+  return { sale, fee, cost, profit: r2(sale - cost - fee) }
+}

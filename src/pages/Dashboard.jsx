@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatDate, formatDateTime, isCountedOrder } from '../lib/format'
+import { calcOrderLine } from '../lib/pricing'
 
 const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
 const CLOSED_OPP_STATUSES = ['סגור-הצלחה', 'סגור-נכשל']
@@ -15,7 +16,7 @@ export default function Dashboard() {
       const [tasks, expenses, orders, opportunities, products, suppliers, teamMembers, ideas, trends] = await Promise.all([
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
-        supabase.from('orders').select('total_amount, quantity, order_date, order_number, sku, product_name, wc_status, products(name, product_url)').order('order_date', { ascending: false }),
+        supabase.from('orders').select('total_amount, quantity, order_date, order_number, sku, product_name, wc_status, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
@@ -97,7 +98,7 @@ export default function Dashboard() {
           <div className="table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>תאריך</th><th>הזמנה</th><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>סכום</th></tr>
+                <tr><th>תאריך</th><th>הזמנה</th><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מכירה</th><th>רווח נטו</th></tr>
               </thead>
               <tbody>
                 {recentSales.map((o, i) => {
@@ -110,6 +111,7 @@ export default function Dashboard() {
                       <td>{o.sku || '—'}</td>
                       <td>{o.quantity}</td>
                       <td>₪{o.total_amount}</td>
+                      <td>{(() => { const { profit } = calcOrderLine(o); return profit === null ? '—' : <span className={profit >= 0 ? 'pos' : 'neg'}>₪{profit}</span> })()}</td>
                     </tr>
                   )
                 })}

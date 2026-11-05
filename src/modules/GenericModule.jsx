@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { calcProduct } from '../lib/pricing'
+import { calcProduct, calcOrderLine } from '../lib/pricing'
 import { isCountedOrder } from '../lib/format'
 
 export default function GenericModule({ config }) {
@@ -303,11 +303,20 @@ function OrdersSummary({ rows: allRows }) {
   const rows = allRows.filter(isCountedOrder)
   const totalRevenue = rows.reduce((a, r) => a + (r.total_amount || 0), 0)
   const totalQuantity = rows.reduce((a, r) => a + (r.quantity || 0), 0)
+  // רווח נטו רק על שורות עם עלות ידועה (מקושרות למוצר שהוזנה לו עלות)
+  const lines = rows.map(calcOrderLine)
+  const known = lines.filter(l => l.profit !== null)
+  const totalProfit = known.reduce((a, l) => a + l.profit, 0)
+  const unknownCount = lines.length - known.length
   return (
     <div className="summary-row">
       <div className="summary-card"><span>סה"כ הזמנות</span><b>{rows.length}</b></div>
       <div className="summary-card"><span>סה"כ יחידות</span><b>{totalQuantity}</b></div>
       <div className="summary-card"><span>סה"כ הכנסות</span><b className="pos">₪{totalRevenue.toFixed(0)}</b></div>
+      <div className="summary-card">
+        <span>רווח נטו{unknownCount > 0 ? ` (${unknownCount} שורות בלי עלות)` : ''}</span>
+        <b className={totalProfit >= 0 ? 'pos' : 'neg'}>₪{totalProfit.toFixed(0)}</b>
+      </div>
     </div>
   )
 }
