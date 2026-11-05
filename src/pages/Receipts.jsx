@@ -27,12 +27,12 @@ export default function Receipts() {
       supabase.from('stock_receipts')
         .select('*, suppliers(name), stock_receipt_items(id, product_id, quantity, unit_cost, discount_percent, products(name, sku))')
         .order('doc_date', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('products').select('id, name, sku, cost, supplier_discount_percent').order('name'),
+      supabase.from('products').select('id, name, sku, cost, supplier_discount_percent, wc_product_id, wc_parent_id').order('name'),
       supabase.from('suppliers').select('id, name').order('name'),
     ])
     const err = [r, p, s].find(x => x.error)
     if (err) { setError(err.error.message); setReceipts([]); return }
-    setReceipts(r.data); setProducts(p.data); setSuppliers(s.data)
+    setReceipts(r.data); const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)); setProducts(p.data.filter(pr => !parents.has(pr.wc_product_id))); setSuppliers(s.data)
   }
   useEffect(() => { load() }, [])
 

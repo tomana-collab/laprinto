@@ -27,13 +27,14 @@ export default function Inventory() {
   async function load() {
     setError('')
     const [p, s] = await Promise.all([
-      supabase.from('products').select('id, name, sku, category, opening_stock, stock_min, suppliers(name)').order('name'),
+      supabase.from('products').select('id, name, sku, category, opening_stock, stock_min, wc_product_id, wc_parent_id, suppliers(name)').order('name'),
       supabase.from('product_stock').select('*'),
     ])
     const err = [p, s].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); return }
     const st = new Map(s.data.map(x => [x.product_id, x]))
-    setRows(p.data.map(pr => {
+    const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצרים ראשיים שפוצלו לוריאציות
+    setRows(p.data.filter(pr => !parents.has(pr.wc_product_id)).map(pr => {
       const x = st.get(pr.id) || {}
       return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, stock_min: Number(pr.stock_min) || 0 }
     }))

@@ -70,6 +70,21 @@ async function fetchAllWcProducts() {
   return all
 }
 
+// וריאציות של מוצר משתנה (variable). רק וריאציות מפורסמות.
+async function fetchVariations(parentId: number) {
+  const auth = 'Basic ' + btoa(`${WC_KEY}:${WC_SECRET}`)
+  const all: any[] = []
+  for (let page = 1; page <= 10; page++) {
+    const res = await fetch(`${WC_SITE_URL}/wp-json/wc/v3/products/${parentId}/variations?per_page=100&page=${page}`, {
+      headers: { Authorization: auth },
+    })
+    if (!res.ok) throw new Error(`WooCommerce (וריאציות ${parentId}) החזיר ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    all.push(...(await res.json()))
+    if (page >= Number(res.headers.get('x-wp-totalpages') || 1)) break
+  }
+  return all.filter(v => !v.status || v.status === 'publish')
+}
+
 type WcCat = { id: number; name: string; slug: string; parent: number }
 
 async function fetchAllWcCategories(): Promise<Map<number, WcCat>> {
@@ -110,7 +125,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
   const wcProducts = await fetchAllWcProducts()
   const catMap = await fetchAllWcCategories()
 
-  const { data: existing, error: existingErr } = await admin.from('products').select('id, name, wc_product_id')
+  const { data: existing, error: existingErr } = await admin.from('products').select('id, name, wc_product_id, cost, supplier_id, supplier_url, supplier_discount_percent, extra_expenses')
   if (existingErr) throw new Error(existingErr.message)
 
   const byWcId = new Map<number, any>()
@@ -124,10 +139,38 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
   const toInsert: any[] = []
   const toUpdate: { id: string; data: any }[] = []
 
+  // מוצר משתנה עם וריאציות → כל וריאציה הופכת למוצר נפרד (עם המק"ט שלה), והמוצר הראשי לא נכנס.
+  const variableProducts = wcProducts.filter(p => p.type === 'variable' && (p.variations || []).length > 0)
+  const variationsByParent = new Map<number, any[]>()
+  const errors: string[] = []
+  for (let i = 0; i < variableProducts.length; i += 5) {
+    const chunk = variableProducts.slice(i, i + 5)
+    const results = await Promise.allSettled(chunk.map(p => fetchVariations(p.id)))
+    results.forEach((res, idx) => {
+      if (res.status === 'fulfilled') variationsByParent.set(chunk[idx].id, res.value)
+      else errors.push(String(res.reason?.message || res.reason))
+    })
+  }
+
+  const items: any[] = []
   for (const wc of wcProducts) {
-    const name = decode(String(wc.name || '')).trim()
+    const vars = variationsByParent.get(wc.id)
+    if (!vars || vars.length === 0) { items.push({ wc, name: decode(String(wc.name || '')).trim(), parent: null }); continue }
+    const parentName = decode(String(wc.name || '')).trim()
+    for (const v of vars) {
+      const opts = (v.attributes || []).map((a: any) => decode(String(a.option || ''))).filter(Boolean)
+      items.push({
+        wc: { ...v, categories: wc.categories, permalink: v.permalink || wc.permalink },
+        name: opts.length ? `${parentName} – ${opts.join(', ')}` : `${parentName} (${v.sku || v.id})`,
+        parent: wc,
+      })
+    }
+  }
+
+  for (const { wc, name, parent } of items) {
     if (!name) continue
     const siteData = {
+      wc_parent_id: parent ? parent.id : null,
       wc_product_id: wc.id,
       name,
       sku: wc.sku || '',
@@ -140,12 +183,18 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
     }
     const match = byWcId.get(wc.id) || unlinkedByName.get(name.toLowerCase())
     if (match) toUpdate.push({ id: match.id, data: siteData })
-    else toInsert.push({ ...siteData, status: 'לבדיקה', created_by: 'WooCommerce Sync' })
+    else {
+      // וריאציה חדשה יורשת עלות/ספק מהמוצר הראשי אם כבר הוזנו שם
+      const pr = parent ? byWcId.get(parent.id) : null
+      const inherit = pr && Number(pr.cost) > 0
+        ? { cost: pr.cost, supplier_id: pr.supplier_id, supplier_url: pr.supplier_url, supplier_discount_percent: pr.supplier_discount_percent, extra_expenses: pr.extra_expenses }
+        : {}
+      toInsert.push({ ...siteData, ...inherit, status: 'לבדיקה', created_by: 'WooCommerce Sync' })
+    }
   }
 
   let inserted = 0
   let updated = 0
-  const errors: string[] = []
 
   if (toInsert.length) {
     const { error } = await admin.from('products').insert(toInsert)
@@ -162,7 +211,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
     })
   }
 
-  return { total: wcProducts.length, inserted, updated, errors }
+  return { total: items.length, inserted, updated, errors }
 }
 
 async function fetchAllWcOrders() {
@@ -247,7 +296,7 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
         sku: li.sku || '',
         ...orderInfo(o),
         personalization: lineItemMetaText(li),
-        product_id: productByWcId.get(li.product_id) ?? null,
+        product_id: (li.variation_id ? productByWcId.get(li.variation_id) : undefined) ?? productByWcId.get(li.product_id) ?? null,
         quantity: qty,
         // מחיר ליחידה כולל מע"מ, אחרי הנחות/קופונים (li.total הוא אחרי קופון; li.subtotal לפני)
         price: Math.round(((Number(li.total) + Number(li.total_tax || 0)) / qty) * 100) / 100,
