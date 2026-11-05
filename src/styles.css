@@ -1,6 +1,7 @@
 :root{
   color-scheme: light;
   --bg: #F1F2F6;
+  --main-bg: #FFFFFF;
   --cream: #FAF3E3;
   --cream-hover: #F1E6CC;
   --cream-line: #EADFC6;
@@ -24,6 +25,10 @@
 :root[data-theme="dark"]{
   color-scheme: dark;
   --bg: #131420;
+  --main-bg: #131420;
+  --cream: #1C1E2C;
+  --cream-hover: #262838;
+  --cream-line: #2E3042;
   --paper: #1C1E2C;
   --ink: #F1F2F6;
   --ink-soft: #9A9FBB;
@@ -88,7 +93,7 @@ button{ font-family:'Assistant',sans-serif; cursor:pointer; }
 .signout{ width:100%; background:var(--cream-hover); color:var(--ink); border:none; padding:9px; border-radius:9px; font-weight:600; font-size:13px; }
 .sidebar-scrim{ display:none; }
 
-main{ flex:1; min-width:0; padding:24px 28px; background:#fff; }
+main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .mobile-menu-btn{ display:none; }
 
 @media (max-width: 860px){
