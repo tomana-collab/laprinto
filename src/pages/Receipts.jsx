@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDate } from '../lib/format'
+import { VAT_RATE } from '../lib/pricing'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const label = p => `${p.sku ? p.sku + ' · ' : ''}${p.name}`
 const netCost = i => (Number(i.unit_cost) || 0) * (1 - (Number(i.discount_percent) || 0) / 100)
+const withVat = n => n * (1 + VAT_RATE)
 const money = n => '₪' + (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
 // קליטת תעודות ספק: כל תעודה מוסיפה כמות למלאי של המוצרים שבה.
@@ -84,10 +86,10 @@ export default function Receipts() {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>תאריך</th><th>מס׳ תעודה</th><th>ספק</th><th>פריטים</th><th>יחידות</th><th>סה״כ (לפני מע״מ)</th></tr>
+            <tr><th>תאריך</th><th>מס׳ תעודה</th><th>ספק</th><th>פריטים</th><th>יחידות</th><th>סה״כ (לפני מע״מ)</th><th>סה״כ כולל מע״מ</th></tr>
           </thead>
           <tbody>
-            {receipts.length === 0 && <tr><td className="empty-col" colSpan={6}>אין תעודות עדיין</td></tr>}
+            {receipts.length === 0 && <tr><td className="empty-col" colSpan={7}>אין תעודות עדיין</td></tr>}
             {receipts.map(r => (
               <tr key={r.id} onClick={() => setEditing(r)}>
                 <td>{formatDate(r.doc_date)}</td>
@@ -96,6 +98,7 @@ export default function Receipts() {
                 <td>{r.stock_receipt_items.length}</td>
                 <td>{r.stock_receipt_items.reduce((a, i) => a + Number(i.quantity), 0)}</td>
                 <td>{money(total(r))}</td>
+                <td><b>{money(withVat(total(r)))}</b></td>
               </tr>
             ))}
           </tbody>
@@ -153,7 +156,7 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
 
         <datalist id="receipt-products">{products.map(p => <option key={p.id} value={label(p)} />)}</datalist>
         <table className="data-table">
-          <thead><tr><th style={{ width: '55%' }}>מוצר (מק״ט / שם)</th><th>כמות</th><th>עלות ליחידה (לפני מע״מ)</th><th>הנחה %</th><th>אחרי הנחה</th><th /></tr></thead>
+          <thead><tr><th style={{ width: '55%' }}>מוצר (מק״ט / שם)</th><th>כמות</th><th>עלות ליחידה (לפני מע״מ)</th><th>הנחה %</th><th>אחרי הנחה</th><th>סה״כ שורה</th><th>שורה כולל מע״מ</th><th /></tr></thead>
           <tbody>
             {items.map((it, idx) => (
               <tr key={idx} style={{ cursor: 'default' }}>
@@ -166,6 +169,8 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
                 <td><input type="number" min="0" step="0.01" value={it.unit_cost} onChange={e => setItem(idx, { unit_cost: e.target.value })} style={{ width: 110 }} /></td>
                 <td><input type="number" min="0" max="100" step="0.1" value={it.discount_percent} onChange={e => setItem(idx, { discount_percent: e.target.value })} style={{ width: 80 }} /></td>
                 <td>{money(netCost(it))}</td>
+                <td>{money((Number(it.quantity) || 0) * netCost(it))}</td>
+                <td><b>{money(withVat((Number(it.quantity) || 0) * netCost(it)))}</b></td>
                 <td><button type="button" className="btn-ghost" style={{ border: 'none', borderRadius: 8, padding: '4px 10px' }}
                   onClick={() => setItems(l => l.length > 1 ? l.filter((_, i) => i !== idx) : l)}>✕</button></td>
               </tr>
@@ -175,7 +180,11 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
         <button type="button" className="btn-add" style={{ marginTop: 10 }}
           onClick={() => setItems(l => [...l, { text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])}>+ שורה</button>
 
-        <p style={{ marginTop: 14 }}>סה״כ תעודה: <b>{money(total)}</b> (לפני מע״מ)</p>
+        <div className="summary-row" style={{ marginTop: 14 }}>
+          <div className="summary-card"><span>סה״כ לפני מע״מ</span><b>{money(total)}</b></div>
+          <div className="summary-card"><span>מע״מ {Math.round(VAT_RATE * 100)}%</span><b>{money(withVat(total) - total)}</b></div>
+          <div className="summary-card"><span>סה״כ כולל מע״מ (להשוואה לחשבונית)</span><b>{money(withVat(total))}</b></div>
+        </div>
         <div className="modal-actions">
           {onDelete && <button className="btn btn-danger" onClick={onDelete}>מחיקת תעודה</button>}
           <button className="btn btn-ghost" onClick={onCancel}>ביטול</button>
