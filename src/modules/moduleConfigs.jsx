@@ -59,6 +59,7 @@ export const MODULES = {
     selectQuery: '*, suppliers(name)',
     fields: [
       { key: 'name', label: 'שם מוצר', type: 'text', required: true },
+      { key: 'sku', label: 'מק"ט — מסונכרן מהאתר', type: 'text' },
       { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
       { key: 'supplier_url', label: 'קישור למוצר באתר הספק', type: 'text' },
       { key: 'cost', label: 'עלות ליחידה מהספק (₪, לפני מע"מ)', type: 'number' },
