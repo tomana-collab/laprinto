@@ -244,7 +244,8 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .cmp-table{ font-size:13px; }
 .cmp-table th{ position:sticky; top:0; background:var(--paper); z-index:2; }
 .cmp-table td{ vertical-align:top; }
-.cmp-table th.n, .cmp-table td.n{ text-align:left; white-space:nowrap; font-family:'JetBrains Mono',monospace; font-size:12.5px; }
+.cmp-table th.n, .cmp-table td.n{ text-align:left; white-space:nowrap; }
+.cmp-table td.n{ font-family:'JetBrains Mono',monospace; font-size:12.5px; }
 .cmp-table .cmp-sticky{ position:sticky; right:0; background:var(--paper); z-index:1; min-width:240px; max-width:280px; box-shadow:-1px 0 0 var(--line); }
 .cmp-table th.cmp-sticky{ z-index:3; }
 .cmp-table tbody tr:hover td.cmp-sticky{ background:var(--hover-bg); }

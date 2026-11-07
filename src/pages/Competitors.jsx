@@ -47,7 +47,8 @@ export default function Competitors() {
     if (err) { setError(err.error.message); setRows([]); setStores([]); return }
     setStores(s.data.filter(x => x.enabled !== false))
 
-    // מוצר ראשי שפוצל לוריאציות לא מוצג (כמו בעמוד המלאי) — הוריאציות מוצגות במקומו
+    // מוצר ראשי שפוצל לוריאציות לא מוצג (כמו בעמוד המלאי) — הוריאציות מוצגות במקומו,
+    // אלא אם קושרה אליו התאמת מתחרה
     const prodById = new Map(p.data.map(x => [x.id, x]))
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean))
     const byProduct = new Map()
@@ -73,7 +74,7 @@ export default function Competitors() {
         package_notes: r.package_notes, shipping_notes: r.shipping_notes,
       })
     }
-    const list = [...byProduct.values()].filter(r => !parents.has(r.wc_product_id))
+    const list = [...byProduct.values()].filter(r => !parents.has(r.wc_product_id) || r.offers.length)
     for (const r of list) {
       const priced = r.offers.filter(o => o.price != null && o.match_type !== 'similar')
       r.lowest = priced.length ? priced.reduce((a, o) => (o.price < a.price ? o : a)) : null
@@ -108,7 +109,8 @@ export default function Competitors() {
       return true
     })
     const by = {
-      name: (a, b) => (a.name || '').localeCompare(b.name || '', 'he'),
+      // מוצרים עם השוואה קודם, ואז לפי שם
+      name: (a, b) => (b.offers.length > 0) - (a.offers.length > 0) || (a.name || '').localeCompare(b.name || '', 'he'),
       price_desc: (a, b) => (b.price || 0) - (a.price || 0),
       price_asc: (a, b) => (a.price || 0) - (b.price || 0),
       // הכי "בסכנה" קודם: המתחרה הכי זול ממני באחוזים; מוצרים בלי השוואה בסוף
