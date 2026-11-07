@@ -6,16 +6,20 @@ import Dashboard from './pages/Dashboard'
 import Bundles from './pages/Bundles'
 import Receipts from './pages/Receipts'
 import Inventory from './pages/Inventory'
+import Competitors from './pages/Competitors'
 import Sidebar from './components/Sidebar'
 import GenericModule from './modules/GenericModule'
 import { MODULES } from './modules/moduleConfigs'
 import { NavProvider } from './contexts/NavContext'
 
-const PAGES = ['dashboard', 'settings', 'bundles', 'receipts', 'inventory']
+const PAGES = ['dashboard', 'settings', 'bundles', 'receipts', 'inventory', 'competitors']
 const isPage = k => PAGES.includes(k) || !!MODULES[k]
 
 // הדף הפעיל נשמר ב-hash של ה-URL, כך שרענון (או חזרה אחורה) נשארים על אותו דף
 function pageFromHash() {
+  // כתובת ישירה כמו /competitors → מתורגמת ל-hash (ה-CRM עובד בניווט לפי hash)
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, '')
+  if (path && isPage(path)) { window.history.replaceState(null, '', '/#/' + path); return path }
   const k = decodeURIComponent(window.location.hash.replace(/^#\/?/, ''))
   return isPage(k) ? k : 'tasks'
 }
@@ -61,6 +65,7 @@ export default function App() {
           : active === 'bundles' ? <Bundles />
           : active === 'receipts' ? <Receipts />
           : active === 'inventory' ? <Inventory />
+          : active === 'competitors' ? <Competitors />
           : <GenericModule key={active} config={MODULES[active]} focusId={focus?.module === active ? focus.id : null} />}
       </main>
     </div>

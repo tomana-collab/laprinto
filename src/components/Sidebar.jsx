@@ -83,6 +83,12 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
                   >
                     <span className="nav-icon">📥</span> קליטת תעודות
                   </button>
+                  <button
+                    className={active === 'competitors' ? 'active' : ''}
+                    onClick={() => { onSelect('competitors'); onClose() }}
+                  >
+                    <span className="nav-icon">🔎</span> השוואת מתחרים
+                  </button>
                 </>
               )}
             </Fragment>
