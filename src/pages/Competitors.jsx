@@ -318,7 +318,7 @@ function ProductDrawer({ row, stores, onClose }) {
         <div className="cmp-drawer-head">
           <div>
             <h2>{row.name}</h2>
-            <div className="cmp-sku">{row.sku || 'ללא מק״ט'} · {[row.category, row.subcategory].filter(Boolean).join(' / ') || 'ללא קטגוריה'}</div>
+            <div className="cmp-sub"><span className="cmp-sku">{row.sku || 'ללא מק״ט'}</span> · {[row.category, row.subcategory].filter(Boolean).join(' / ') || 'ללא קטגוריה'}</div>
           </div>
           <button className="cmp-close" onClick={onClose} aria-label="סגירה">✕</button>
         </div>
