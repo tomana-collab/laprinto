@@ -59,7 +59,7 @@ async function fetchAllWcProducts() {
   const auth = 'Basic ' + btoa(`${WC_KEY}:${WC_SECRET}`)
   const all: any[] = []
   for (let page = 1; page <= 50; page++) {
-    const url = `${WC_SITE_URL}/wp-json/wc/v3/products?per_page=100&page=${page}&status=publish`
+    const url = `${WC_SITE_URL}/wp-json/wc/v3/products?per_page=100&page=${page}&status=any`
     const res = await fetch(url, { headers: { Authorization: auth } })
     if (!res.ok) throw new Error(`WooCommerce החזיר ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const batch = await res.json()
@@ -82,7 +82,7 @@ async function fetchVariations(parentId: number) {
     all.push(...(await res.json()))
     if (page >= Number(res.headers.get('x-wp-totalpages') || 1)) break
   }
-  return all.filter(v => !v.status || v.status === 'publish')
+  return all
 }
 
 type WcCat = { id: number; name: string; slug: string; parent: number }
@@ -160,7 +160,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
     for (const v of vars) {
       const opts = (v.attributes || []).map((a: any) => decode(String(a.option || ''))).filter(Boolean)
       items.push({
-        wc: { ...v, categories: wc.categories, permalink: v.permalink || wc.permalink },
+        wc: { ...v, categories: wc.categories, permalink: v.permalink || wc.permalink, status: wc.status === 'publish' ? (v.status || 'publish') : wc.status },
         name: opts.length ? `${parentName} – ${opts.join(', ')}` : `${parentName} (${v.sku || v.id})`,
         parent: wc,
       })
@@ -180,6 +180,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
       regular_price: num(wc.regular_price),
       sale_price: num(wc.sale_price),
       synced_at: now,
+      status: wc.status === 'publish' ? 'פעיל' : 'לא פעיל', // פעיל = מפורסם באתר
     }
     const match = byWcId.get(wc.id) || unlinkedByName.get(name.toLowerCase())
     if (match) toUpdate.push({ id: match.id, data: siteData })
@@ -189,7 +190,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
       const inherit = pr && Number(pr.cost) > 0
         ? { cost: pr.cost, supplier_id: pr.supplier_id, supplier_url: pr.supplier_url, supplier_discount_percent: pr.supplier_discount_percent, extra_expenses: pr.extra_expenses }
         : {}
-      toInsert.push({ ...siteData, ...inherit, status: 'לבדיקה', created_by: 'WooCommerce Sync' })
+      toInsert.push({ ...siteData, ...inherit, created_by: 'WooCommerce Sync' })
     }
   }
 

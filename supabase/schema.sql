@@ -32,7 +32,7 @@ create table if not exists ideas (
 create table if not exists products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  status text default 'לבדיקה',           -- לבדיקה / להזמנה / פעיל / הופסק
+  status text default 'פעיל',             -- פעיל (מפורסם באתר) / לא פעיל
   cost numeric default 0,                 -- עלות ליחידה (ספק)
   extra_expenses numeric default 0,       -- הוצאות נלוות (משלוח, פרסום ליחידה וכו')
   price numeric default 0,                -- מחיר מכירה כולל מע"מ (מסונכרן מ-WooCommerce)

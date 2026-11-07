@@ -54,7 +54,7 @@ export const MODULES = {
     label: 'מוצרים',
     icon: '📦',
     statusField: 'status',
-    statusOptions: ['לבדיקה', 'להזמנה', 'פעיל', 'הופסק'],
+    statusOptions: ['פעיל', 'לא פעיל'], // מסונכרן מהאתר: מפורסם = פעיל
     // מביא גם את שם הספק (suppliers) דרך ה-foreign key
     selectQuery: '*, suppliers(name)',
     fields: [
