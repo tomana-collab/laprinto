@@ -216,3 +216,5 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .fields-grid.cols-4{ grid-template-columns:repeat(4, 1fr); }
 @media (max-width:900px){ .fields-grid.cols-4{ grid-template-columns:1fr 1fr; } }
 @media (max-width:420px){ .fields-grid.cols-4{ grid-template-columns:1fr; } }
+
+.bulk-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--hover-bg); border:1px solid var(--line); border-radius:12px; padding:8px 12px; margin-bottom:10px; }

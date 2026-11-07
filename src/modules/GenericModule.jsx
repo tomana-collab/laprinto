@@ -19,6 +19,7 @@ export default function GenericModule({ config, focusId = null }) {
   const [filterValues, setFilterValues] = useState({})
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
+  const [selected, setSelected] = useState(() => new Set()) // מזהי שורות מסומנות לפעולה בכמות
 
   function setFilter(key, val) { setFilterValues(v => ({ ...v, [key]: val })) }
 
@@ -124,6 +125,23 @@ export default function GenericModule({ config, focusId = null }) {
     load()
   }
 
+  const idsOf = row => row.line_ids || [row.id]
+  async function bulkDelete(list) {
+    const n = list.length
+    if (!window.confirm(`למחוק ${n} ${config.bulkNoun || 'רשומות'}? אי אפשר לבטל.${config.bulkSyncNote ? `\n${config.bulkSyncNote}` : ''}`)) return
+    const { error } = await supabase.from(config.table).delete().in('id', list.flatMap(idsOf))
+    if (error) { setError(error.message); return }
+    setSelected(new Set()); load()
+  }
+  async function bulkSetStatus(list, status) {
+    if (!status) return
+    const label = config.bulkStatus.labels?.[status] || status
+    if (!window.confirm(`לעדכן ${list.length} ${config.bulkNoun || 'רשומות'} לסטטוס "${label}"?${config.bulkSyncNote ? `\n${config.bulkSyncNote}` : ''}`)) return
+    const { error } = await supabase.from(config.table).update({ [config.bulkStatus.field]: status }).in('id', list.flatMap(idsOf))
+    if (error) { setError(error.message); return }
+    setSelected(new Set()); load()
+  }
+
   if (rows === null && error) return <div className="err-inline">שגיאה בטעינת {config.label}: {error}</div>
   if (rows === null) return <div className="loading">טוען {config.label}...</div>
 
@@ -161,6 +179,13 @@ export default function GenericModule({ config, focusId = null }) {
       .sort(([a], [b]) => (a === empty) - (b === empty) || a.localeCompare(b, 'he'))
       .map(([title, rs]) => ({ title, rows: rs }))
   }
+
+  const bulk = !!config.bulk
+  const selectedRows = bulk ? filtered.filter(r => selected.has(r.id)) : []
+  const allChecked = bulk && filtered.length > 0 && filtered.every(r => selected.has(r.id))
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(filtered.map(r => r.id)))
+  const toggleOne = id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const colCount = config.columns.length + (config.statusField ? 1 : 0) + (bulk ? 1 : 0)
 
   return (
     <div>
@@ -240,29 +265,45 @@ export default function GenericModule({ config, focusId = null }) {
         </div>
       )}
 
+      {bulk && selectedRows.length > 0 && (
+        <div className="bulk-bar">
+          <b>נבחרו {selectedRows.length}</b>
+          {config.bulkStatus && (
+            <select value="" onChange={e => bulkSetStatus(selectedRows, e.target.value)}>
+              <option value="">עדכון סטטוס ל...</option>
+              {Object.entries(config.bulkStatus.labels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          )}
+          <button className="btn-add" onClick={() => bulkDelete(selectedRows)}>מחיקה</button>
+          <button className="btn-add" onClick={() => setSelected(new Set())}>ביטול בחירה</button>
+        </div>
+      )}
+
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
+              {bulk && <th style={{ width: 32 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>}
               {config.columns.map(c => <th key={c.key}>{c.label}</th>)}
               {config.statusField && <th>סטטוס</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td className="empty-col" colSpan={config.columns.length + (config.statusField ? 1 : 0)}>אין רשומות עדיין</td></tr>
+              <tr><td className="empty-col" colSpan={colCount}>אין רשומות עדיין</td></tr>
             )}
             {groups.map(g => (
               <Fragment key={g.title ?? 'all'}>
                 {g.title !== null && (
                   <tr className="group-row">
-                    <td colSpan={config.columns.length + (config.statusField ? 1 : 0)}>
+                    <td colSpan={colCount}>
                       <b>{g.title}</b> <span style={{ opacity: 0.6 }}>({g.rows.length})</span>
                     </td>
                   </tr>
                 )}
                 {g.rows.map(row => (
                   <tr key={row.id} onClick={() => setEditing(row)}>
+                    {bulk && <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} /></td>}
                     {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav) : (row[c.key] ?? '—')}</td>)}
                     {config.statusField && (
                       <td onClick={e => e.stopPropagation()}>

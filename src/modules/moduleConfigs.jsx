@@ -190,6 +190,11 @@ export const MODULES = {
     orderBy: 'order_date',
     // שורות פריט של אותה הזמנת אתר מאוחדות להזמנה אחת (src/lib/orders.js); חלון העריכה רחב על כל הדף
     groupOrders: true,
+    // בחירה מרובה + פעולות בכמות (מחיקה / עדכון סטטוס)
+    bulk: true,
+    bulkNoun: 'הזמנות',
+    bulkStatus: { field: 'wc_status', labels: ORDER_STATUS_LABELS },
+    bulkSyncNote: 'שים לב: הזמנות מהאתר מסונכרנות מחדש — סטטוס ישתנה חזרה לפי האתר, והזמנה שנמחקה תחזור בסנכרון הבא.',
     modalWide: true,
     fields: [
       // מוצר/מחיר/כמות מסונכרנים מהאתר — מוצגים לעריכה רק בהזמנה ידנית
