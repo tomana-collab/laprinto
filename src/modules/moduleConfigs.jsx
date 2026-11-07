@@ -215,10 +215,10 @@ export const MODULES = {
     searchField: ['product_name', 'sku', 'order_number', 'customer_name', 'customer_phone'],
     searchLabel: 'חיפוש לפי מוצר, מק"ט, הזמנה או מזמין',
     filters: [
-      // ברירת מחדל: רק הזמנות פתוחות (בטיפול / ממתינות לתשלום / בהמתנה / ידניות)
+      // ברירת מחדל: רק הזמנות פתוחות (בטיפול / ממתינות לתשלום / בהמתנה). הזמנה ידנית נחשבת סגורה
       { key: 'view', type: 'preset', options: [
-        { value: 'open', label: 'הזמנות פתוחות', test: r => !r.wc_status || ['processing', 'pending', 'on-hold'].includes(r.wc_status) },
-        { value: 'completed', label: 'הושלמו', test: r => r.wc_status === 'completed' },
+        { value: 'open', label: 'הזמנות פתוחות', test: r => ['processing', 'pending', 'on-hold'].includes(r.wc_status) },
+        { value: 'completed', label: 'הושלמו / ידניות', test: r => !r.wc_status || r.wc_status === 'completed' },
         { value: 'all', label: 'הצג את כל ההזמנות' },
       ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
