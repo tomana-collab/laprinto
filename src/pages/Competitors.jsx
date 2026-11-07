@@ -5,8 +5,10 @@ import { formatDateTime } from '../lib/format'
 
 // השוואת מתחרים. הנתונים (חנויות, התאמות, בדיקות מחיר) נכתבים למסד מבחוץ;
 // לשונית ההשוואה רק קוראת (v_competitor_matrix + competitor_stores + competitor_price_checks),
-// ולשונית "אישור התאמות" כותבת רק review_status / review_notes ב-competitor_offers.
+// כתיבה מהממשק: review_status / review_notes ב-competitor_offers (אישור/דחייה),
+// הוספת חנות ל-competitor_stores, והוספת קישור ידני ל-competitor_offers (entry_method = 'manual').
 // רק התאמה מאושרת (approved) נחשבת סופית: היא היחידה שנכנסת לחישובי "הזול ביותר", לפערים ולסיכומים.
+// אישור אוטומטי לפי מק״ט נעשה במסד (approval_method = 'verified_supplier_sku') — הממשק רק מציג אותו.
 
 const ils = n => n == null ? '—' : '₪' + Number(n).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 const pct = n => n == null ? '—' : Number(n).toLocaleString('he-IL', { maximumFractionDigits: 1 }) + '%'
@@ -26,6 +28,36 @@ const REVIEW = {
   rejected: { label: 'נדחה', cls: 'r-rejected' },
 }
 const isFinal = o => o.review_status === 'approved'
+const isAutoApproved = o => o.review_status === 'approved' && !!o.approval_method && o.approval_method !== 'manual'
+const approvalLabel = o => o.review_status !== 'approved' ? null
+  : o.approval_method === 'verified_supplier_sku' ? 'מאושר אוטומטית לפי מק״ט'
+  : isAutoApproved(o) ? `מאושר אוטומטית (${o.approval_method})` : 'אושר ידנית'
+const SKU_SOURCE = {
+  url: 'המק״ט אומת מכתובת העמוד אצל המתחרה',
+  page: 'המק״ט אומת מתוכן עמוד המוצר',
+  json_ld: 'המק״ט אומת מהנתונים המובנים בעמוד',
+  structured_data: 'המק״ט אומת מהנתונים המובנים בעמוד',
+  manual: 'המק״ט אומת ידנית',
+  unverified: 'המק״ט לא אומת',
+}
+const skuSourceLabel = v => !v ? null : SKU_SOURCE[v] || `מקור אימות מק״ט: ${v}`
+
+// שמירת אישור/דחייה ובדיקה מול המסד שהעדכון נקלט (השורה המוחזרת מה-update)
+const DECISION_COLS = 'id, review_status, review_notes, reviewed_at, approval_method, sku_verification_source, sku_verified_at'
+async function saveDecision(offerId, review_status, review_notes) {
+  const patch = { review_status }
+  if (review_status === 'rejected') patch.review_notes = review_notes
+  const { data, error } = await supabase.from('competitor_offers').update(patch).eq('id', offerId).select(DECISION_COLS).maybeSingle()
+  if (error || !data || data.review_status !== review_status) return { error: error?.message || 'העדכון לא נשמר במסד (ייתכן שאין הרשאה)' }
+  return { data }
+}
+
+// כתובת → דומיין נקי (בלי פרוטוקול, www ונתיב)
+function cleanDomain(v) {
+  const t = (v || '').trim().toLowerCase()
+  if (!t) return ''
+  try { return new URL(/^https?:\/\//.test(t) ? t : 'https://' + t).hostname.replace(/^www\./, '') } catch { return '' }
+}
 const matchInfo = t => MATCH[t] || { label: t || 'לא אומת', cls: 'm-similar' }
 
 // פער מול המחיר שלי: שלילי = המתחרה זול ממני
@@ -39,14 +71,13 @@ const gapCls = (g, offer) => !g || !isFinal(offer) ? 'c-none' : g.diff < 0 ? 'c-
 export default function Competitors() {
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('cmp-tab') || 'compare' } catch { return 'compare' } })
   const [pending, setPending] = useState(null)
-  const [version, setVersion] = useState(0) // עולה אחרי כל אישור/דחייה, כדי שההשוואה תיטען מחדש
   const choose = t => { setTab(t); try { localStorage.setItem('cmp-tab', t) } catch {} }
 
   async function countPending() {
     const { count } = await supabase.from('competitor_offers').select('id', { count: 'exact', head: true }).eq('review_status', 'pending')
     setPending(count ?? null)
   }
-  useEffect(() => { countPending() }, [version])
+  useEffect(() => { countPending() }, [])
 
   return (
     <div className="cmp-page">
@@ -58,37 +89,37 @@ export default function Competitors() {
         </button>
       </div>
       {tab === 'compare'
-        ? <ComparisonView key={version} />
-        : <ReviewQueue onChanged={() => setVersion(v => v + 1)} />}
+        ? <ComparisonView onChanged={countPending} />
+        : <ReviewQueue onChanged={countPending} />}
     </div>
   )
 }
 
-function ComparisonView() {
+function ComparisonView({ onChanged }) {
   const [stores, setStores] = useState(null)
+  const [addingStore, setAddingStore] = useState(false)
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
   const [loadedAt, setLoadedAt] = useState(null)
   const [f, setF] = useState({ q: '', cat: '', sub: '', store: '', pricier: false, noCost: false, exact: false, withOffers: false, sort: 'name' })
-  const [open, setOpen] = useState(null)
+  const [openId, setOpenId] = useState(null)
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
+  const open = openId ? (rows || []).find(r => r.id === openId) : null
 
   async function load() {
     setError('')
-    const [m, s, p, o] = await Promise.all([
+    const [m, s, p] = await Promise.all([
       supabase.from('v_competitor_matrix').select('*'),
       supabase.from('competitor_stores').select('id, name, domain, enabled, priority').order('priority'),
       supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url'),
-      supabase.from('competitor_offers').select('id, review_status'),
     ])
-    const err = [m, s, p, o].find(x => x.error)
+    const err = [m, s, p].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); setStores([]); return }
     setStores(s.data.filter(x => x.enabled !== false))
 
     // מוצר ראשי שפוצל לוריאציות לא מוצג (כמו בעמוד המלאי) — הוריאציות מוצגות במקומו,
     // אלא אם קושרה אליו התאמת מתחרה
     const prodById = new Map(p.data.map(x => [x.id, x]))
-    const reviewById = new Map(o.data.map(x => [x.id, x.review_status || 'pending']))
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean))
     const byProduct = new Map()
     for (const r of m.data) {
@@ -101,13 +132,13 @@ function ComparisonView() {
           cost: num(pr.cost ?? r.supplier_cost), cost_with_vat: num(pr.cost_with_vat ?? r.cost_with_vat),
           extra_expenses: num(pr.extra_expenses), price: num(pr.price ?? r.my_price),
           profit: num(pr.profit ?? r.calculated_profit), margin: num(pr.margin_percent ?? r.calculated_margin_percent),
-          offers: [],
+          offers: [], rejected: [],
         }
         byProduct.set(r.product_id, row)
       }
-      const review_status = r.offer_id ? reviewById.get(r.offer_id) || 'pending' : null
-      if (r.offer_id && review_status !== 'rejected') row.offers.push({
-        review_status,
+      if (r.offer_id) (r.review_status === 'rejected' ? row.rejected : row.offers).push({
+        review_status: r.review_status || 'pending', review_notes: r.review_notes,
+        approval_method: r.approval_method, sku_verification_source: r.sku_verification_source, sku_verified_at: r.sku_verified_at,
         offer_id: r.offer_id, store_id: r.store_id, store_name: r.store_name, price: num(r.competitor_price),
         shipping_price: num(r.shipping_price), url: r.competitor_url || r.source_url, sku: r.competitor_sku, title: r.competitor_title,
         match_type: r.match_type, confidence: num(r.match_confidence), availability: r.availability, checked_at: r.checked_at,
@@ -116,15 +147,28 @@ function ComparisonView() {
       })
     }
     const list = [...byProduct.values()].filter(r => !parents.has(r.wc_product_id) || r.offers.length)
-    for (const r of list) {
-      const priced = r.offers.filter(o => o.price != null && isFinal(o))
-      r.lowest = priced.length ? priced.reduce((a, o) => (o.price < a.price ? o : a)) : null
-      r.lowestGap = gap(r.lowest, r.price)
-    }
+    list.forEach(withLowest)
     setRows(list)
     setLoadedAt(new Date())
   }
   useEffect(() => { load() }, [])
+
+  // עדכון מקומי מיידי אחרי אישור/דחייה/הוספה (בלי טעינה מחדש)
+  function patchOffer(productId, offerId, patch) {
+    setRows(list => list.map(r => {
+      if (r.id !== productId) return r
+      const all = [...r.offers, ...r.rejected]
+      const prev = all.find(o => o.offer_id === offerId)
+      const next = { ...prev, ...patch }
+      const rest = all.filter(o => o.offer_id !== offerId).concat(next)
+      return withLowest({ ...r, offers: rest.filter(o => o.review_status !== 'rejected'), rejected: rest.filter(o => o.review_status === 'rejected') })
+    }))
+    onChanged?.()
+  }
+  function addOffer(productId, offer) {
+    setRows(list => list.map(r => r.id !== productId ? r : withLowest({ ...r, offers: [...r.offers, offer] })))
+    onChanged?.()
+  }
   // חזרה ללשונית = רענון, כדי שמחירים חדשים שנכתבו למסד יופיעו בלי לרענן ידנית
   useEffect(() => {
     const onVis = () => { if (document.visibilityState === 'visible') load() }
@@ -178,6 +222,7 @@ function ComparisonView() {
       <div className="cmp-toolbar">
         <div className="cmp-head-meta">
           {loadedAt && <span>עודכן בתצוגה {loadedAt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>}
+          <button className="btn-add btn-outline" onClick={() => setAddingStore(true)}>+ הוספת מתחרה</button>
           <button className="btn-add" onClick={load}>רענון</button>
         </div>
       </div>
@@ -248,7 +293,7 @@ function ComparisonView() {
               </td></tr>
             )}
             {shown.map(r => (
-              <tr key={r.id} onClick={() => setOpen(r)}>
+              <tr key={r.id} onClick={() => setOpenId(r.id)}>
                 <td className="cmp-sticky">
                   <div className="cmp-prod">
                     <div className="cmp-thumb">{(r.name || '?').trim()[0]}</div>
@@ -287,9 +332,20 @@ function ComparisonView() {
         <span>הפער מחושב מול המחיר שלי באתר, לא כולל משלוח וחריטה. לחיצה על שורה פותחת פירוט והיסטוריה.</span>
       </p>
 
-      {open && <ProductDrawer row={open} stores={stores || []} onClose={() => setOpen(null)} />}
+      {open && <ProductDrawer row={open} stores={stores || []} onClose={() => setOpenId(null)}
+        onPatch={(offerId, patch) => patchOffer(open.id, offerId, patch)} onAdd={offer => addOffer(open.id, offer)}
+        onAddStore={() => setAddingStore(true)} />}
+      {addingStore && <AddStoreModal stores={stores || []} onCancel={() => setAddingStore(false)}
+        onSaved={st => { setStores(list => [...list, st]); setAddingStore(false) }} />}
     </div>
   )
+}
+
+function withLowest(r) {
+  const priced = r.offers.filter(o => o.price != null && isFinal(o))
+  r.lowest = priced.length ? priced.reduce((a, o) => (o.price < a.price ? o : a)) : null
+  r.lowestGap = gap(r.lowest, r.price)
+  return r
 }
 
 // פער כסף + אחוז, מבודד כ-LTR כדי שסימן המינוס לא יקפוץ לצד הלא נכון בתוך טקסט עברי
@@ -317,11 +373,12 @@ function OfferCell({ offer, myPrice, showStore }) {
   return (
     <div className={`cmp-offer ${gapCls(g, offer)}`}>
       <div className="cmp-offer-top">
-        <b>{ils(offer.price)}</b>
+        <b>{offer.price != null ? ils(offer.price) : <span className="cmp-dash">אין מחיר עדיין</span>}</b>
         <span className={`cmp-match ${m.cls}`}>{m.label}</span>
       </div>
       {showStore && <div className="cmp-offer-store">{offer.store_name}</div>}
       {!isFinal(offer) && <div className="cmp-offer-review">ממתין לאישור התאמה</div>}
+      {isAutoApproved(offer) && <div className="cmp-offer-auto">✓ אוטומטי לפי מק״ט</div>}
       {g && <div className="cmp-offer-gap"><GapText g={g} /></div>}
       <div className="cmp-offer-meta">
         {offer.checked_at && <span dir="ltr">{formatDateTime(offer.checked_at)}</span>}
@@ -331,19 +388,20 @@ function OfferCell({ offer, myPrice, showStore }) {
   )
 }
 
-function ProductDrawer({ row, stores, onClose }) {
+function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
+  const [adding, setAdding] = useState(false)
   const { openRecord } = useNav()
   const [checks, setChecks] = useState(null)
   const [err, setErr] = useState('')
   const storeName = id => stores.find(s => s.id === id)?.name || row.offers.find(o => o.store_id === id)?.store_name || '—'
 
   useEffect(() => {
-    const ids = row.offers.map(o => o.offer_id)
+    const ids = [...row.offers, ...row.rejected].map(o => o.offer_id)
     if (!ids.length) { setChecks([]); return }
     supabase.from('competitor_price_checks').select('id, offer_id, price, shipping_price, availability, checked_at, collection_method, note')
       .in('offer_id', ids).order('checked_at', { ascending: true })
       .then(({ data, error }) => { if (error) { setErr(error.message); setChecks([]) } else setChecks(data) })
-  }, [row.id])
+  }, [row.id, row.offers.length + row.rejected.length])
 
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
@@ -351,8 +409,11 @@ function ProductDrawer({ row, stores, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const offerById = new Map(row.offers.map(o => [o.offer_id, o]))
-  const offers = [...row.offers].sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity))
+  const offerById = new Map([...row.offers, ...row.rejected].map(o => [o.offer_id, o]))
+  // ממתינים קודם (דורשים פעולה), אחר כך מאושרים לפי מחיר; נדחים בסוף
+  const rank = o => o.review_status === 'pending' ? 0 : o.review_status === 'approved' ? 1 : 2
+  const offers = [...row.offers, ...row.rejected].sort((a, b) => rank(a) - rank(b) || (a.price ?? Infinity) - (b.price ?? Infinity))
+  const pendingCount = row.offers.filter(o => o.review_status === 'pending').length
 
   return (
     <div className="overlay cmp-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -380,9 +441,14 @@ function ProductDrawer({ row, stores, onClose }) {
         </div>
         {!hasCost(row) && <p className="cmp-note">לא הוזנה עלות רכישה למוצר, ולכן לא מוצג רווח. אפשר להזין עלות בכרטיס המוצר.</p>}
 
-        <h3>הצעות אצל מתחרים</h3>
+        <div className="cmp-h3-row">
+          <h3>הצעות אצל מתחרים {pendingCount > 0 && <span className="cmp-tab-count">{pendingCount} ממתינים</span>}</h3>
+          {!adding && <button className="btn-add btn-outline" onClick={() => setAdding(true)}>+ הוספת קישור למתחרה</button>}
+        </div>
+        {adding && <AddOfferForm row={row} stores={stores} onCancel={() => setAdding(false)} onAddStore={onAddStore}
+          onSaved={offer => { onAdd(offer); setAdding(false) }} />}
         {offers.length === 0 ? (
-          <div className="cmp-empty">עדיין לא נמצאו התאמות למוצר הזה. כשיתווספו התאמות למסד, הן יופיעו כאן אוטומטית.</div>
+          <div className="cmp-empty">עדיין לא נמצאו התאמות למוצר הזה. אפשר להוסיף קישור למוצר אצל מתחרה בכפתור למעלה.</div>
         ) : (
           <div className="cmp-offer-list">
             {offers.map(o => {
@@ -390,15 +456,16 @@ function ProductDrawer({ row, stores, onClose }) {
               const m = matchInfo(o.match_type)
               const notes = [o.variant_notes, o.engraving_notes, o.package_notes, o.shipping_notes, o.note].filter(Boolean)
               return (
-                <div key={o.offer_id} className={`cmp-offer-row ${gapCls(g, o)}`}>
+                <div key={o.offer_id} className={`cmp-offer-row ${o.review_status === 'rejected' ? 'is-rejected' : gapCls(g, o)}`}>
                   <div className="cmp-offer-row-main">
                     <div>
-                      <b>{o.store_name}</b> <span className={`cmp-review ${REVIEW[o.review_status]?.cls || ''}`}>{REVIEW[o.review_status]?.label}</span> <span className={`cmp-match ${m.cls}`}>{m.label}{o.confidence != null ? ` · ${Math.round(o.confidence * 100)}%` : ''}</span>
+                      <b>{o.store_name}</b> <ReviewBadge o={o} /> <span className={`cmp-match ${m.cls}`}>{m.label}{o.confidence != null ? ` · ${Math.round(o.confidence * 100)}%` : ''}</span>
                       {o.title && <div className="cmp-sub">{o.title}</div>}
                       {o.sku && <div className="cmp-sub">מק״ט אצל המתחרה: {o.sku}</div>}
+                      <SkuSource o={o} />
                     </div>
                     <div className="cmp-offer-row-price">
-                      <b>{ils(o.price)}</b>
+                      <b>{o.price != null ? ils(o.price) : <span className="cmp-dash">אין מחיר עדיין</span>}</b>
                       {g && <div className="cmp-offer-gap"><GapText g={g} /></div>}
                     </div>
                   </div>
@@ -409,6 +476,8 @@ function ProductDrawer({ row, stores, onClose }) {
                     {o.url && <a href={o.url} target="_blank" rel="noopener noreferrer">לעמוד המוצר ↗</a>}
                   </div>
                   {notes.length > 0 && <div className="cmp-offer-notes">{notes.join(' · ')}</div>}
+                  {o.review_status === 'rejected' && o.review_notes && <div className="rv-reason">סיבת דחייה: {o.review_notes}</div>}
+                  {o.review_status === 'pending' && <DecisionControls offer={o} onDone={patch => onPatch(o.offer_id, patch)} />}
                 </div>
               )
             })}
@@ -515,6 +584,194 @@ function PriceChart({ checks, offerById, storeName, myPrice }) {
   )
 }
 
+// ---------- רכיבי אישור משותפים ----------
+
+function ReviewBadge({ o }) {
+  const st = o.review_status || 'pending'
+  if (st === 'approved') {
+    const auto = isAutoApproved(o)
+    return <span className={`cmp-review r-approved ${auto ? 'r-auto' : ''}`} title={auto ? 'אושר על ידי מנגנון האימות במסד' : undefined}>{auto ? '✓ ' : ''}{approvalLabel(o)}</span>
+  }
+  return <span className={`cmp-review ${REVIEW[st]?.cls || ''}`}>{REVIEW[st]?.label || st}</span>
+}
+
+function SkuSource({ o }) {
+  const label = skuSourceLabel(o.sku_verification_source)
+  if (!label) return null
+  const verified = o.sku_verification_source !== 'unverified'
+  return (
+    <div className={`cmp-skusrc ${verified ? 'ok' : ''}`}>
+      {verified ? '🔒 ' : ''}{label}
+      {verified && o.sku_verified_at && <> · <span dir="ltr">{formatDateTime(o.sku_verified_at)}</span></>}
+    </div>
+  )
+}
+
+// כפתורי אישור/דחייה להצעה בודדת (בחלונית המוצר)
+function DecisionControls({ offer, onDone }) {
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  async function run(status, notes) {
+    setBusy(true); setErr('')
+    const { data, error } = await saveDecision(offer.offer_id, status, notes)
+    setBusy(false)
+    if (error) { setErr(error); return }
+    onDone({ ...data, offer_id: offer.offer_id })
+  }
+  return (
+    <div className="cmp-decide" onClick={e => e.stopPropagation()}>
+      {rejecting ? (
+        <div className="rv-reject">
+          <div className="rv-label">למה זה לא אותו מוצר?</div>
+          <div className="rv-reasons">
+            {REJECT_REASONS.map(r => <button key={r} className={`cmp-chip ${reason === r ? 'on' : ''}`} onClick={() => setReason(r)}>{r}</button>)}
+          </div>
+          <input type="text" placeholder="או כתוב סיבה" value={reason} onChange={e => setReason(e.target.value)} />
+          <div className="rv-actions">
+            <button className="rv-btn rv-reject-btn" disabled={busy || !reason.trim()} onClick={() => run('rejected', reason.trim())}>{busy ? 'שומר...' : 'שמירת דחייה'}</button>
+            <button className="rv-btn rv-ghost" disabled={busy} onClick={() => { setRejecting(false); setReason('') }}>ביטול</button>
+          </div>
+        </div>
+      ) : (
+        <div className="rv-actions">
+          <button className="rv-btn rv-approve" disabled={busy} onClick={() => run('approved')}>{busy ? 'שומר...' : '✓ זה אותו מוצר — אשר'}</button>
+          <button className="rv-btn rv-reject-btn" disabled={busy} onClick={() => setRejecting(true)}>✕ לא אותו מוצר — דחה</button>
+        </div>
+      )}
+      {err && <div className="rv-flash err">{err}</div>}
+    </div>
+  )
+}
+
+// ---------- הוספה ידנית ----------
+
+function AddOfferForm({ row, stores, onCancel, onSaved, onAddStore }) {
+  const [v, setV] = useState({ store_id: '', url: '', sku: '', title: '', match_type: 'exact', approve: false })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k, x) => setV(s => ({ ...s, [k]: x }))
+  const sorted = [...stores].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he'))
+  const store = stores.find(s => s.id === v.store_id)
+  let urlHost = ''
+  try { urlHost = /^https?:\/\//i.test(v.url.trim()) ? new URL(v.url.trim()).hostname.replace(/^www\./, '') : '' } catch { urlHost = '' }
+  const mismatch = store?.domain && urlHost && !urlHost.endsWith(cleanDomain(store.domain))
+
+  async function save() {
+    setErr('')
+    const url = v.url.trim()
+    if (!v.store_id) return setErr('צריך לבחור חנות מתחרה')
+    if (!urlHost) return setErr('הקישור צריך להיות כתובת מלאה שמתחילה ב-https://')
+    if ([...row.offers, ...row.rejected].some(o => o.store_id === v.store_id && (o.url || '').replace(/\/$/, '') === url.replace(/\/$/, '')))
+      return setErr('הקישור הזה כבר קיים למוצר אצל החנות הזאת')
+    setBusy(true)
+    const { data, error } = await supabase.from('competitor_offers').insert({
+      product_id: row.id, store_id: v.store_id, product_url: url,
+      competitor_sku: v.sku.trim() || null, competitor_title: v.title.trim() || null,
+      match_type: v.match_type, entry_method: 'manual',
+    }).select('*').single()
+    if (error || !data) { setBusy(false); return setErr(error?.message || 'ההוספה לא נשמרה במסד') }
+    let review = { review_status: data.review_status || 'pending', approval_method: data.approval_method, sku_verification_source: data.sku_verification_source, sku_verified_at: data.sku_verified_at, review_notes: data.review_notes }
+    if (v.approve && review.review_status !== 'approved') {
+      const r = await saveDecision(data.id, 'approved')
+      if (r.error) setErr('הקישור נשמר, אבל האישור לא נשמר: ' + r.error)
+      else review = { ...review, ...r.data }
+    }
+    setBusy(false)
+    onSaved({
+      offer_id: data.id, store_id: data.store_id, store_name: store?.name, price: null, shipping_price: null,
+      url: data.product_url, sku: data.competitor_sku, title: data.competitor_title, match_type: data.match_type,
+      confidence: num(data.confidence), availability: null, checked_at: null, ...review,
+    })
+  }
+
+  return (
+    <div className="cmp-addform">
+      <div className="fields-grid">
+        <div className="field">
+          <label>חנות מתחרה</label>
+          <select value={v.store_id} onChange={e => set('store_id', e.target.value)}>
+            <option value="">בחירת חנות…</option>
+            {sorted.map(s => <option key={s.id} value={s.id}>{s.name}{s.domain ? ` · ${s.domain}` : ''}</option>)}
+          </select>
+          <button type="button" className="link-btn cmp-mini" onClick={onAddStore}>החנות לא ברשימה? הוספת מתחרה חדש</button>
+        </div>
+        <div className="field">
+          <label>סוג התאמה</label>
+          <select value={v.match_type} onChange={e => set('match_type', e.target.value)}>
+            <option value="exact">זהה</option>
+            <option value="variant">וריאציה</option>
+            <option value="similar">דומה</option>
+            <option value="candidate">מועמד (לא בטוח)</option>
+          </select>
+        </div>
+        <div className="field full">
+          <label>קישור למוצר אצל המתחרה</label>
+          <input type="url" dir="ltr" placeholder="https://" value={v.url} onChange={e => set('url', e.target.value)} />
+          {mismatch && <div className="cmp-warn">הקישור הוא מ-{urlHost}, והחנות שנבחרה היא {store.domain}. כדאי לוודא שבחרת את החנות הנכונה.</div>}
+        </div>
+        <div className="field">
+          <label>מק״ט אצל המתחרה (לא חובה)</label>
+          <input type="text" dir="ltr" value={v.sku} onChange={e => set('sku', e.target.value)} />
+        </div>
+        <div className="field">
+          <label>שם המוצר אצל המתחרה (לא חובה)</label>
+          <input type="text" value={v.title} onChange={e => set('title', e.target.value)} />
+        </div>
+      </div>
+      <label className="cmp-check"><input type="checkbox" checked={v.approve} onChange={e => set('approve', e.target.checked)} /> זה בדיוק אותו מוצר — לאשר מיד</label>
+      <p className="cmp-note">המחיר ייבדק בסריקה הבאה. עד אז ההצעה תופיע בלי מחיר.</p>
+      {err && <div className="err-inline">{err}</div>}
+      <div className="rv-actions">
+        <button className="rv-btn rv-approve" disabled={busy} onClick={save}>{busy ? 'שומר...' : 'שמירת קישור'}</button>
+        <button className="rv-btn rv-ghost" disabled={busy} onClick={onCancel}>ביטול</button>
+      </div>
+    </div>
+  )
+}
+
+function AddStoreModal({ stores, onCancel, onSaved }) {
+  const [name, setName] = useState('')
+  const [domain, setDomain] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const d = cleanDomain(domain)
+
+  async function save() {
+    setErr('')
+    if (!name.trim()) return setErr('צריך שם לחנות')
+    if (!d || !d.includes('.')) return setErr('צריך דומיין תקין, למשל example.co.il')
+    const dup = stores.find(s => cleanDomain(s.domain) === d || (s.name || '').trim() === name.trim())
+    if (dup) return setErr(`החנות כבר קיימת ברשימה: ${dup.name}`)
+    setBusy(true)
+    const { data, error } = await supabase.from('competitor_stores').insert({ name: name.trim(), domain: d }).select('id, name, domain, enabled, priority').single()
+    setBusy(false)
+    if (error || !data) return setErr(error?.message || 'החנות לא נשמרה במסד')
+    onSaved(data)
+  }
+
+  return (
+    <div className="overlay" style={{ zIndex: 50 }} onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div className="modal" style={{ maxWidth: 460 }}>
+        <h2>הוספת חנות מתחרה</h2>
+        <div className="field"><label>שם החנות</label><input value={name} onChange={e => setName(e.target.value)} autoFocus /></div>
+        <div className="field">
+          <label>אתר (דומיין)</label>
+          <input dir="ltr" placeholder="example.co.il" value={domain} onChange={e => setDomain(e.target.value)} />
+          {domain && d && d !== domain.trim().toLowerCase() && <div className="cmp-note">יישמר כ-<b dir="ltr">{d}</b></div>}
+        </div>
+        <p className="cmp-note">החנות תתווסף כעמודה בטבלת ההשוואה. מחיקה או עריכה של חנות לא זמינות מתוך ה-CRM, אז כדאי לוודא שהפרטים נכונים.</p>
+        {err && <div className="err-inline">{err}</div>}
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>ביטול</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'שומר...' : 'הוספה'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ---------- אישור התאמות ----------
 // מקור: v_competitor_review_queue. שמירה: competitor_offers.review_status / review_notes לפי offer_id.
 // reviewed_at / reviewed_by מתמלאים במסד אוטומטית.
@@ -543,14 +800,8 @@ function ReviewQueue({ onChanged }) {
 
   // שומר ומוודא מול המסד שהעדכון נקלט (השורה המוחזרת מה-update)
   async function decide(item, review_status, review_notes) {
-    const patch = { review_status }
-    if (review_status === 'rejected') patch.review_notes = review_notes
-    const { data, error: e } = await supabase.from('competitor_offers').update(patch).eq('id', item.offer_id)
-      .select('id, review_status, review_notes, reviewed_at').maybeSingle()
-    if (e || !data || data.review_status !== review_status) {
-      setFlash({ id: item.offer_id, ok: false, text: e?.message || 'העדכון לא נשמר במסד (ייתכן שאין הרשאה)' })
-      return false
-    }
+    const { data, error: e } = await saveDecision(item.offer_id, review_status, review_notes)
+    if (e) { setFlash({ id: item.offer_id, ok: false, text: e }); return false }
     setItems(list => list.map(x => x.offer_id === item.offer_id ? { ...x, ...data, offer_id: x.offer_id } : x))
     setJustDecided(d => new Set(d).add(item.offer_id))
     setFlash({ id: item.offer_id, ok: true, text: review_status === 'approved' ? 'אושר ונשמר' : 'נדחה ונשמר' })
@@ -645,7 +896,7 @@ function ReviewCard({ item, onDecide, flash }) {
   return (
     <article className={`rv-card rv-${st}`}>
       <div className="rv-top">
-        <span className={`cmp-review ${REVIEW[st]?.cls || ''}`}>{REVIEW[st]?.label || st}</span>
+        <ReviewBadge o={item} />
         <span className={`cmp-match ${m.cls}`}>{m.label}</span>
         {item.confidence != null && <span className="rv-conf">ביטחון {Math.round(item.confidence * 100)}%</span>}
       </div>
@@ -672,8 +923,9 @@ function ReviewCard({ item, onDecide, flash }) {
         </div>
       </div>
 
-      {(evidence.length > 0 || notes.length > 0 || item.last_price_checked_at) && (
+      {(evidence.length > 0 || notes.length > 0 || item.last_price_checked_at || item.sku_verification_source) && (
         <div className="rv-meta">
+          <SkuSource o={item} />
           {item.last_price_checked_at && <div>מחיר נבדק <span dir="ltr">{formatDateTime(item.last_price_checked_at)}</span>{item.store_domain ? ` · ${item.store_domain}` : ''}</div>}
           {evidence.map(([k, v]) => <div key={k}><b>{k}:</b> {typeof v === 'object' ? JSON.stringify(v) : String(v)}</div>)}
           {notes.length > 0 && <div>{notes.join(' · ')}</div>}
@@ -681,7 +933,7 @@ function ReviewCard({ item, onDecide, flash }) {
       )}
       {st === 'rejected' && item.review_notes && <div className="rv-reason">סיבת דחייה: {item.review_notes}</div>}
 
-      {rejecting ? (
+      {isAutoApproved(item) ? null : rejecting ? (
         <div className="rv-reject">
           <div className="rv-label">למה זה לא אותו מוצר?</div>
           <div className="rv-reasons">
