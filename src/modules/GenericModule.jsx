@@ -159,6 +159,11 @@ export default function GenericModule({ config, focusId = null }) {
   }
 
   for (const f of config.filters || []) {
+    if (f.type === 'preset') {
+      const opt = f.options.find(o => o.value === (filterValues[f.key] ?? f.options[0].value))
+      if (opt?.test) filtered = filtered.filter(opt.test)
+      continue
+    }
     const val = filterValues[f.key]
     if (!val) continue
     if (f.type === 'month') filtered = filtered.filter(r => (r[f.key] || '').startsWith(val))
@@ -234,7 +239,11 @@ export default function GenericModule({ config, focusId = null }) {
             />
           )}
           {(config.filters || []).map(f => (
-            f.type === 'relation' ? (
+            f.type === 'preset' ? (
+              <select key={f.key} value={filterValues[f.key] ?? f.options[0].value} onChange={e => setFilter(f.key, e.target.value)}>
+                {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : f.type === 'relation' ? (
               <RelationField
                 key={f.key}
                 value={filterValues[f.key] || ''}

@@ -215,6 +215,12 @@ export const MODULES = {
     searchField: ['product_name', 'sku', 'order_number', 'customer_name', 'customer_phone'],
     searchLabel: 'חיפוש לפי מוצר, מק"ט, הזמנה או מזמין',
     filters: [
+      // ברירת מחדל: רק הזמנות פתוחות (בטיפול / ממתינות לתשלום / בהמתנה / ידניות)
+      { key: 'view', type: 'preset', options: [
+        { value: 'open', label: 'הזמנות פתוחות', test: r => !r.wc_status || ['processing', 'pending', 'on-hold'].includes(r.wc_status) },
+        { value: 'completed', label: 'הושלמו', test: r => r.wc_status === 'completed' },
+        { value: 'all', label: 'הצג את כל ההזמנות' },
+      ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
       { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: ORDER_STATUS_LABELS },
     ],
