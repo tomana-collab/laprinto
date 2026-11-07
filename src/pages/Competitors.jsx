@@ -251,6 +251,11 @@ export default function Competitors() {
   )
 }
 
+// פער כסף + אחוז, מבודד כ-LTR כדי שסימן המינוס לא יקפוץ לצד הלא נכון בתוך טקסט עברי
+function GapText({ g }) {
+  return <span dir="ltr">{signed(g.diff)} ({g.pct > 0 ? '+' : g.pct < 0 ? '−' : ''}{pct(Math.abs(g.pct))})</span>
+}
+
 function Kpi({ label, value, sub, tone = '', onClick }) {
   return (
     <div className={`summary-card cmp-kpi ${onClick ? 'clickable' : ''}`} onClick={onClick}>
@@ -275,9 +280,9 @@ function OfferCell({ offer, myPrice, showStore }) {
         <span className={`cmp-match ${m.cls}`}>{m.label}</span>
       </div>
       {showStore && <div className="cmp-offer-store">{offer.store_name}</div>}
-      {g && <div className="cmp-offer-gap">{signed(g.diff)} · {g.pct > 0 ? '+' : ''}{pct(g.pct)}</div>}
+      {g && <div className="cmp-offer-gap"><GapText g={g} /></div>}
       <div className="cmp-offer-meta">
-        {offer.checked_at && <span>{formatDateTime(offer.checked_at)}</span>}
+        {offer.checked_at && <span dir="ltr">{formatDateTime(offer.checked_at)}</span>}
         {offer.url && <a href={offer.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>לעמוד ↗</a>}
       </div>
     </div>
@@ -352,11 +357,11 @@ function ProductDrawer({ row, stores, onClose }) {
                     </div>
                     <div className="cmp-offer-row-price">
                       <b>{ils(o.price)}</b>
-                      {g && <div className="cmp-offer-gap">{signed(g.diff)} · {g.pct > 0 ? '+' : ''}{pct(g.pct)}</div>}
+                      {g && <div className="cmp-offer-gap"><GapText g={g} /></div>}
                     </div>
                   </div>
                   <div className="cmp-offer-meta">
-                    {o.checked_at && <span>נבדק {formatDateTime(o.checked_at)}</span>}
+                    {o.checked_at && <span>נבדק <span dir="ltr">{formatDateTime(o.checked_at)}</span></span>}
                     {o.shipping_price != null && <span>משלוח {ils(o.shipping_price)}</span>}
                     {o.availability && o.availability !== 'unknown' && <span>{o.availability === 'in_stock' ? 'במלאי' : o.availability === 'out_of_stock' ? 'אזל' : o.availability}</span>}
                     {o.url && <a href={o.url} target="_blank" rel="noopener noreferrer">לעמוד המוצר ↗</a>}
@@ -381,10 +386,10 @@ function ProductDrawer({ row, stores, onClose }) {
                   <tbody>
                     {withChange(checks).slice().reverse().map(c => (
                       <tr key={c.id}>
-                        <td>{formatDateTime(c.checked_at)}</td>
+                        <td><span dir="ltr">{formatDateTime(c.checked_at)}</span></td>
                         <td>{storeName(offerById.get(c.offer_id)?.store_id)}</td>
                         <td>{ils(c.price)}</td>
-                        <td>{c.change == null ? '—' : <span className={c.change < 0 ? 'neg' : c.change > 0 ? 'pos' : ''}>{signed(c.change)}</span>}</td>
+                        <td>{c.change == null ? '—' : <span dir="ltr" className={c.change < 0 ? 'neg' : c.change > 0 ? 'pos' : ''}>{signed(c.change)}</span>}</td>
                         <td>{c.availability === 'in_stock' ? 'במלאי' : c.availability === 'out_of_stock' ? 'אזל' : 'לא ידוע'}</td>
                       </tr>
                     ))}
