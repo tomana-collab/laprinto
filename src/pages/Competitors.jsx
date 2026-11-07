@@ -3,8 +3,10 @@ import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
 import { formatDateTime } from '../lib/format'
 
-// השוואת מתחרים — תצוגה בלבד. הנתונים (חנויות, התאמות, בדיקות מחיר) נכתבים למסד
-// מבחוץ; העמוד רק קורא את v_competitor_matrix + competitor_stores + competitor_price_checks.
+// השוואת מתחרים. הנתונים (חנויות, התאמות, בדיקות מחיר) נכתבים למסד מבחוץ;
+// לשונית ההשוואה רק קוראת (v_competitor_matrix + competitor_stores + competitor_price_checks),
+// ולשונית "אישור התאמות" כותבת רק review_status / review_notes ב-competitor_offers.
+// רק התאמה מאושרת (approved) נחשבת סופית: היא היחידה שנכנסת לחישובי "הזול ביותר", לפערים ולסיכומים.
 
 const ils = n => n == null ? '—' : '₪' + Number(n).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 const pct = n => n == null ? '—' : Number(n).toLocaleString('he-IL', { maximumFractionDigits: 1 }) + '%'
@@ -16,7 +18,14 @@ const MATCH = {
   exact: { label: 'זהה', cls: 'm-exact' },
   variant: { label: 'וריאציה', cls: 'm-variant' },
   similar: { label: 'דומה', cls: 'm-similar' },
+  candidate: { label: 'מועמד', cls: 'm-similar' },
 }
+const REVIEW = {
+  pending: { label: 'ממתין לאישור', cls: 'r-pending' },
+  approved: { label: 'מאושר', cls: 'r-approved' },
+  rejected: { label: 'נדחה', cls: 'r-rejected' },
+}
+const isFinal = o => o.review_status === 'approved'
 const matchInfo = t => MATCH[t] || { label: t || 'לא אומת', cls: 'm-similar' }
 
 // פער מול המחיר שלי: שלילי = המתחרה זול ממני
@@ -25,9 +34,37 @@ function gap(offer, myPrice) {
   const diff = offer.price - myPrice
   return { diff, pct: (diff / myPrice) * 100 }
 }
-const gapCls = (g, offer) => !g || offer.match_type === 'similar' ? 'c-none' : g.diff < 0 ? 'c-cheaper' : g.diff > 0 ? 'c-pricier' : 'c-equal'
+const gapCls = (g, offer) => !g || !isFinal(offer) ? 'c-none' : g.diff < 0 ? 'c-cheaper' : g.diff > 0 ? 'c-pricier' : 'c-equal'
 
 export default function Competitors() {
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem('cmp-tab') || 'compare' } catch { return 'compare' } })
+  const [pending, setPending] = useState(null)
+  const [version, setVersion] = useState(0) // עולה אחרי כל אישור/דחייה, כדי שההשוואה תיטען מחדש
+  const choose = t => { setTab(t); try { localStorage.setItem('cmp-tab', t) } catch {} }
+
+  async function countPending() {
+    const { count } = await supabase.from('competitor_offers').select('id', { count: 'exact', head: true }).eq('review_status', 'pending')
+    setPending(count ?? null)
+  }
+  useEffect(() => { countPending() }, [version])
+
+  return (
+    <div className="cmp-page">
+      <div className="module-head"><h2>🔎 השוואת מתחרים</h2></div>
+      <div className="cmp-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'compare'} className={tab === 'compare' ? 'on' : ''} onClick={() => choose('compare')}>השוואת מחירים</button>
+        <button role="tab" aria-selected={tab === 'review'} className={tab === 'review' ? 'on' : ''} onClick={() => choose('review')}>
+          אישור התאמות {pending > 0 && <span className="cmp-tab-count">{pending}</span>}
+        </button>
+      </div>
+      {tab === 'compare'
+        ? <ComparisonView key={version} />
+        : <ReviewQueue onChanged={() => setVersion(v => v + 1)} />}
+    </div>
+  )
+}
+
+function ComparisonView() {
   const [stores, setStores] = useState(null)
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
@@ -38,18 +75,20 @@ export default function Competitors() {
 
   async function load() {
     setError('')
-    const [m, s, p] = await Promise.all([
+    const [m, s, p, o] = await Promise.all([
       supabase.from('v_competitor_matrix').select('*'),
       supabase.from('competitor_stores').select('id, name, domain, enabled, priority').order('priority'),
       supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url'),
+      supabase.from('competitor_offers').select('id, review_status'),
     ])
-    const err = [m, s, p].find(x => x.error)
+    const err = [m, s, p, o].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); setStores([]); return }
     setStores(s.data.filter(x => x.enabled !== false))
 
     // מוצר ראשי שפוצל לוריאציות לא מוצג (כמו בעמוד המלאי) — הוריאציות מוצגות במקומו,
     // אלא אם קושרה אליו התאמת מתחרה
     const prodById = new Map(p.data.map(x => [x.id, x]))
+    const reviewById = new Map(o.data.map(x => [x.id, x.review_status || 'pending']))
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean))
     const byProduct = new Map()
     for (const r of m.data) {
@@ -66,7 +105,9 @@ export default function Competitors() {
         }
         byProduct.set(r.product_id, row)
       }
-      if (r.offer_id) row.offers.push({
+      const review_status = r.offer_id ? reviewById.get(r.offer_id) || 'pending' : null
+      if (r.offer_id && review_status !== 'rejected') row.offers.push({
+        review_status,
         offer_id: r.offer_id, store_id: r.store_id, store_name: r.store_name, price: num(r.competitor_price),
         shipping_price: num(r.shipping_price), url: r.competitor_url || r.source_url, sku: r.competitor_sku, title: r.competitor_title,
         match_type: r.match_type, confidence: num(r.match_confidence), availability: r.availability, checked_at: r.checked_at,
@@ -76,7 +117,7 @@ export default function Competitors() {
     }
     const list = [...byProduct.values()].filter(r => !parents.has(r.wc_product_id) || r.offers.length)
     for (const r of list) {
-      const priced = r.offers.filter(o => o.price != null && o.match_type !== 'similar')
+      const priced = r.offers.filter(o => o.price != null && isFinal(o))
       r.lowest = priced.length ? priced.reduce((a, o) => (o.price < a.price ? o : a)) : null
       r.lowestGap = gap(r.lowest, r.price)
     }
@@ -104,7 +145,7 @@ export default function Competitors() {
       if (t && !r.name?.toLowerCase().includes(t) && !(r.sku || '').toLowerCase().includes(t)) return false
       const offers = r.offers.filter(o => (!f.store || o.store_id === f.store) && (!f.exact || o.match_type === 'exact'))
       if ((f.store || f.exact || f.withOffers) && !offers.length) return false
-      if (f.pricier && !offers.some(o => gap(o, r.price)?.diff < 0 && o.match_type !== 'similar')) return false
+      if (f.pricier && !offers.some(o => gap(o, r.price)?.diff < 0 && isFinal(o))) return false
       if (f.noCost && hasCost(r)) return false
       return true
     })
@@ -124,17 +165,17 @@ export default function Competitors() {
 
   if (rows === null) return <div className="loading">טוען השוואת מתחרים...</div>
 
-  const compared = rows.filter(r => r.offers.some(o => o.price != null))
+  const compared = rows.filter(r => r.offers.some(o => o.price != null && isFinal(o)))
+  const awaiting = rows.filter(r => r.offers.some(o => o.review_status === 'pending'))
   const cheaper = rows.filter(r => r.lowestGap && r.lowestGap.diff < 0)
   const iAmCheapest = rows.filter(r => r.lowestGap && r.lowestGap.diff > 0)
   const missingCost = rows.filter(r => !hasCost(r))
-  const activeStores = new Set(rows.flatMap(r => r.offers.map(o => o.store_id)))
+  const activeStores = new Set(rows.flatMap(r => r.offers.filter(isFinal).map(o => o.store_id)))
   const anyFilter = f.q || f.cat || f.sub || f.store || f.pricier || f.noCost || f.exact || f.withOffers
 
   return (
-    <div className="cmp-page">
-      <div className="module-head">
-        <h2>🔎 השוואת מתחרים</h2>
+    <div>
+      <div className="cmp-toolbar">
         <div className="cmp-head-meta">
           {loadedAt && <span>עודכן בתצוגה {loadedAt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>}
           <button className="btn-add" onClick={load}>רענון</button>
@@ -144,8 +185,8 @@ export default function Competitors() {
 
       <div className="cmp-kpis">
         <Kpi label="מוצרים בקטלוג" value={rows.length} />
-        <Kpi label="עם השוואת מתחרים" value={compared.length} sub={rows.length ? pct(compared.length / rows.length * 100) + ' מהקטלוג' : null} />
-        <Kpi label="מתחרים במעקב" value={(stores || []).length} sub={`${activeStores.size} עם התאמות`} />
+        <Kpi label="עם השוואת מתחרים" value={compared.length} sub={awaiting.length ? `עוד ${awaiting.length} ממתינים לאישור` : rows.length ? pct(compared.length / rows.length * 100) + ' מהקטלוג' : null} />
+        <Kpi label="מתחרים במעקב" value={(stores || []).length} sub={`${activeStores.size} עם התאמות מאושרות`} />
         <Kpi label="מתחרה זול ממני" value={cheaper.length} tone={cheaper.length ? 'neg' : ''} onClick={() => setF(s => ({ ...s, pricier: true, sort: 'gap' }))} />
         <Kpi label="המחיר שלי הכי נמוך" value={iAmCheapest.length} tone={iAmCheapest.length ? 'pos' : ''} />
         <Kpi label="חסרה עלות רכישה" value={missingCost.length} tone={missingCost.length ? 'warn' : ''} onClick={() => set('noCost', true)} />
@@ -242,7 +283,7 @@ export default function Competitors() {
       <p className="cmp-legend">
         <span><i className="sw c-cheaper" /> המתחרה זול ממני</span>
         <span><i className="sw c-pricier" /> המתחרה יקר ממני</span>
-        <span><i className="sw c-none" /> אין נתון / התאמה לא מאומתת</span>
+        <span><i className="sw c-none" /> התאמה שעוד לא אושרה (לא נכנסת לחישובים)</span>
         <span>הפער מחושב מול המחיר שלי באתר, לא כולל משלוח וחריטה. לחיצה על שורה פותחת פירוט והיסטוריה.</span>
       </p>
 
@@ -280,6 +321,7 @@ function OfferCell({ offer, myPrice, showStore }) {
         <span className={`cmp-match ${m.cls}`}>{m.label}</span>
       </div>
       {showStore && <div className="cmp-offer-store">{offer.store_name}</div>}
+      {!isFinal(offer) && <div className="cmp-offer-review">ממתין לאישור התאמה</div>}
       {g && <div className="cmp-offer-gap"><GapText g={g} /></div>}
       <div className="cmp-offer-meta">
         {offer.checked_at && <span dir="ltr">{formatDateTime(offer.checked_at)}</span>}
@@ -351,7 +393,7 @@ function ProductDrawer({ row, stores, onClose }) {
                 <div key={o.offer_id} className={`cmp-offer-row ${gapCls(g, o)}`}>
                   <div className="cmp-offer-row-main">
                     <div>
-                      <b>{o.store_name}</b> <span className={`cmp-match ${m.cls}`}>{m.label}{o.confidence != null ? ` · ${Math.round(o.confidence * 100)}%` : ''}</span>
+                      <b>{o.store_name}</b> <span className={`cmp-review ${REVIEW[o.review_status]?.cls || ''}`}>{REVIEW[o.review_status]?.label}</span> <span className={`cmp-match ${m.cls}`}>{m.label}{o.confidence != null ? ` · ${Math.round(o.confidence * 100)}%` : ''}</span>
                       {o.title && <div className="cmp-sub">{o.title}</div>}
                       {o.sku && <div className="cmp-sub">מק״ט אצל המתחרה: {o.sku}</div>}
                     </div>
@@ -470,5 +512,198 @@ function PriceChart({ checks, offerById, storeName, myPrice }) {
         {lines.map(([id], i) => <span key={id}><i className="sw" style={{ background: SERIES[i % SERIES.length] }} /> {storeName(offerById.get(id)?.store_id)}</span>)}
       </div>
     </div>
+  )
+}
+
+// ---------- אישור התאמות ----------
+// מקור: v_competitor_review_queue. שמירה: competitor_offers.review_status / review_notes לפי offer_id.
+// reviewed_at / reviewed_by מתמלאים במסד אוטומטית.
+
+const REJECT_REASONS = ['דגם אחר', 'מידה שונה', 'צבע / גימור שונה', 'כמות או מארז שונים', 'מוצר לא קשור']
+const safeImg = u => (typeof u === 'string' && /^https:\/\//i.test(u) ? u : null)
+
+function ReviewQueue({ onChanged }) {
+  const [items, setItems] = useState(null)
+  const [error, setError] = useState('')
+  const [status, setStatus] = useState('pending')
+  const [store, setStore] = useState('')
+  const [q, setQ] = useState('')
+  const [flash, setFlash] = useState(null) // { id, text, ok }
+  // כרטיס שהוחלט עליו נשאר על המסך עד שמחליפים סינון, כדי לראות שהשמירה הצליחה ולתקן טעות
+  const [justDecided, setJustDecided] = useState(() => new Set())
+  const pickStatus = k => { setStatus(k); setJustDecided(new Set()) }
+
+  async function load() {
+    setError('')
+    const { data, error: e } = await supabase.from('v_competitor_review_queue').select('*')
+    if (e) { setError(e.message); setItems([]); return }
+    setItems(data)
+  }
+  useEffect(() => { load() }, [])
+
+  // שומר ומוודא מול המסד שהעדכון נקלט (השורה המוחזרת מה-update)
+  async function decide(item, review_status, review_notes) {
+    const patch = { review_status }
+    if (review_status === 'rejected') patch.review_notes = review_notes
+    const { data, error: e } = await supabase.from('competitor_offers').update(patch).eq('id', item.offer_id)
+      .select('id, review_status, review_notes, reviewed_at').maybeSingle()
+    if (e || !data || data.review_status !== review_status) {
+      setFlash({ id: item.offer_id, ok: false, text: e?.message || 'העדכון לא נשמר במסד (ייתכן שאין הרשאה)' })
+      return false
+    }
+    setItems(list => list.map(x => x.offer_id === item.offer_id ? { ...x, ...data, offer_id: x.offer_id } : x))
+    setJustDecided(d => new Set(d).add(item.offer_id))
+    setFlash({ id: item.offer_id, ok: true, text: review_status === 'approved' ? 'אושר ונשמר' : 'נדחה ונשמר' })
+    onChanged?.()
+    return true
+  }
+
+  const counts = useMemo(() => (items || []).reduce((a, x) => { const k = x.review_status || 'pending'; a[k] = (a[k] || 0) + 1; a.all++; return a }, { all: 0, pending: 0, approved: 0, rejected: 0 }), [items])
+  const stores = useMemo(() => [...new Map((items || []).map(x => [x.store_id, x.store_name])).entries()].sort((a, b) => (a[1] || '').localeCompare(b[1] || '', 'he')), [items])
+
+  // מקובץ לפי מוצר שלי, כדי לראות את כל המועמדים של אותו מוצר יחד
+  const groups = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    const list = (items || []).filter(x =>
+      (status === 'all' || (x.review_status || 'pending') === status || justDecided.has(x.offer_id)) &&
+      (!store || x.store_id === store) &&
+      (!t || (x.product_name || '').toLowerCase().includes(t) || (x.product_sku || '').toLowerCase().includes(t) || (x.competitor_sku || '').toLowerCase().includes(t)))
+    const m = new Map()
+    for (const x of list) {
+      if (!m.has(x.product_id)) m.set(x.product_id, { product: x, offers: [] })
+      m.get(x.product_id).offers.push(x)
+    }
+    for (const g of m.values()) g.offers.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+    return [...m.values()].sort((a, b) => (a.product.product_name || '').localeCompare(b.product.product_name || '', 'he'))
+  }, [items, status, store, q, justDecided])
+
+  if (items === null) return <div className="loading">טוען התאמות לאישור...</div>
+
+  return (
+    <div>
+      {error && <div className="err-inline">{error}</div>}
+      <p className="cmp-intro">כל כרטיס הוא מוצר שנמצא אצל מתחרה. אשר רק כשזה בדיוק אותו מוצר: רק התאמות מאושרות נכנסות למעקב המחירים ולחישובי ההשוואה.</p>
+
+      <div className="cmp-filters">
+        <div className="cmp-seg">
+          {[['pending', 'ממתינים'], ['approved', 'מאושרים'], ['rejected', 'נדחים'], ['all', 'הכל']].map(([k, l]) => (
+            <button key={k} className={status === k ? 'on' : ''} onClick={() => pickStatus(k)}>{l} <span>{counts[k] || 0}</span></button>
+          ))}
+        </div>
+        <input className="search-input" type="search" placeholder="חיפוש מוצר או מק״ט" value={q} onChange={e => setQ(e.target.value)} />
+        <select value={store} onChange={e => setStore(e.target.value)}>
+          <option value="">כל המתחרים</option>
+          {stores.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select>
+        <button className="btn-add" onClick={load}>רענון</button>
+      </div>
+
+      {groups.length === 0 && (
+        <div className="cmp-empty">
+          {status === 'pending' && counts.all ? 'אין התאמות שממתינות לאישור. כל הכבוד!' : 'אין התאמות להצגה בסינון הזה.'}
+        </div>
+      )}
+
+      {groups.map(g => (
+        <section key={g.product.product_id} className="rv-group">
+          <header className="rv-group-head">
+            <div>
+              <b>{g.product.product_name}</b>
+              <span className="cmp-sku">{g.product.product_sku || 'ללא מק״ט'}</span>
+              <span className="cmp-sub">{[g.product.category, g.product.subcategory].filter(Boolean).join(' / ')}</span>
+            </div>
+            <div className="rv-my-price">המחיר שלי <b>{g.product.my_price > 0 ? ils(g.product.my_price) : '—'}</b></div>
+          </header>
+          <div className="rv-cards">
+            {g.offers.map(x => <ReviewCard key={x.offer_id} item={x} onDecide={decide} flash={flash?.id === x.offer_id ? flash : null} />)}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function ReviewCard({ item, onDecide, flash }) {
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const st = item.review_status || 'pending'
+  const g = gap({ price: num(item.competitor_price) }, num(item.my_price))
+  const m = matchInfo(item.match_type)
+  const myImg = safeImg(item.source_image_url), theirImg = safeImg(item.competitor_image_url)
+  const evidence = item.matching_evidence && typeof item.matching_evidence === 'object' && !Array.isArray(item.matching_evidence)
+    ? Object.entries(item.matching_evidence).filter(([, v]) => v != null && v !== '') : []
+  const notes = [item.variant_notes, item.engraving_notes, item.package_notes, item.shipping_notes].filter(Boolean)
+
+  async function run(status, notesText) {
+    setBusy(true)
+    const ok = await onDecide(item, status, notesText)
+    setBusy(false)
+    if (ok) { setRejecting(false); setReason('') }
+  }
+
+  return (
+    <article className={`rv-card rv-${st}`}>
+      <div className="rv-top">
+        <span className={`cmp-review ${REVIEW[st]?.cls || ''}`}>{REVIEW[st]?.label || st}</span>
+        <span className={`cmp-match ${m.cls}`}>{m.label}</span>
+        {item.confidence != null && <span className="rv-conf">ביטחון {Math.round(item.confidence * 100)}%</span>}
+      </div>
+
+      <div className="rv-compare">
+        <div className="rv-side">
+          <div className="rv-label">המוצר שלי</div>
+          {myImg ? <img className="rv-img" src={myImg} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <div className="rv-img rv-noimg">אין תמונה</div>}
+          <div className="rv-name">{item.product_name}</div>
+          <div className="cmp-sku">{item.product_sku || 'ללא מק״ט'}</div>
+          <div className="rv-price">{num(item.my_price) > 0 ? ils(item.my_price) : '—'}</div>
+          {item.my_product_url && <a className="rv-link" href={item.my_product_url} target="_blank" rel="noopener noreferrer">פתיחת המוצר שלי ↗</a>}
+        </div>
+        <div className="rv-side">
+          <div className="rv-label">{item.store_name}</div>
+          {theirImg ? <img className="rv-img" src={theirImg} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <div className="rv-img rv-noimg">אין תמונה</div>}
+          <div className="rv-name">{item.competitor_title || <span className="cmp-dash">ללא כותרת</span>}</div>
+          <div className="cmp-sku">{item.competitor_sku || 'ללא מק״ט'}</div>
+          <div className="rv-price">
+            {ils(item.competitor_price)}
+            {g && <span className={`rv-gap ${g.diff < 0 ? 'neg' : g.diff > 0 ? 'pos' : ''}`}> <GapText g={g} /></span>}
+          </div>
+          {item.competitor_url && <a className="rv-link" href={item.competitor_url} target="_blank" rel="noopener noreferrer">פתיחת המוצר אצל המתחרה ↗</a>}
+        </div>
+      </div>
+
+      {(evidence.length > 0 || notes.length > 0 || item.last_price_checked_at) && (
+        <div className="rv-meta">
+          {item.last_price_checked_at && <div>מחיר נבדק <span dir="ltr">{formatDateTime(item.last_price_checked_at)}</span>{item.store_domain ? ` · ${item.store_domain}` : ''}</div>}
+          {evidence.map(([k, v]) => <div key={k}><b>{k}:</b> {typeof v === 'object' ? JSON.stringify(v) : String(v)}</div>)}
+          {notes.length > 0 && <div>{notes.join(' · ')}</div>}
+        </div>
+      )}
+      {st === 'rejected' && item.review_notes && <div className="rv-reason">סיבת דחייה: {item.review_notes}</div>}
+
+      {rejecting ? (
+        <div className="rv-reject">
+          <div className="rv-label">למה זה לא אותו מוצר?</div>
+          <div className="rv-reasons">
+            {REJECT_REASONS.map(r => <button key={r} className={`cmp-chip ${reason === r ? 'on' : ''}`} onClick={() => setReason(r)}>{r}</button>)}
+          </div>
+          <input type="text" placeholder="או כתוב סיבה" value={reason} onChange={e => setReason(e.target.value)} />
+          <div className="rv-actions">
+            <button className="rv-btn rv-reject-btn" disabled={busy || !reason.trim()} onClick={() => run('rejected', reason.trim())}>{busy ? 'שומר...' : 'שמירת דחייה'}</button>
+            <button className="rv-btn rv-ghost" disabled={busy} onClick={() => { setRejecting(false); setReason('') }}>ביטול</button>
+          </div>
+        </div>
+      ) : (
+        <div className="rv-actions">
+          <button className="rv-btn rv-approve" disabled={busy || st === 'approved'} onClick={() => run('approved')}>
+            {busy ? 'שומר...' : st === 'approved' ? '✓ מאושר' : '✓ זה אותו מוצר — אשר'}
+          </button>
+          <button className="rv-btn rv-reject-btn" disabled={busy || st === 'rejected'} onClick={() => { setReason(st === 'rejected' ? item.review_notes || '' : ''); setRejecting(true) }}>
+            {st === 'rejected' ? '✕ נדחה' : '✕ לא אותו מוצר — דחה'}
+          </button>
+        </div>
+      )}
+      {flash && <div className={`rv-flash ${flash.ok ? 'ok' : 'err'}`}>{flash.text}</div>}
+    </article>
   )
 }
