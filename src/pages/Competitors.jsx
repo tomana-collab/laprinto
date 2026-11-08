@@ -551,33 +551,79 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
           </div>
         )}
 
-        <h3>היסטוריית מחירים</h3>
-        {err && <div className="err-inline">{err}</div>}
-        {checks === null ? <div className="loading">טוען היסטוריה...</div>
-          : checks.length === 0 ? <div className="cmp-empty">אין עדיין בדיקות מחיר למוצר הזה.</div>
-          : (
-            <>
-              <PriceChart checks={checks} offerById={offerById} storeName={storeName} myPrice={row.price} />
-              <div className="table-wrap cmp-hist">
-                <table className="data-table">
-                  <thead><tr><th>תאריך</th><th>מתחרה</th><th>מחיר</th><th>שינוי</th><th>מקור</th><th>זמינות</th></tr></thead>
-                  <tbody>
-                    {withChange(checks).slice().reverse().map(c => (
-                      <tr key={c.id}>
-                        <td><span dir="ltr">{formatDateTime(c.checked_at)}</span></td>
-                        <td>{storeName(offerById.get(c.offer_id)?.store_id)}</td>
-                        <td>{ils(c.price)}</td>
-                        <td>{c.change == null ? '—' : <span dir="ltr" className={c.change < 0 ? 'neg' : c.change > 0 ? 'pos' : ''}>{signed(c.change)}</span>}</td>
-                        <td>{c.collection_method === 'manual' ? <span className="cmp-offer-manual" title={c.note || undefined}>✎ עודכן ידנית</span> : <span className="cmp-sub">סריקה</span>}</td>
-                        <td>{c.availability === 'in_stock' ? 'במלאי' : c.availability === 'out_of_stock' ? 'אזל' : 'לא ידוע'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+        <h3>מחיר אחרון אצל כל מתחרה</h3>
+        <LatestPrices row={row} stores={stores} />
+
+        <details className="cmp-history">
+          <summary>
+            <span>היסטוריית מחירים</span>
+            <span className="cmp-sub">{checks === null ? 'טוען…' : `${checks.length} בדיקות`}</span>
+          </summary>
+          {err && <div className="err-inline">{err}</div>}
+          {checks === null ? <div className="loading">טוען היסטוריה...</div>
+            : checks.length === 0 ? <div className="cmp-empty">אין עדיין בדיקות מחיר למוצר הזה.</div>
+            : (
+              <>
+                <PriceChart checks={checks} offerById={offerById} storeName={storeName} myPrice={row.price} />
+                <div className="table-wrap cmp-hist">
+                  <table className="data-table">
+                    <thead><tr><th>תאריך</th><th>מתחרה</th><th>מחיר</th><th>שינוי</th><th>מקור</th><th>זמינות</th></tr></thead>
+                    <tbody>
+                      {withChange(checks).slice().reverse().map(c => (
+                        <tr key={c.id}>
+                          <td><span dir="ltr">{formatDateTime(c.checked_at)}</span></td>
+                          <td>{storeName(offerById.get(c.offer_id)?.store_id)}</td>
+                          <td>{ils(c.price)}</td>
+                          <td>{c.change == null ? '—' : <span dir="ltr" className={c.change < 0 ? 'neg' : c.change > 0 ? 'pos' : ''}>{signed(c.change)}</span>}</td>
+                          <td>{c.collection_method === 'manual' ? <span className="cmp-offer-manual" title={c.note || undefined}>✎ עודכן ידנית</span> : <span className="cmp-sub">סריקה</span>}</td>
+                          <td>{c.availability === 'in_stock' ? 'במלאי' : c.availability === 'out_of_stock' ? 'אזל' : 'לא ידוע'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+        </details>
       </aside>
+    </div>
+  )
+}
+
+// כל מתחרה פעם אחת עם המחיר האחרון שלו (בלי היסטוריה). חנות פעילה בלי הצעה / בלי מחיר = "לא ידוע".
+// כשיש לחנות כמה הצעות למוצר: עדיפות למאושרת, ואז לזו שנבדקה אחרונה.
+function LatestPrices({ row, stores }) {
+  const best = new Map()
+  const rank = o => (o.review_status === 'approved' ? 2 : 1) * 1e13 + (o.checked_at ? new Date(o.checked_at).getTime() : 0)
+  for (const o of row.offers) {
+    const cur = best.get(o.store_id)
+    if (!cur || rank(o) > rank(cur)) best.set(o.store_id, o)
+  }
+  const list = stores.map(s => ({ store: s, offer: best.get(s.id) || null }))
+  for (const [id, o] of best) if (!stores.some(s => s.id === id)) list.push({ store: { id, name: o.store_name }, offer: o })
+  list.sort((a, b) => (a.offer?.price ?? Infinity) - (b.offer?.price ?? Infinity) || (a.store.name || '').localeCompare(b.store.name || '', 'he'))
+  if (!list.length) return <div className="cmp-empty">אין מתחרים במעקב.</div>
+  return (
+    <div className="table-wrap cmp-hist cmp-latest">
+      <table className="data-table">
+        <thead><tr><th>מתחרה</th><th>מחיר אחרון</th><th>פער ממני</th><th>נבדק</th><th>התאמה</th></tr></thead>
+        <tbody>
+          {list.map(({ store, offer: o }) => {
+            const g = o && isFinal(o) ? gap(o, row.price) : null
+            return (
+              <tr key={store.id}>
+                <td><b>{store.name}</b></td>
+                <td>{o?.price != null
+                  ? <>{o.url ? <a href={o.url} target="_blank" rel="noopener noreferrer">{ils(o.price)}</a> : ils(o.price)}{o.collection_method === 'manual' && <span className="cmp-offer-manual"> ✎</span>}</>
+                  : <span className="cmp-dash">לא ידוע</span>}</td>
+                <td>{g ? <span className={g.diff < 0 ? 'neg' : g.diff > 0 ? 'pos' : ''}><GapText g={g} /></span> : '—'}</td>
+                <td>{o?.checked_at ? <span dir="ltr">{formatDateTime(o.checked_at)}</span> : '—'}</td>
+                <td>{o ? <ReviewBadge o={o} /> : <span className="cmp-sub">אין התאמה</span>}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

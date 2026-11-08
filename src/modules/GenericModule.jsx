@@ -20,6 +20,9 @@ export default function GenericModule({ config, focusId = null }) {
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
   const [selected, setSelected] = useState(() => new Set()) // מזהי שורות מסומנות לפעולה בכמות
+  // מיון בלחיצה על כותרת: ראשונה מהגדול לקטן, שנייה מהקטן לגדול, שלישית מבטלת
+  const [sort, setSort] = useState({ key: null, dir: 'desc' })
+  const toggleSort = key => setSort(s => s.key !== key ? { key, dir: 'desc' } : s.dir === 'desc' ? { key, dir: 'asc' } : { key: null, dir: 'desc' })
 
   function setFilter(key, val) { setFilterValues(v => ({ ...v, [key]: val })) }
 
@@ -170,6 +173,21 @@ export default function GenericModule({ config, focusId = null }) {
     else filtered = filtered.filter(r => r[f.key] === val)
   }
 
+  if (config.sortable && sort.key) {
+    const col = config.columns.find(c => c.key === sort.key)
+    const get = col?.sortValue || (r => r[sort.key])
+    const norm = v => (v === '' || v === undefined ? null : typeof v === 'string' && v.trim() !== '' && !isNaN(v) ? Number(v) : v)
+    const sign = sort.dir === 'desc' ? -1 : 1
+    filtered = [...filtered].sort((a, b) => {
+      const x = norm(get(a)), y = norm(get(b))
+      if (x === null && y === null) return 0
+      if (x === null) return 1 // ריקים תמיד בסוף
+      if (y === null) return -1
+      if (typeof x === 'number' && typeof y === 'number') return (x - y) * sign
+      return String(x).localeCompare(String(y), 'he') * sign
+    })
+  }
+
   // חילוק לקבוצות (למשל מוצרים לפי קטגוריה): קבוצות ממוינות לפי שם, "ללא קטגוריה" בסוף
   let groups = [{ title: null, rows: filtered }]
   if (config.groupBy) {
@@ -241,7 +259,7 @@ export default function GenericModule({ config, focusId = null }) {
           {(config.filters || []).map(f => (
             f.type === 'preset' ? (
               <select key={f.key} value={filterValues[f.key] ?? f.options[0].value} onChange={e => setFilter(f.key, e.target.value)}>
-                {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {f.options.map(o => <option key={o.value} value={o.value}>{o.label}{o.test ? ` (${viewRows.filter(o.test).length})` : ''}</option>)}
               </select>
             ) : f.type === 'relation' ? (
               <RelationField
@@ -293,7 +311,11 @@ export default function GenericModule({ config, focusId = null }) {
           <thead>
             <tr>
               {bulk && <th style={{ width: 32 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>}
-              {config.columns.map(c => <th key={c.key}>{c.label}</th>)}
+              {config.columns.map(c => (config.sortable && !c.noSort)
+                ? <th key={c.key} className="th-sort" onClick={() => toggleSort(c.key)} title="לחיצה למיון">
+                    {c.label}<span className="sort-ind">{sort.key === c.key ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ' ↕'}</span>
+                  </th>
+                : <th key={c.key}>{c.label}</th>)}
               {config.statusField && <th>סטטוס</th>}
             </tr>
           </thead>
@@ -648,7 +670,7 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
 
         <div className="fields-grid">
         {fieldsFor.map(fld => (
-          <div className={`field${fld.type === 'textarea' || fld.type === 'file' ? ' full' : ''}`} key={fld.key}>
+          <div className={`field${fld.type === 'textarea' || fld.type === 'file' || fld.link ? ' full' : ''}`} key={fld.key}>
             <label>{fld.label}</label>
             {fld.type === 'textarea' ? (
               <textarea value={form[fld.key]} onChange={e => set(fld.key, e.target.value)} />
@@ -660,6 +682,13 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
               <FileField value={form[fld.key]} onChange={v => set(fld.key, v)} />
             ) : fld.type === 'relation' ? (
               <RelationField value={form[fld.key]} onChange={v => set(fld.key, v)} relation={fld.relation} />
+            ) : fld.link ? (
+              <div className="link-input-row">
+                <input type="text" dir="ltr" value={form[fld.key]} onChange={e => set(fld.key, e.target.value)} placeholder="https://" />
+                {/^https?:\/\//i.test(String(form[fld.key] || '').trim())
+                  ? <a className="btn-view-link" href={String(form[fld.key]).trim()} target="_blank" rel="noopener noreferrer">{fld.link} ↗</a>
+                  : <span className="btn-view-link disabled" title="אין קישור תקין">{fld.link}</span>}
+              </div>
             ) : (
               <input
                 type={fld.type === 'number' ? 'number' : fld.type === 'date' ? 'date' : 'text'}

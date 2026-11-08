@@ -61,12 +61,12 @@ export const MODULES = {
       { key: 'name', label: 'שם מוצר', type: 'text', required: true },
       { key: 'sku', label: 'מק"ט — מסונכרן מהאתר', type: 'text' },
       { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
-      { key: 'supplier_url', label: 'קישור למוצר באתר הספק', type: 'text' },
+      { key: 'supplier_url', label: 'קישור למוצר באתר הספק', type: 'text', link: 'צפייה במוצר אצל הספק' },
       { key: 'cost', label: 'עלות ליחידה מהספק (₪, לפני מע"מ)', type: 'number' },
       { key: 'supplier_discount_percent', label: 'הנחת ספק (%)', type: 'number', default: 0 },
       { key: 'extra_expenses', label: 'הוצאות נלוות ליחידה (₪)', type: 'number' },
       { key: 'price', label: 'מחיר מכירה באתר (₪) — מסונכרן מהאתר', type: 'number' },
-      { key: 'product_url', label: 'קישור למוצר באתר', type: 'text' },
+      { key: 'product_url', label: 'קישור למוצר באתר', type: 'text', link: 'צפייה במוצר באתר' },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
     // cost_with_vat, clearing_fee, profit ו-margin_percent מחושבים אוטומטית ב-DB (generated columns)
@@ -78,7 +78,17 @@ export const MODULES = {
     searchLabel: 'חיפוש לפי שם או מק"ט',
     filters: [
       { key: 'category', label: 'כל הקטגוריות', type: 'values' },
+      // מה נשאר להשלים במוצרים (המספר בסוגריים מתעדכן לפי הנתונים)
+      { key: 'missing', type: 'preset', options: [
+        { value: 'all', label: 'כל המוצרים' },
+        { value: 'no_sku', label: 'ללא מק"ט', test: r => !String(r.sku || '').trim() },
+        { value: 'no_price', label: 'ללא מחיר', test: r => !(Number(r.price) > 0) },
+        { value: 'no_supplier', label: 'ללא ספק', test: r => !r.supplier_id },
+        { value: 'no_cost', label: 'ללא עלות', test: r => !(Number(r.cost) > 0) },
+      ] },
     ],
+    // לחיצה על כותרת עמודה ממיינת לפיה
+    sortable: true,
     // כפתור "סנכרן מהאתר" — קורא ל-Edge Function sync-wc-products
     syncFunction: 'sync-wc-products',
     syncBody: { target: 'products' },
@@ -87,9 +97,10 @@ export const MODULES = {
       { key: 'name', label: 'שם מוצר' },
       { key: 'sku', label: 'מק"ט', render: row => row.sku || '—' },
       { key: 'subcategory', label: 'תת-קטגוריה', render: row => row.subcategory || '—' },
-      { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
+      { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—', sortValue: row => row.suppliers?.name || null },
       {
         key: 'supplier_url',
+        noSort: true,
         label: 'אתר ספק',
         render: row => row.supplier_url
           ? <a href={row.supplier_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>פתח</a>
@@ -97,6 +108,7 @@ export const MODULES = {
       },
       {
         key: 'product_url',
+        noSort: true,
         label: 'באתר',
         render: row => row.product_url
           ? <a href={row.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>פתח</a>

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { getStoredTheme, setTheme } from '../lib/theme'
+import GenericModule from '../modules/GenericModule'
+import { MODULES } from '../modules/moduleConfigs'
 
 export default function Settings() {
   const { user } = useAuth()
@@ -98,6 +100,12 @@ export default function Settings() {
           <button type="button" className={theme === 'dark' ? 'active' : ''} onClick={() => pickTheme('dark')}>🌙 כהה</button>
         </div>
       </div>
+
+      {profile?.role === 'אדמין' && (
+        <div className="settings-users">
+          <GenericModule config={MODULES.team_members} />
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { MODULE_ORDER, MODULES } from '../modules/moduleConfigs'
+import { MODULES } from '../modules/moduleConfigs'
 import { useAuth } from '../contexts/AuthContext'
 
 const DEV_GROUP = ['ideas', 'opportunities', 'trends']
@@ -17,18 +17,36 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
 
   const [devOpen, setDevOpen] = useState(false)
   const devActive = DEV_GROUP.includes(active)
-  const visibleModules = MODULE_ORDER.filter(key => (!MODULES[key].adminOnly || role === 'אדמין') && !DEV_GROUP.includes(key))
-  const navButton = key => (
-    <button key={key} className={active === key ? 'active' : ''} onClick={() => { onSelect(key); onClose() }}>
-      <span className="nav-icon">{MODULES[key].icon}</span> {MODULES[key].label}
-    </button>
-  )
+  const isAdmin = role === 'אדמין'
+
+  // סדר התפריט. מארזים וקליטת תעודות נשארים ליד המוצרים והמלאי שהם שייכים אליהם.
+  // משתמשים — בתוך עמוד ההגדרות (לאדמין).
+  const PAGES = {
+    dashboard: { icon: '📊', label: 'דאשבורד', admin: true },
+    competitors: { icon: '🔎', label: 'השוואת מחירים' },
+    bundles: { icon: '🎁', label: 'מארזים' },
+    inventory: { icon: '📦', label: 'מלאי' },
+    receipts: { icon: '📥', label: 'קליטת תעודות' },
+  }
+  const ORDER = ['dashboard', 'tasks', 'orders', 'competitors', 'products', 'bundles', 'inventory', 'receipts', 'expenses', 'suppliers', 'dev']
+
+  const item = key => {
+    if (key === 'dev') return devGroup
+    const page = PAGES[key] || MODULES[key]
+    if (!page) return null
+    if ((page.admin || page.adminOnly) && !isAdmin) return null
+    return (
+      <button key={key} className={active === key ? 'active' : ''} onClick={() => { onSelect(key); onClose() }}>
+        <span className="nav-icon">{page.icon}</span> {page.label}
+      </button>
+    )
+  }
   const devGroup = (
     <Fragment key="dev-group">
       <button className={`nav-group ${devOpen || devActive ? 'open' : ''}`} onClick={() => setDevOpen(o => !o)}>
         <span className="nav-icon">🚀</span> פיתוח העסק <span className="chev">◀</span>
       </button>
-      {(devOpen || devActive) && <div className="nav-sub">{DEV_GROUP.map(navButton)}</div>}
+      {(devOpen || devActive) && <div className="nav-sub">{DEV_GROUP.map(item)}</div>}
     </Fragment>
   )
 
@@ -44,55 +62,7 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
           </div>
         </div>
         <nav>
-          {role === 'אדמין' && (
-            <button
-              className={active === 'dashboard' ? 'active' : ''}
-              onClick={() => { onSelect('dashboard'); onClose() }}
-            >
-              <span className="nav-icon">📊</span> דאשבורד
-            </button>
-          )}
-          {visibleModules.map(key => (
-            <Fragment key={key}>
-              {key === 'products' && devGroup}
-              <button
-                className={active === key ? 'active' : ''}
-                onClick={() => { onSelect(key); onClose() }}
-              >
-                <span className="nav-icon">{MODULES[key].icon}</span> {MODULES[key].label}
-              </button>
-              {key === 'products' && (
-                <button
-                  className={active === 'bundles' ? 'active' : ''}
-                  onClick={() => { onSelect('bundles'); onClose() }}
-                >
-                  <span className="nav-icon">🎁</span> מארזים
-                </button>
-              )}
-              {key === 'products' && (
-                <>
-                  <button
-                    className={active === 'inventory' ? 'active' : ''}
-                    onClick={() => { onSelect('inventory'); onClose() }}
-                  >
-                    <span className="nav-icon">📦</span> מלאי
-                  </button>
-                  <button
-                    className={active === 'receipts' ? 'active' : ''}
-                    onClick={() => { onSelect('receipts'); onClose() }}
-                  >
-                    <span className="nav-icon">📥</span> קליטת תעודות
-                  </button>
-                  <button
-                    className={active === 'competitors' ? 'active' : ''}
-                    onClick={() => { onSelect('competitors'); onClose() }}
-                  >
-                    <span className="nav-icon">🔎</span> השוואת מתחרים
-                  </button>
-                </>
-              )}
-            </Fragment>
-          ))}
+          {ORDER.map(item)}
         </nav>
         <div className="sidebar-footer">
           <button
