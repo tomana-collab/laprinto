@@ -1052,6 +1052,26 @@ function StoreEditModal({ store, stores, onCancel, onSaved }) {
 // על קישורים מאושרים (v_competitor_price_targets) — הממשק לא נוגע ב-competitor_offers בזמן סנכרון.
 
 const SCAN_BATCH = 4
+
+// קריאה ל-Edge Function עם הטוקן של המשתמש המחובר. לא דרך supabase.functions.invoke, כי הוא שולח
+// כותרת x-client-info שה-CORS של competitor-price-scan לא מתיר, והדפדפן חוסם את הבקשה.
+async function invokeScan(body) {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { error: 'אין משתמש מחובר' }
+  try {
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/competitor-price-scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json().catch(() => null)
+    if (!res.ok) return { error: json?.error || json?.message || `HTTP ${res.status}` }
+    if (!json || !Array.isArray(json.results)) return { error: 'תשובה לא צפויה מפונקציית הסריקה' }
+    return { data: json }
+  } catch (e) {
+    return { error: e.message || 'הבקשה לפונקציית הסריקה נכשלה' }
+  }
+}
 const RESULT_LABEL = { success: 'הצליח', failed: 'נכשל', error: 'שגיאה', blocked: 'נחסם', no_price: 'לא זוהה מחיר', not_found: 'העמוד לא נמצא', timeout: 'פג זמן' }
 
 function ScanPanel({ rows, onDone }) {
@@ -1081,13 +1101,8 @@ function ScanPanel({ rows, onDone }) {
     let after = null
     for (let i = 0; i < 200; i++) {
       if (cancelRef.current) { st.error = 'הסריקה הופסקה ידנית'; break }
-      const { data, error } = await supabase.functions.invoke('competitor-price-scan', { body: after ? { limit: SCAN_BATCH, after } : { limit: SCAN_BATCH } })
-      if (error) {
-        let msg = error.message
-        try { const b = await error.context?.json?.(); if (b?.error || b?.message) msg = b.error || b.message } catch {}
-        st.error = `הסריקה נעצרה: ${msg}`
-        break
-      }
+      const { data, error } = await invokeScan(after ? { limit: SCAN_BATCH, after } : { limit: SCAN_BATCH })
+      if (error) { st.error = `הסריקה נעצרה: ${error}`; break }
       const results = Array.isArray(data?.results) ? data.results : []
       for (const r of results) {
         st.scanned++
