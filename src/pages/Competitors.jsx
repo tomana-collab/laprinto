@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
 import { formatDateTime } from '../lib/format'
@@ -96,8 +96,11 @@ export default function Competitors() {
 }
 
 function ComparisonView({ onChanged }) {
-  const [stores, setStores] = useState(null)
+  const [stores, setStores] = useState(null)       // חנויות פעילות (עמודות בטבלה)
+  const [allStores, setAllStores] = useState([])   // כולל לא פעילות, לניהול
   const [addingStore, setAddingStore] = useState(false)
+  const [editingStore, setEditingStore] = useState(null)
+  const [managingStores, setManagingStores] = useState(false)
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
   const [loadedAt, setLoadedAt] = useState(null)
@@ -116,6 +119,7 @@ function ComparisonView({ onChanged }) {
     const err = [m, s, p].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); setStores([]); return }
     setStores(s.data.filter(x => x.enabled !== false))
+    setAllStores(s.data)
 
     // מוצר ראשי שפוצל לוריאציות לא מוצג (כמו בעמוד המלאי) — הוריאציות מוצגות במקומו,
     // אלא אם קושרה אליו התאמת מתחרה
@@ -144,6 +148,7 @@ function ComparisonView({ onChanged }) {
         match_type: r.match_type, confidence: num(r.match_confidence), availability: r.availability, checked_at: r.checked_at,
         note: r.observation_note, variant_notes: r.variant_notes, engraving_notes: r.engraving_notes,
         package_notes: r.package_notes, shipping_notes: r.shipping_notes,
+        collection_method: r.collection_method, price_scan_enabled: r.price_scan_enabled, entry_method: r.entry_method,
       })
     }
     const list = [...byProduct.values()].filter(r => !parents.has(r.wc_product_id) || r.offers.length)
@@ -164,6 +169,17 @@ function ComparisonView({ onChanged }) {
       return withLowest({ ...r, offers: rest.filter(o => o.review_status !== 'rejected'), rejected: rest.filter(o => o.review_status === 'rejected') })
     }))
     onChanged?.()
+  }
+  // חנות נערכה: מעדכנים רשימות ושם החנות בהצעות, בלי טעינה מחדש
+  function storeSaved(st) {
+    setAllStores(list => list.some(x => x.id === st.id) ? list.map(x => x.id === st.id ? st : x) : [...list, st])
+    setStores(list => {
+      const others = (list || []).filter(x => x.id !== st.id)
+      return (st.enabled !== false ? [...others, st] : others).sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+    })
+    setRows(list => list.map(r => ({ ...r,
+      offers: r.offers.map(o => o.store_id === st.id ? { ...o, store_name: st.name } : o),
+      rejected: r.rejected.map(o => o.store_id === st.id ? { ...o, store_name: st.name } : o) })))
   }
   function addOffer(productId, offer) {
     setRows(list => list.map(r => r.id !== productId ? r : withLowest({ ...r, offers: [...r.offers, offer] })))
@@ -222,11 +238,14 @@ function ComparisonView({ onChanged }) {
       <div className="cmp-toolbar">
         <div className="cmp-head-meta">
           {loadedAt && <span>עודכן בתצוגה {loadedAt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>}
+          <button className="btn-add btn-outline" onClick={() => setManagingStores(true)}>ניהול מתחרים</button>
           <button className="btn-add btn-outline" onClick={() => setAddingStore(true)}>+ הוספת מתחרה</button>
-          <button className="btn-add" onClick={load}>רענון</button>
+          <button className="btn-add btn-outline" onClick={load}>רענון</button>
         </div>
       </div>
       {error && <div className="err-inline">{error}</div>}
+
+      <ScanPanel rows={rows} onDone={load} />
 
       <div className="cmp-kpis">
         <Kpi label="מוצרים בקטלוג" value={rows.length} />
@@ -283,7 +302,11 @@ function ComparisonView({ onChanged }) {
               <th className="n">רווח משוער</th>
               <th className="n">רווחיות</th>
               <th className="cmp-lowest-h">הזול ביותר אצל מתחרה</th>
-              {shownStores.map(s => <th key={s.id} className="cmp-store-h" title={s.domain}>{s.name}</th>)}
+              {shownStores.map(s => (
+                <th key={s.id} className="cmp-store-h" title={s.domain}>
+                  {s.name} <button className="cmp-edit-ico" title="עריכת חנות" aria-label={`עריכת ${s.name}`} onClick={() => setEditingStore(s)}>✎</button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -335,8 +358,11 @@ function ComparisonView({ onChanged }) {
       {open && <ProductDrawer row={open} stores={stores || []} onClose={() => setOpenId(null)}
         onPatch={(offerId, patch) => patchOffer(open.id, offerId, patch)} onAdd={offer => addOffer(open.id, offer)}
         onAddStore={() => setAddingStore(true)} />}
-      {addingStore && <AddStoreModal stores={stores || []} onCancel={() => setAddingStore(false)}
-        onSaved={st => { setStores(list => [...list, st]); setAddingStore(false) }} />}
+      {addingStore && <AddStoreModal stores={allStores} onCancel={() => setAddingStore(false)}
+        onSaved={st => { storeSaved(st); setAddingStore(false) }} />}
+      {managingStores && <StoresModal stores={allStores} onClose={() => setManagingStores(false)} onEdit={st => setEditingStore(st)} />}
+      {editingStore && <StoreEditModal store={editingStore} stores={allStores} onCancel={() => setEditingStore(null)}
+        onSaved={st => { storeSaved(st); setEditingStore(null) }} />}
     </div>
   )
 }
@@ -395,6 +421,7 @@ function OfferCell({ offer, myPrice, showStore }) {
       {showStore && <div className="cmp-offer-store">{offer.store_name}</div>}
       {!isFinal(offer) && <div className="cmp-offer-review">ממתין לאישור התאמה</div>}
       {isAutoApproved(offer) && <div className="cmp-offer-auto">✓ אוטומטי לפי מק״ט</div>}
+      {offer.collection_method === 'manual' && <div className="cmp-offer-manual">✎ עודכן ידנית</div>}
       {g && <div className="cmp-offer-gap"><GapText g={g} /></div>}
       <div className="cmp-offer-meta">
         {offer.checked_at && <span dir="ltr">{formatDateTime(offer.checked_at)}</span>}
@@ -409,15 +436,19 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
   const { openRecord } = useNav()
   const [checks, setChecks] = useState(null)
   const [err, setErr] = useState('')
+  const [mode, setMode] = useState({}) // offer_id → 'edit' | 'price'
+  const [notice, setNotice] = useState({}) // offer_id → { ok, text }
+  const setOfferMode = (id, m) => setMode(x => ({ ...x, [id]: m }))
   const storeName = id => stores.find(s => s.id === id)?.name || row.offers.find(o => o.store_id === id)?.store_name || '—'
 
-  useEffect(() => {
+  function loadChecks() {
     const ids = [...row.offers, ...row.rejected].map(o => o.offer_id)
     if (!ids.length) { setChecks([]); return }
     supabase.from('competitor_price_checks').select('id, offer_id, price, shipping_price, availability, checked_at, collection_method, note')
       .in('offer_id', ids).order('checked_at', { ascending: true })
       .then(({ data, error }) => { if (error) { setErr(error.message); setChecks([]) } else setChecks(data) })
-  }, [row.id, row.offers.length + row.rejected.length])
+  }
+  useEffect(loadChecks, [row.id, row.offers.length + row.rejected.length])
 
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
@@ -496,7 +527,23 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
                   </div>
                   {notes.length > 0 && <div className="cmp-offer-notes">{notes.join(' · ')}</div>}
                   {o.review_status === 'rejected' && o.review_notes && <div className="rv-reason">סיבת דחייה: {o.review_notes}</div>}
-                  {o.review_status === 'pending' && <DecisionControls offer={o} onDone={patch => onPatch(o.offer_id, patch)} />}
+                  {o.price_scan_enabled === false && <div className="cmp-offer-notes">⏸ מעקב מחירים מושבת להצעה הזו</div>}
+                  {notice[o.offer_id] && <div className={`rv-flash ${notice[o.offer_id].ok ? 'ok' : 'err'}`}>{notice[o.offer_id].text}</div>}
+                  {mode[o.offer_id] === 'edit' ? (
+                    <OfferEditForm offer={o} onCancel={() => setOfferMode(o.offer_id, null)}
+                      onSaved={(patch, msg) => { onPatch(o.offer_id, patch); setOfferMode(o.offer_id, null); setNotice(x => ({ ...x, [o.offer_id]: msg })) }} />
+                  ) : mode[o.offer_id] === 'price' ? (
+                    <PriceForm offer={o} onCancel={() => setOfferMode(o.offer_id, null)}
+                      onSaved={(patch, msg) => { onPatch(o.offer_id, patch); setOfferMode(o.offer_id, null); setNotice(x => ({ ...x, [o.offer_id]: msg })); loadChecks() }} />
+                  ) : (
+                    <>
+                      {o.review_status === 'pending' && <DecisionControls offer={o} onDone={patch => onPatch(o.offer_id, patch)} />}
+                      <div className="cmp-offer-tools">
+                        <button className="cmp-tool" onClick={() => { setNotice(x => ({ ...x, [o.offer_id]: null })); setOfferMode(o.offer_id, 'edit') }}>✎ עריכה</button>
+                        {o.review_status !== 'rejected' && <button className="cmp-tool" onClick={() => { setNotice(x => ({ ...x, [o.offer_id]: null })); setOfferMode(o.offer_id, 'price') }}>₪ עדכן מחיר</button>}
+                      </div>
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -512,7 +559,7 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
               <PriceChart checks={checks} offerById={offerById} storeName={storeName} myPrice={row.price} />
               <div className="table-wrap cmp-hist">
                 <table className="data-table">
-                  <thead><tr><th>תאריך</th><th>מתחרה</th><th>מחיר</th><th>שינוי</th><th>זמינות</th></tr></thead>
+                  <thead><tr><th>תאריך</th><th>מתחרה</th><th>מחיר</th><th>שינוי</th><th>מקור</th><th>זמינות</th></tr></thead>
                   <tbody>
                     {withChange(checks).slice().reverse().map(c => (
                       <tr key={c.id}>
@@ -520,6 +567,7 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
                         <td>{storeName(offerById.get(c.offer_id)?.store_id)}</td>
                         <td>{ils(c.price)}</td>
                         <td>{c.change == null ? '—' : <span dir="ltr" className={c.change < 0 ? 'neg' : c.change > 0 ? 'pos' : ''}>{signed(c.change)}</span>}</td>
+                        <td>{c.collection_method === 'manual' ? <span className="cmp-offer-manual" title={c.note || undefined}>✎ עודכן ידנית</span> : <span className="cmp-sub">סריקה</span>}</td>
                         <td>{c.availability === 'in_stock' ? 'במלאי' : c.availability === 'out_of_stock' ? 'אזל' : 'לא ידוע'}</td>
                       </tr>
                     ))}
@@ -787,6 +835,343 @@ function AddStoreModal({ stores, onCancel, onSaved }) {
           <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'שומר...' : 'הוספה'}</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---------- עריכת הצעה + עדכון מחיר ידני ----------
+
+const OFFER_EDIT_COLS = `${DECISION_COLS}, product_url, competitor_sku, competitor_title, variant_notes, engraving_notes, package_notes, shipping_notes, price_scan_enabled, manual_locked`
+
+function OfferEditForm({ offer, onCancel, onSaved }) {
+  const init = {
+    url: offer.url || '', sku: offer.sku || '', title: offer.title || '',
+    variant_notes: offer.variant_notes || '', engraving_notes: offer.engraving_notes || '',
+    package_notes: offer.package_notes || '', shipping_notes: offer.shipping_notes || '',
+    price_scan_enabled: offer.price_scan_enabled !== false,
+  }
+  const [v, setV] = useState(init)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k, x) => setV(s => ({ ...s, [k]: x }))
+  const urlChanged = v.url.trim() !== init.url.trim(), skuChanged = v.sku.trim() !== init.sku.trim()
+
+  async function save() {
+    setErr('')
+    const url = v.url.trim()
+    if (!/^https?:\/\/[^\s]+\.[^\s]+/i.test(url)) return setErr('הקישור צריך להיות כתובת מלאה שמתחילה ב-https://')
+    // שולחים רק שדות ששונו — עדכון של הרשומה הקיימת לפי id, לא יצירת רשומה חדשה
+    const map = { product_url: ['url', url], competitor_sku: ['sku', v.sku.trim() || null], competitor_title: ['title', v.title.trim() || null],
+      variant_notes: ['variant_notes', v.variant_notes.trim() || null], engraving_notes: ['engraving_notes', v.engraving_notes.trim() || null],
+      package_notes: ['package_notes', v.package_notes.trim() || null], shipping_notes: ['shipping_notes', v.shipping_notes.trim() || null],
+      price_scan_enabled: ['price_scan_enabled', v.price_scan_enabled] }
+    const patch = {}
+    for (const [col, [k, val]] of Object.entries(map)) {
+      const before = typeof init[k] === 'string' ? (init[k].trim() || null) : init[k]
+      if (val !== before) patch[col] = val
+    }
+    if (!Object.keys(patch).length) return onCancel()
+    setBusy(true)
+    const { data, error } = await supabase.from('competitor_offers').update(patch).eq('id', offer.offer_id).select(OFFER_EDIT_COLS).maybeSingle()
+    setBusy(false)
+    if (error || !data) return setErr(error?.message || 'העדכון לא נשמר במסד (ייתכן שאין הרשאה)')
+    const back = {
+      url: data.product_url, sku: data.competitor_sku, title: data.competitor_title,
+      variant_notes: data.variant_notes, engraving_notes: data.engraving_notes, package_notes: data.package_notes, shipping_notes: data.shipping_notes,
+      price_scan_enabled: data.price_scan_enabled, review_status: data.review_status, review_notes: data.review_notes,
+      approval_method: data.approval_method, sku_verification_source: data.sku_verification_source, sku_verified_at: data.sku_verified_at,
+    }
+    const reverify = offer.review_status === 'approved' && data.review_status !== 'approved'
+    onSaved(back, { ok: true, text: reverify
+      ? 'נשמר. הקישור או המק״ט השתנו, ולכן ההתאמה חזרה לאימות — אשר אותה שוב כדי שתיכנס למעקב המחירים.'
+      : 'השינויים נשמרו' })
+  }
+
+  return (
+    <div className="cmp-addform cmp-inline-form" onClick={e => e.stopPropagation()}>
+      <div className="fields-grid">
+        <div className="field full">
+          <label>קישור ישיר למוצר</label>
+          <input type="url" dir="ltr" value={v.url} onChange={e => set('url', e.target.value)} />
+        </div>
+        <div className="field"><label>מק״ט אצל המתחרה</label><input dir="ltr" value={v.sku} onChange={e => set('sku', e.target.value)} /></div>
+        <div className="field"><label>כותרת המוצר</label><input value={v.title} onChange={e => set('title', e.target.value)} /></div>
+        <div className="field"><label>וריאציה</label><input value={v.variant_notes} onChange={e => set('variant_notes', e.target.value)} /></div>
+        <div className="field"><label>חריטה</label><input value={v.engraving_notes} onChange={e => set('engraving_notes', e.target.value)} /></div>
+        <div className="field"><label>מארז</label><input value={v.package_notes} onChange={e => set('package_notes', e.target.value)} /></div>
+        <div className="field"><label>משלוח</label><input value={v.shipping_notes} onChange={e => set('shipping_notes', e.target.value)} /></div>
+      </div>
+      <label className="cmp-check"><input type="checkbox" checked={v.price_scan_enabled} onChange={e => set('price_scan_enabled', e.target.checked)} /> מעקב מחירים פעיל להצעה הזו</label>
+      {(urlChanged || skuChanged) && offer.review_status === 'approved' && (
+        <div className="cmp-warn">שינוי קישור או מק״ט מחזיר את ההתאמה לאימות. אחרי השמירה תצטרך לאשר אותה שוב.</div>
+      )}
+      {err && <div className="err-inline">{err}</div>}
+      <div className="rv-actions">
+        <button className="rv-btn rv-approve" disabled={busy} onClick={save}>{busy ? 'שומר...' : 'שמירת שינויים'}</button>
+        <button className="rv-btn rv-ghost" disabled={busy} onClick={onCancel}>ביטול</button>
+      </div>
+    </div>
+  )
+}
+
+function PriceForm({ offer, onCancel, onSaved }) {
+  const [price, setPrice] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  async function save() {
+    setErr('')
+    const p = Number(String(price).replace(/[^\d.]/g, ''))
+    if (!(p > 0)) return setErr('צריך מחיר גדול מאפס')
+    setBusy(true)
+    // תצפית חדשה בלבד — מחירים קודמים לא נמחקים ולא נדרסים
+    const { data, error } = await supabase.from('competitor_price_checks').insert({
+      offer_id: offer.offer_id, price: p, collection_method: 'manual', source_url: offer.url || null, note: note.trim() || null,
+    }).select('id, price, checked_at, collection_method').single()
+    setBusy(false)
+    if (error || !data) return setErr(error?.message || 'המחיר לא נשמר במסד')
+    onSaved({ price: Number(data.price), checked_at: data.checked_at, collection_method: 'manual' }, { ok: true, text: `המחיר עודכן ידנית ל-${ils(data.price)}` })
+  }
+  return (
+    <div className="cmp-addform cmp-inline-form" onClick={e => e.stopPropagation()}>
+      <div className="fields-grid">
+        <div className="field"><label>מחיר חדש (₪, כולל מע״מ)</label>
+          <input type="number" inputMode="decimal" min="0" step="0.01" dir="ltr" value={price} onChange={e => setPrice(e.target.value)} autoFocus placeholder={offer.price != null ? String(offer.price) : ''} /></div>
+        <div className="field"><label>הערה (לא חובה)</label><input value={note} onChange={e => setNote(e.target.value)} placeholder="למשל: מבצע סוף שבוע" /></div>
+      </div>
+      <p className="cmp-note">נשמרת תצפית מחיר חדשה עם הקישור הנוכחי. ההיסטוריה הקודמת נשארת.</p>
+      {err && <div className="err-inline">{err}</div>}
+      <div className="rv-actions">
+        <button className="rv-btn rv-approve" disabled={busy} onClick={save}>{busy ? 'שומר...' : 'שמירת מחיר'}</button>
+        <button className="rv-btn rv-ghost" disabled={busy} onClick={onCancel}>ביטול</button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- ניהול ועריכת חנויות ----------
+
+function StoresModal({ stores, onClose, onEdit }) {
+  const [counts, setCounts] = useState(null)
+  useEffect(() => {
+    supabase.from('competitor_offers').select('store_id').then(({ data }) =>
+      setCounts((data || []).reduce((a, x) => { a[x.store_id] = (a[x.store_id] || 0) + 1; return a }, {})))
+  }, [])
+  const sorted = [...stores].sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal" style={{ maxWidth: 620 }}>
+        <h2>ניהול מתחרים</h2>
+        <div className="table-wrap cmp-hist">
+          <table className="data-table">
+            <thead><tr><th>עדיפות</th><th>חנות</th><th>אתר</th><th>הצעות</th><th>סטטוס</th><th></th></tr></thead>
+            <tbody>
+              {sorted.map(s => (
+                <tr key={s.id} onClick={() => onEdit(s)}>
+                  <td>{s.priority ?? '—'}</td>
+                  <td><b>{s.name}</b></td>
+                  <td dir="ltr" className="cmp-sub">{s.domain}</td>
+                  <td>{counts ? counts[s.id] || 0 : '…'}</td>
+                  <td>{s.enabled === false ? <span className="cmp-review r-rejected">לא פעיל</span> : <span className="cmp-review r-approved">פעיל</span>}</td>
+                  <td><button className="cmp-tool">✎ עריכה</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="modal-actions"><button className="btn btn-ghost" onClick={onClose}>סגירה</button></div>
+      </div>
+    </div>
+  )
+}
+
+function StoreEditModal({ store, stores, onCancel, onSaved }) {
+  const [v, setV] = useState({ name: store.name || '', priority: store.priority ?? '', enabled: store.enabled !== false, domain: store.domain || '' })
+  const [offerCount, setOfferCount] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k, x) => setV(s => ({ ...s, [k]: x }))
+  useEffect(() => {
+    supabase.from('competitor_offers').select('id', { count: 'exact', head: true }).eq('store_id', store.id)
+      .then(({ count, error }) => setOfferCount(error ? -1 : count ?? 0))
+  }, [store.id])
+  // דומיין אפשר לשנות רק לחנות שאין לה מוצרים משויכים
+  const domainLocked = offerCount !== 0
+
+  async function save() {
+    setErr('')
+    if (!v.name.trim()) return setErr('צריך שם לחנות')
+    const pr = v.priority === '' ? null : Number(v.priority)
+    if (pr !== null && !Number.isFinite(pr)) return setErr('עדיפות צריכה להיות מספר')
+    const patch = {}
+    if (v.name.trim() !== store.name) patch.name = v.name.trim()
+    if (pr !== (store.priority ?? null)) patch.priority = pr
+    if (v.enabled !== (store.enabled !== false)) patch.enabled = v.enabled
+    if (!domainLocked) {
+      const d = cleanDomain(v.domain)
+      if (!d || !d.includes('.')) return setErr('צריך דומיין תקין')
+      if (d !== store.domain) {
+        if (stores.some(s => s.id !== store.id && cleanDomain(s.domain) === d)) return setErr('יש כבר חנות עם הדומיין הזה')
+        patch.domain = d
+      }
+    }
+    if (!Object.keys(patch).length) return onCancel()
+    setBusy(true)
+    const { data, error } = await supabase.from('competitor_stores').update(patch).eq('id', store.id).select('id, name, domain, enabled, priority').maybeSingle()
+    setBusy(false)
+    if (error || !data) return setErr(error?.message || 'העדכון לא נשמר במסד (ייתכן שאין הרשאה)')
+    onSaved(data)
+  }
+
+  return (
+    <div className="overlay" style={{ zIndex: 55 }} onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div className="modal" style={{ maxWidth: 460 }}>
+        <h2>עריכת חנות מתחרה</h2>
+        <div className="field"><label>שם החנות</label><input value={v.name} onChange={e => set('name', e.target.value)} /></div>
+        <div className="field"><label>עדיפות (מספר נמוך = עמודה ראשונה)</label><input type="number" dir="ltr" value={v.priority} onChange={e => set('priority', e.target.value)} /></div>
+        <div className="field">
+          <label>אתר (דומיין)</label>
+          <input dir="ltr" value={v.domain} disabled={domainLocked} onChange={e => set('domain', e.target.value)} />
+          {offerCount === null ? <div className="cmp-note">בודק מוצרים משויכים…</div>
+            : domainLocked ? <div className="cmp-note">אי אפשר לשנות דומיין לחנות שכבר משויכים אליה מוצרים ({offerCount > 0 ? offerCount : 'לא ידוע כמה'}). אם האתר עבר כתובת, צריך להוסיף חנות חדשה.</div>
+            : null}
+        </div>
+        <label className="cmp-check"><input type="checkbox" checked={v.enabled} onChange={e => set('enabled', e.target.checked)} /> חנות פעילה (מוצגת כעמודה בטבלה)</label>
+        {err && <div className="err-inline">{err}</div>}
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>ביטול</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'שומר...' : 'שמירה'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------- סנכרון מחירים ידני ----------
+// מפעיל את competitor-price-scan הקיימת בקבוצות קטנות לפי next_after. הסריקה עצמה רק מוסיפה תצפיות מחיר
+// על קישורים מאושרים (v_competitor_price_targets) — הממשק לא נוגע ב-competitor_offers בזמן סנכרון.
+
+const SCAN_BATCH = 4
+const RESULT_LABEL = { success: 'הצליח', failed: 'נכשל', error: 'שגיאה', blocked: 'נחסם', no_price: 'לא זוהה מחיר', not_found: 'העמוד לא נמצא', timeout: 'פג זמן' }
+
+function ScanPanel({ rows, onDone }) {
+  const [total, setTotal] = useState(null)
+  const [lastAt, setLastAt] = useState(null)
+  const [run, setRun] = useState(null) // { running, scanned, success, failed, updated, error, startedAt, finishedAt }
+  const [failures, setFailures] = useState([])
+  const [cancel, setCancel] = useState(false)
+  const cancelRef = useRef(false)
+
+  async function loadMeta() {
+    const [t, a] = await Promise.all([
+      supabase.from('v_competitor_price_targets').select('offer_id', { count: 'exact', head: true }),
+      supabase.from('competitor_scan_attempts').select('attempted_at').order('attempted_at', { ascending: false }).limit(1),
+    ])
+    if (!t.error) setTotal(t.count ?? 0)
+    if (!a.error) setLastAt(a.data?.[0]?.attempted_at || null)
+  }
+  useEffect(() => { loadMeta() }, [])
+
+  async function start() {
+    cancelRef.current = false; setCancel(false); setFailures([])
+    const prev = new Map((rows || []).flatMap(r => [...r.offers, ...r.rejected]).map(o => [o.offer_id, o.price]))
+    const startedAt = new Date().toISOString()
+    const st = { running: true, scanned: 0, success: 0, failed: 0, updated: 0, error: '', startedAt, finishedAt: null }
+    setRun({ ...st })
+    let after = null
+    for (let i = 0; i < 200; i++) {
+      if (cancelRef.current) { st.error = 'הסריקה הופסקה ידנית'; break }
+      const { data, error } = await supabase.functions.invoke('competitor-price-scan', { body: after ? { limit: SCAN_BATCH, after } : { limit: SCAN_BATCH } })
+      if (error) {
+        let msg = error.message
+        try { const b = await error.context?.json?.(); if (b?.error || b?.message) msg = b.error || b.message } catch {}
+        st.error = `הסריקה נעצרה: ${msg}`
+        break
+      }
+      const results = Array.isArray(data?.results) ? data.results : []
+      for (const r of results) {
+        st.scanned++
+        if (r.result === 'success' && r.price != null) {
+          st.success++
+          const was = prev.get(r.offer_id)
+          if (was == null || Number(was) !== Number(r.price)) st.updated++
+        } else st.failed++
+      }
+      setRun({ ...st })
+      if (!data?.scanned || !data?.next_after || data.next_after === after) break
+      after = data.next_after
+    }
+    st.running = false; st.finishedAt = new Date().toISOString()
+    setRun({ ...st })
+    // שגיאות אמיתיות מתוך competitor_scan_attempts של הריצה הזו
+    const [att, tg] = await Promise.all([
+      supabase.from('competitor_scan_attempts').select('id, offer_id, attempted_at, result, http_status, details, parsed_price')
+        .gte('attempted_at', startedAt).neq('result', 'success').order('attempted_at', { ascending: false }),
+      supabase.from('v_competitor_price_targets').select('offer_id, store_name, my_sku, competitor_url'),
+    ])
+    const names = new Map((tg.data || []).map(x => [x.offer_id, x]))
+    if (!att.error) setFailures(att.data.map(x => ({ ...x, ...names.get(x.offer_id) })))
+    loadMeta()
+    onDone?.() // רענון נתוני הטבלה בלי טעינת העמוד
+  }
+
+  const r = run
+  const tone = !r ? '' : r.running ? 'is-running' : r.error || r.failed > 0 || r.success === 0 ? 'is-warn' : 'is-ok'
+  return (
+    <div className={`cmp-scan ${tone}`}>
+      <div className="cmp-scan-head">
+        <div>
+          <b>סנכרון מחירי מתחרים</b>
+          <div className="cmp-sub">
+            {total != null ? `${total} קישורים מאושרים במעקב` : '…'}
+            {' · '}בדיקה אחרונה: {lastAt ? <span dir="ltr">{formatDateTime(lastAt)}</span> : 'עדיין לא בוצעה'}
+          </div>
+        </div>
+        {r?.running
+          ? <button className="btn-add btn-outline" disabled={cancel} onClick={() => { cancelRef.current = true; setCancel(true) }}>{cancel ? 'עוצר…' : 'עצירה'}</button>
+          : <button className="btn-add" onClick={start} disabled={total === 0}>⟳ סנכרן מחירים עכשיו</button>}
+      </div>
+      {r && (
+        <>
+          <div className="cmp-scan-bar"><i style={{ width: `${total ? Math.min(100, (r.scanned / total) * 100) : 0}%` }} /></div>
+          <div className="cmp-scan-stats">
+            <span>נבדקו <b>{r.scanned}</b>{total != null ? ` מתוך ${total}` : ''}</span>
+            <span className="pos">הצליחו <b>{r.success}</b></span>
+            <span className={r.failed ? 'neg' : ''}>נכשלו או נחסמו <b>{r.failed}</b></span>
+            <span>מחירים שהתעדכנו <b>{r.updated}</b></span>
+          </div>
+          {!r.running && (
+            <div className={`cmp-scan-msg ${r.error || r.failed || !r.success ? 'warn' : 'ok'}`}>
+              {r.error ? r.error
+                : r.scanned === 0 ? 'לא נסרקו קישורים. ייתכן שאין קישורים מאושרים עם מעקב מחירים פעיל.'
+                : r.success === 0 ? 'הסריקה הסתיימה, אבל לא זוהה אף מחיר.'
+                : r.failed ? `הסריקה הסתיימה: ${r.success} מחירים זוהו, ${r.failed} קישורים נכשלו או נחסמו.`
+                : `הסריקה הסתיימה בהצלחה: ${r.success} מחירים זוהו.`}
+            </div>
+          )}
+          {failures.length > 0 && (
+            <details className="cmp-scan-fails" open={failures.length <= 6}>
+              <summary>פירוט כשלונות ({failures.length})</summary>
+              <div className="table-wrap cmp-hist">
+                <table className="data-table">
+                  <thead><tr><th>חנות</th><th>מק״ט שלי</th><th>תוצאה</th><th>HTTP</th><th>פרטים</th></tr></thead>
+                  <tbody>
+                    {failures.map(x => (
+                      <tr key={x.id}>
+                        <td>{x.store_name || '—'}</td>
+                        <td className="cmp-sku">{x.my_sku || '—'}</td>
+                        <td><span className="neg">{RESULT_LABEL[x.result] || x.result}</span></td>
+                        <td dir="ltr">{x.http_status ?? '—'}</td>
+                        <td className="cmp-sub">{x.details || '—'}{x.competitor_url && <> · <a href={x.competitor_url} target="_blank" rel="noopener noreferrer">לעמוד ↗</a></>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+        </>
+      )}
     </div>
   )
 }

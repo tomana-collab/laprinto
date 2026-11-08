@@ -406,3 +406,29 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .cmp-warn{ font-size:12px; color:#9A5B0B; background:var(--amber-soft); padding:6px 9px; border-radius:8px; margin-top:6px; }
 .cmp-check{ display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; margin:2px 0 6px; cursor:pointer; }
 .cmp-check input{ width:auto; }
+
+/* עריכה, עדכון מחיר וסנכרון */
+.cmp-edit-ico{ background:none; border:none; color:var(--ink-soft); font-size:12px; padding:0 3px; cursor:pointer; border-radius:6px; }
+.cmp-edit-ico:hover{ background:var(--hover-bg); color:var(--ink); }
+.cmp-offer-manual{ font-size:10.5px; font-weight:700; color:var(--violet); }
+.cmp-offer-tools{ display:flex; gap:6px; flex-wrap:wrap; margin-top:2px; }
+.cmp-tool{ background:var(--paper); border:1.5px solid var(--line); color:var(--ink); border-radius:999px; padding:5px 12px; font-size:12.5px; font-weight:700; }
+.cmp-tool:hover{ background:var(--hover-bg); }
+.cmp-inline-form{ margin:6px 0 0; background:var(--paper); }
+.cmp-scan{ background:var(--paper); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:12px 14px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px; border-inline-start:4px solid var(--line); }
+.cmp-scan.is-running{ border-inline-start-color:var(--violet); }
+.cmp-scan.is-ok{ border-inline-start-color:var(--teal); }
+.cmp-scan.is-warn{ border-inline-start-color:var(--amber); }
+.cmp-scan-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.cmp-scan-bar{ height:6px; background:var(--hover-bg); border-radius:999px; overflow:hidden; }
+.cmp-scan-bar i{ display:block; height:100%; background:var(--violet); transition:width .3s; }
+.cmp-scan-stats{ display:flex; flex-wrap:wrap; gap:6px 18px; font-size:13px; color:var(--ink-soft); }
+.cmp-scan-stats b{ font-family:'JetBrains Mono',monospace; color:var(--ink); margin-inline-start:3px; }
+.cmp-scan-stats .pos b{ color:var(--teal); } .cmp-scan-stats .neg b{ color:var(--coral); }
+.cmp-scan-msg{ font-size:13px; font-weight:700; padding:8px 10px; border-radius:9px; }
+.cmp-scan-msg.ok{ background:var(--teal-soft); color:#0B655F; }
+.cmp-scan-msg.warn{ background:var(--amber-soft); color:#9A5B0B; }
+:root[data-theme="dark"] .cmp-scan-msg.ok{ color:#5FD3C9; } :root[data-theme="dark"] .cmp-scan-msg.warn{ color:#F2C27A; }
+.cmp-scan-fails summary{ cursor:pointer; font-size:13px; font-weight:700; margin-bottom:6px; }
+.cmp-scan-fails .data-table tbody tr{ cursor:default; }
+.btn-add:disabled{ opacity:.55; cursor:default; }
