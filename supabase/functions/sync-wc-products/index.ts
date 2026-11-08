@@ -164,6 +164,10 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
   for (const wc of wcProducts) {
     const vars = variationsByParent.get(wc.id)
     if (!vars || vars.length === 0) { items.push({ wc, name: decode(String(wc.name || '')).trim(), parent: null }); continue }
+    // שורת מוצר האב (אם קיימת מסנכרון ישן) מקבלת רק את התמונה הראשית — שאר השדות שלה לא נוגעים
+    const parentRow = byWcId.get(wc.id)
+    const parentImg = mainImage(wc, null)
+    if (parentRow && parentImg) toUpdate.push({ id: parentRow.id, data: { image_url: parentImg } })
     const parentName = decode(String(wc.name || '')).trim()
     for (const v of vars) {
       const opts = (v.attributes || []).map((a: any) => decode(String(a.option || ''))).filter(Boolean)
@@ -216,7 +220,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
     const chunk = toUpdate.slice(i, i + 20)
     const results = await Promise.all(chunk.map(u => admin.from('products').update(u.data).eq('id', u.id)))
     results.forEach((r, idx) => {
-      if (r.error) errors.push(`${chunk[idx].data.name}: ${r.error.message}`)
+      if (r.error) errors.push(`${chunk[idx].data.name || chunk[idx].id}: ${r.error.message}`)
       else updated++
     })
   }
