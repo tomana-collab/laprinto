@@ -35,6 +35,7 @@ const approvalLabel = o => o.review_status !== 'approved' ? null
 const SKU_SOURCE = {
   url: 'המק״ט אומת מכתובת העמוד אצל המתחרה',
   page: 'המק״ט אומת מתוכן עמוד המוצר',
+  product_page: 'המק״ט אומת מתוכן עמוד המוצר',
   json_ld: 'המק״ט אומת מהנתונים המובנים בעמוד',
   structured_data: 'המק״ט אומת מהנתונים המובנים בעמוד',
   manual: 'המק״ט אומת ידנית',
