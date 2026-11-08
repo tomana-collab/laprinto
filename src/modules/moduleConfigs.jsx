@@ -94,7 +94,18 @@ export const MODULES = {
     syncBody: { target: 'products' },
     syncNoun: 'מוצרים',
     columns: [
-      { key: 'name', label: 'שם מוצר' },
+      // תמונת המוצר הראשית מ-WooCommerce (products.image_url) לצד השם
+      { key: 'name', label: 'שם מוצר', render: row => (
+        <div className="prod-cell">
+          <div className="cmp-thumb">
+            {/^https:\/\//i.test(row.image_url || '')
+              ? <img src={row.image_url} alt="" width="52" height="52" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                  onError={e => { e.currentTarget.replaceWith(Object.assign(document.createElement('span'), { className: 'thumb-empty', textContent: '📦' })) }} />
+              : <span className="thumb-empty">📦</span>}
+          </div>
+          <span>{row.name}</span>
+        </div>
+      ) },
       { key: 'sku', label: 'מק"ט', render: row => row.sku || '—' },
       { key: 'subcategory', label: 'תת-קטגוריה', render: row => row.subcategory || '—' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—', sortValue: row => row.suppliers?.name || null },

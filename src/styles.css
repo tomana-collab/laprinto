@@ -453,3 +453,6 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .cmp-history[open] > summary::before{ transform:rotate(-90deg); }
 .cmp-history > summary > span:first-child{ margin-inline-end:auto; }
 .cmp-history[open]{ padding-bottom:12px; }
+.prod-cell{ display:flex; align-items:center; gap:10px; min-width:200px; }
+.prod-cell .cmp-thumb{ width:44px; height:44px; }
+.thumb-empty{ font-size:18px; opacity:.45; filter:grayscale(1); }
