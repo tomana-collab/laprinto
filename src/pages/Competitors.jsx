@@ -111,7 +111,7 @@ function ComparisonView({ onChanged }) {
     const [m, s, p] = await Promise.all([
       supabase.from('v_competitor_matrix').select('*'),
       supabase.from('competitor_stores').select('id, name, domain, enabled, priority').order('priority'),
-      supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url'),
+      supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url, image_url'),
     ])
     const err = [m, s, p].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); setStores([]); return }
@@ -128,7 +128,7 @@ function ComparisonView({ onChanged }) {
         const pr = prodById.get(r.product_id) || {}
         row = {
           id: r.product_id, name: r.product_name, sku: r.sku, category: r.category || '', subcategory: r.subcategory || '',
-          url: r.product_url, wc_product_id: r.wc_product_id ?? pr.wc_product_id,
+          url: r.product_url, wc_product_id: r.wc_product_id ?? pr.wc_product_id, image: pr.image_url || null,
           cost: num(pr.cost ?? r.supplier_cost), cost_with_vat: num(pr.cost_with_vat ?? r.cost_with_vat),
           extra_expenses: num(pr.extra_expenses), price: num(pr.price ?? r.my_price),
           profit: num(pr.profit ?? r.calculated_profit), margin: num(pr.margin_percent ?? r.calculated_margin_percent),
@@ -296,7 +296,7 @@ function ComparisonView({ onChanged }) {
               <tr key={r.id} onClick={() => setOpenId(r.id)}>
                 <td className="cmp-sticky">
                   <div className="cmp-prod">
-                    <div className="cmp-thumb">{(r.name || '?').trim()[0]}</div>
+                    <ProductThumb src={r.image} />
                     <div>
                       <div className="cmp-name">{r.name}</div>
                       <div className="cmp-sku">{r.sku || 'ללא מק״ט'}</div>
@@ -337,6 +337,22 @@ function ComparisonView({ onChanged }) {
         onAddStore={() => setAddingStore(true)} />}
       {addingStore && <AddStoreModal stores={stores || []} onCancel={() => setAddingStore(false)}
         onSaved={st => { setStores(list => [...list, st]); setAddingStore(false) }} />}
+    </div>
+  )
+}
+
+// תמונת המוצר הראשית מ-WooCommerce (products.image_url). אין תמונה / שגיאת טעינה → אייקון ניטרלי.
+function ProductThumb({ src }) {
+  const [failed, setFailed] = useState(false)
+  const url = safeImg(src)
+  useEffect(() => { setFailed(false) }, [src])
+  return (
+    <div className="cmp-thumb">
+      {url && !failed
+        ? <img src={url} alt="" width="52" height="52" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+        : <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" /><path d="m3 8 9 5 9-5" /><path d="M12 13v8" />
+          </svg>}
     </div>
   )
 }
@@ -419,9 +435,12 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
     <div className="overlay cmp-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <aside className="cmp-drawer">
         <div className="cmp-drawer-head">
-          <div>
+          <div className="cmp-drawer-title">
+            <ProductThumb src={row.image} />
+            <div>
             <h2>{row.name}</h2>
             <div className="cmp-sub"><span className="cmp-sku">{row.sku || 'ללא מק״ט'}</span> · {[row.category, row.subcategory].filter(Boolean).join(' / ') || 'ללא קטגוריה'}</div>
+            </div>
           </div>
           <button className="cmp-close" onClick={onClose} aria-label="סגירה">✕</button>
         </div>
@@ -781,6 +800,7 @@ const safeImg = u => (typeof u === 'string' && /^https:\/\//i.test(u) ? u : null
 
 function ReviewQueue({ onChanged }) {
   const [items, setItems] = useState(null)
+  const [images, setImages] = useState({}) // product_id → image_url
   const [error, setError] = useState('')
   const [status, setStatus] = useState('pending')
   const [store, setStore] = useState('')
@@ -792,8 +812,12 @@ function ReviewQueue({ onChanged }) {
 
   async function load() {
     setError('')
-    const { data, error: e } = await supabase.from('v_competitor_review_queue').select('*')
+    const [{ data, error: e }, img] = await Promise.all([
+      supabase.from('v_competitor_review_queue').select('*'),
+      supabase.from('products').select('id, image_url').not('image_url', 'is', null),
+    ])
     if (e) { setError(e.message); setItems([]); return }
+    if (!img.error) setImages(Object.fromEntries(img.data.map(p => [p.id, p.image_url])))
     setItems(data)
   }
   useEffect(() => { load() }, [])
@@ -859,6 +883,7 @@ function ReviewQueue({ onChanged }) {
         <section key={g.product.product_id} className="rv-group">
           <header className="rv-group-head">
             <div>
+              <ProductThumb src={images[g.product.product_id]} />
               <b>{g.product.product_name}</b>
               <span className="cmp-sku">{g.product.product_sku || 'ללא מק״ט'}</span>
               <span className="cmp-sub">{[g.product.category, g.product.subcategory].filter(Boolean).join(' / ')}</span>
@@ -866,7 +891,7 @@ function ReviewQueue({ onChanged }) {
             <div className="rv-my-price">המחיר שלי <b>{g.product.my_price > 0 ? ils(g.product.my_price) : '—'}</b></div>
           </header>
           <div className="rv-cards">
-            {g.offers.map(x => <ReviewCard key={x.offer_id} item={x} onDecide={decide} flash={flash?.id === x.offer_id ? flash : null} />)}
+            {g.offers.map(x => <ReviewCard key={x.offer_id} item={x} productImage={images[x.product_id]} onDecide={decide} flash={flash?.id === x.offer_id ? flash : null} />)}
           </div>
         </section>
       ))}
@@ -874,14 +899,14 @@ function ReviewQueue({ onChanged }) {
   )
 }
 
-function ReviewCard({ item, onDecide, flash }) {
+function ReviewCard({ item, productImage, onDecide, flash }) {
   const [rejecting, setRejecting] = useState(false)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const st = item.review_status || 'pending'
   const g = gap({ price: num(item.competitor_price) }, num(item.my_price))
   const m = matchInfo(item.match_type)
-  const myImg = safeImg(item.source_image_url), theirImg = safeImg(item.competitor_image_url)
+  const myImg = safeImg(item.source_image_url) || safeImg(productImage), theirImg = safeImg(item.competitor_image_url)
   const evidence = item.matching_evidence && typeof item.matching_evidence === 'object' && !Array.isArray(item.matching_evidence)
     ? Object.entries(item.matching_evidence).filter(([, v]) => v != null && v !== '') : []
   const notes = [item.variant_notes, item.engraving_notes, item.package_notes, item.shipping_notes].filter(Boolean)

@@ -1,7 +1,7 @@
 // Edge Function: מסנכרן מ-WooCommerce (laprinto.co.il) לטבלאות products ו-orders.
 // גוף הבקשה: { target: 'products' | 'orders' | 'all' } (ברירת מחדל: products).
 //
-// מוצרים: מושך את כל המוצרים המפורסמים ומסנכרן לטבלת products. מעדכן רק נתוני אתר (שם, מחירים, קישור) — לעולם לא נוגע בעלות,
+// מוצרים: מושך את כל המוצרים המפורסמים ומסנכרן לטבלת products. מעדכן רק נתוני אתר (שם, מחירים, קישור, תמונה) — לעולם לא נוגע בעלות,
 // הוצאות נלוות, ספק, הערות או סטטוס של מוצר קיים.
 //
 // מי יכול להפעיל:
@@ -119,6 +119,14 @@ function resolveCategory(wcCats: any[] | undefined, catMap: Map<number, WcCat>) 
   return { category: rootName, subcategory: deepName === rootName ? '' : deepName }
 }
 
+// כתובת התמונה הראשית כפי שהיא בחנות (לא מורידים ולא משכפלים).
+// וריאציה: התמונה של הווריאציה אם הוגדרה, אחרת התמונה הראשית של מוצר האב.
+const imageSrc = (img: any): string | null => (img && typeof img.src === 'string' && img.src.trim()) ? img.src.trim() : null
+function mainImage(wc: any, parent: any | null): string | null {
+  if (parent) return imageSrc(wc.image) ?? imageSrc(parent.images?.[0])
+  return imageSrc(wc.images?.[0])
+}
+
 type Stats = { total: number; inserted: number; updated: number; errors: string[] }
 
 async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Stats> {
@@ -175,6 +183,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
       name,
       sku: wc.sku || '',
       product_url: wc.permalink || '',
+      image_url: mainImage(wc, parent),
       ...resolveCategory(wc.categories, catMap),
       price: num(wc.price) ?? 0, // המחיר הנוכחי באתר (מבצע אם פעיל), כולל מע"מ
       regular_price: num(wc.regular_price),

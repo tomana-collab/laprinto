@@ -252,7 +252,11 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .cmp-store-h, .cmp-lowest-h{ min-width:150px; }
 .cmp-lowest{ background:color-mix(in srgb, var(--violet) 5%, transparent); }
 .cmp-prod{ display:flex; gap:10px; align-items:flex-start; }
-.cmp-thumb{ width:34px; height:34px; border-radius:9px; flex-shrink:0; background:var(--violet-soft); color:var(--violet); font-weight:800; display:flex; align-items:center; justify-content:center; font-size:14px; }
+.cmp-thumb{ width:52px; height:52px; border-radius:10px; flex-shrink:0; background:#fff; border:1px solid var(--line); color:var(--ink-soft); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.cmp-thumb img{ width:100%; height:100%; object-fit:contain; display:block; }
+.cmp-prod{ align-items:center !important; }
+.cmp-drawer-title{ display:flex; gap:12px; align-items:center; }
+.rv-group-head .cmp-thumb{ width:40px; height:40px; align-self:center; }
 .cmp-name{ font-weight:700; line-height:1.3; }
 .cmp-sku{ font-size:11.5px; color:var(--ink-soft); font-family:'JetBrains Mono',monospace; margin-top:2px; }
 .cmp-cat{ white-space:nowrap; }
@@ -319,7 +323,6 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 
 @media (max-width:640px){
   .cmp-table .cmp-sticky{ min-width:150px; max-width:170px; }
-  .cmp-thumb{ display:none; }
   .cmp-wrap{ max-height:none; }
   .cmp-drawer{ padding:16px; }
 }
