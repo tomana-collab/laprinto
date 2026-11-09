@@ -21,13 +21,13 @@ export default function Inventory() {
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('all')
   const [q, setQ] = useState('')
-  const [sort, onSort] = useSort()
+  const [sort, onSort] = useSort({ key: 'sold_total', dir: 'desc' }) // ברירת מחדל: הנמכרים ביותר למעלה
   const [counting, setCounting] = useState(null) // שורה לספירת מלאי
 
   async function load() {
     setError('')
     const [p, s] = await Promise.all([
-      supabase.from('products').select('id, name, sku, category, opening_stock, stock_min, wc_product_id, wc_parent_id, suppliers(name)').order('name'),
+      supabase.from('products').select('id, name, sku, category, cost_after_discount, price, opening_stock, stock_min, wc_product_id, wc_parent_id, suppliers(name)').order('name'),
       supabase.from('product_stock').select('*'),
     ])
     const err = [p, s].find(x => x.error)
@@ -36,7 +36,7 @@ export default function Inventory() {
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצרים ראשיים שפוצלו לוריאציות
     setRows(p.data.filter(pr => !parents.has(pr.wc_product_id)).map(pr => {
       const x = st.get(pr.id) || {}
-      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, stock_min: Number(pr.stock_min) || 0 }
+      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || 0, unit_price: Number(pr.price) || 0 }
     }))
   }
   useEffect(() => { load() }, [])
@@ -51,6 +51,7 @@ export default function Inventory() {
 
   const shown = useMemo(() => (rows || []).filter(r => {
     if (filter === 'sold') { if (!(r.sold_total > 0)) return false }
+    else if (filter === 'unsold') { if (!(r.stock > 0 && r.sold_total === 0)) return false }
     else if (filter !== 'all' && status(r).key !== filter) return false
     const t = q.trim().toLowerCase()
     return !t || r.name.toLowerCase().includes(t) || (r.sku || '').toLowerCase().includes(t)
@@ -60,11 +61,20 @@ export default function Inventory() {
 
   const toOrder = rows.filter(r => needToOrder(r) > 0)
   const inStock = rows.filter(r => r.stock > 0)
+  const unsold = inStock.filter(r => r.sold_total === 0) // יש במלאי ועדיין לא נמכרה אפילו יחידה
+  const unsoldCost = unsold.reduce((a, r) => a + r.stock * r.unit_cost, 0)
+  const unsoldSale = unsold.reduce((a, r) => a + r.stock * r.unit_price, 0)
 
   return (
     <div>
       <div className="module-head"><h2>📦 מלאי</h2></div>
       {error && <div className="err-inline">{error}</div>}
+
+      <div className="summary-row">
+        <div className="summary-card"><span>מוצרים במלאי שטרם נמכרו</span><b>{unsold.length}</b></div>
+        <div className="summary-card"><span>כסף תקוע בהם — לפי עלות (לפני מע״מ)</span><b>₪{num(Math.round(unsoldCost))}</b></div>
+        <div className="summary-card"><span>שווי מכירה שלהם באתר (כולל מע״מ)</span><b>₪{num(Math.round(unsoldSale))}</b></div>
+      </div>
 
       <div className="summary-row">
         <div className="summary-card"><span>מוצרים במלאי</span><b>{inStock.length}</b></div>
@@ -76,6 +86,7 @@ export default function Inventory() {
         <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
         <select value={filter} onChange={e => setFilter(e.target.value)}>
           <option value="all">הכל</option>
+          <option value="unsold">במלאי ללא מכירה</option>
           <option value="sold">נמכר (נמכרו יחידות)</option>
           <option value="order">חסר — להזמין</option>
           <option value="incoming">הוזמן, בהמתנה לאספקה</option>

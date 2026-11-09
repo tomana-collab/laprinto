@@ -1,8 +1,8 @@
 import { useState } from 'react'
 
 // מיון טבלה בלחיצה על כותרת: לחיצה ראשונה מהגדול לקטן, שנייה מהקטן לגדול, שלישית מבטלת.
-export function useSort() {
-  const [sort, setSort] = useState({ key: null, dir: 'desc' })
+export function useSort(initial = { key: null, dir: 'desc' }) {
+  const [sort, setSort] = useState(initial)
   const toggle = key => setSort(s =>
     s.key !== key ? { key, dir: 'desc' } : s.dir === 'desc' ? { key, dir: 'asc' } : { key: null, dir: 'desc' })
   return [sort, toggle]
