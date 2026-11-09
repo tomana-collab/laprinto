@@ -60,6 +60,7 @@ export default function GenericModule({ config, focusId = null }) {
       if (fld.type === 'number') payload[fld.key] = payload[fld.key] === '' ? 0 : Number(payload[fld.key])
       if (fld.type === 'date' && payload[fld.key] === '') payload[fld.key] = null
       if (fld.type === 'file' && payload[fld.key] === '') payload[fld.key] = null
+      if (fld.type === 'checkbox') payload[fld.key] = !!payload[fld.key]
       if (fld.type === 'relation' && payload[fld.key] === '') payload[fld.key] = null
     })
 
@@ -140,7 +141,7 @@ export default function GenericModule({ config, focusId = null }) {
     if (!status) return
     const label = config.bulkStatus.labels?.[status] || status
     if (!window.confirm(`לעדכן ${list.length} ${config.bulkNoun || 'רשומות'} לסטטוס "${label}"?${config.bulkSyncNote ? `\n${config.bulkSyncNote}` : ''}`)) return
-    const { error } = await supabase.from(config.table).update({ [config.bulkStatus.field]: status }).in('id', list.flatMap(idsOf))
+    const { error } = await supabase.from(config.table).update({ [config.bulkStatus.field]: status === 'true' ? true : status === 'false' ? false : status }).in('id', list.flatMap(idsOf))
     if (error) { setError(error.message); return }
     setSelected(new Set()); load()
   }
@@ -297,7 +298,7 @@ export default function GenericModule({ config, focusId = null }) {
           <b>נבחרו {selectedRows.length}</b>
           {config.bulkStatus && (
             <select value="" onChange={e => bulkSetStatus(selectedRows, e.target.value)}>
-              <option value="">עדכון סטטוס ל...</option>
+              <option value="">{config.bulkStatus.prompt || 'עדכון סטטוס ל...'}</option>
               {Object.entries(config.bulkStatus.labels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           )}
@@ -678,6 +679,10 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
               <select value={form[fld.key]} onChange={e => set(fld.key, e.target.value)}>
                 {fld.options.map(o => <option key={o} value={o}>{o || '—'}</option>)}
               </select>
+            ) : fld.type === 'checkbox' ? (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                <input type="checkbox" checked={!!form[fld.key]} onChange={e => set(fld.key, e.target.checked)} /> כן
+              </label>
             ) : fld.type === 'file' ? (
               <FileField value={form[fld.key]} onChange={v => set(fld.key, v)} />
             ) : fld.type === 'relation' ? (
