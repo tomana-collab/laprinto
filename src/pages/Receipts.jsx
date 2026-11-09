@@ -149,7 +149,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
   const [items, setItems] = useState(() => initial.id && initial.stock_receipt_items.length
     ? initial.stock_receipt_items.map(i => {
         const p = products.find(x => x.id === i.product_id)
-        return { text: p ? label(p) : (i.products?.name || ''), product_id: i.product_id, quantity: i.quantity, unit_cost: i.unit_cost ?? '', discount_percent: i.discount_percent || '' }
+        return { text: p ? label(p) : (i.products?.name || ''), hidden: !p, product_id: i.product_id, quantity: i.quantity, unit_cost: i.unit_cost ?? '', discount_percent: i.discount_percent || '' }
       })
     : [{ text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])
 
@@ -158,7 +158,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
 
   function pick(idx, text) {
     const p = byLabel.get(text)
-    setItem(idx, { text, product_id: p?.id || '', ...(p && !items[idx].unit_cost ? { unit_cost: p.cost || '', discount_percent: p.supplier_discount_percent || '' } : {}) })
+    setItem(idx, { text, hidden: false, product_id: p?.id || '', ...(p && !items[idx].unit_cost ? { unit_cost: p.cost || '', discount_percent: p.supplier_discount_percent || '' } : {}) })
   }
 
   const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * netCost(i), 0)
@@ -195,6 +195,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
                   <input type="text" list="receipt-products" value={it.text} placeholder="הקלד מק״ט או שם"
                     onChange={e => pick(idx, e.target.value)} style={{ width: '100%' }} />
                   {it.text && !it.product_id && <small className="neg">לא נמצא מוצר — בחר מהרשימה</small>}
+                  {it.hidden && <small className="neg">מוצר ראשי שפוצל לוריאציות — לא נספר במלאי. בחר את הוריאציה (לפי מק״ט).</small>}
                 </td>
                 <td><input type="number" min="0" value={it.quantity} onChange={e => setItem(idx, { quantity: e.target.value })} style={{ width: 80 }} /></td>
                 <td><input type="number" min="0" step="0.01" value={it.unit_cost} onChange={e => setItem(idx, { unit_cost: e.target.value })} style={{ width: 110 }} /></td>
