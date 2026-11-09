@@ -92,7 +92,6 @@ export default function Inventory() {
               <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
               <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
               <SortTh k="supplier" sort={sort} onSort={onSort}>ספק</SortTh>
-              <SortTh k="opening" sort={sort} onSort={onSort}>מלאי פתיחה</SortTh>
               <SortTh k="received" sort={sort} onSort={onSort}>נקלט</SortTh>
               <SortTh k="sold_total" sort={sort} onSort={onSort}>נמכר (סה״כ הזמנות)</SortTh>
               <SortTh k="sold" sort={sort} onSort={onSort}>ירד מהמלאי</SortTh>
@@ -102,10 +101,10 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={10}>אין מוצרים</td></tr>}
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={9}>אין מוצרים</td></tr>}
             {sortRows(shown, {
               name: r => r.name, sku: r => r.sku || '', supplier: r => r.suppliers?.name || '',
-              opening: r => r.opening, received: r => r.received, sold_total: r => r.sold_total,
+              received: r => r.received, sold_total: r => r.sold_total,
               sold: r => r.sold, incoming: r => r.incoming, stock: r => r.stock, status: r => status(r).text,
             }, sort).map(r => {
               const s = status(r)
@@ -114,7 +113,6 @@ export default function Inventory() {
                   <td><a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); openRecord('products', r.id) }}>{r.name}</a></td>
                   <td>{r.sku || '—'}</td>
                   <td>{r.suppliers?.name || '—'}</td>
-                  <td>{num(r.opening)}</td>
                   <td>{num(r.received)}</td>
                   <td><b>{num(r.sold_total)}</b></td>
                   <td>{num(r.sold)}</td>
