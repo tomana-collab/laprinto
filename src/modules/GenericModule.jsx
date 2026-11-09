@@ -676,7 +676,7 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
               <textarea value={form[fld.key]} onChange={e => set(fld.key, e.target.value)} />
             ) : fld.type === 'select' ? (
               <select value={form[fld.key]} onChange={e => set(fld.key, e.target.value)}>
-                {fld.options.map(o => <option key={o} value={o}>{o}</option>)}
+                {fld.options.map(o => <option key={o} value={o}>{o || '—'}</option>)}
               </select>
             ) : fld.type === 'file' ? (
               <FileField value={form[fld.key]} onChange={v => set(fld.key, v)} />
