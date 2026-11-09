@@ -8,9 +8,27 @@ const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
 const CLOSED_OPP_STATUSES = ['סגור-הצלחה', 'סגור-נכשל']
 const today = () => new Date().toISOString().slice(0, 10)
 
+// תקופות לסיכום כספי: מספר חודשים אחורה (כולל החודש הנוכחי), או 0 = הכל
+const PERIODS = [
+  { months: 1, label: 'החודש הנוכחי' },
+  { months: 2, label: 'חודשיים' },
+  { months: 3, label: 'רבעון (3 חודשים)' },
+  { months: 6, label: 'חצי שנה' },
+  { months: 12, label: 'שנה' },
+  { months: 0, label: 'הכל' },
+]
+const pad = n => String(n).padStart(2, '0')
+function periodStart(months) {
+  if (!months) return ''
+  const d = new Date()
+  const s = new Date(d.getFullYear(), d.getMonth() - (months - 1), 1)
+  return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-01`
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const [periodMonths, setPeriodMonths] = useState(1)
 
   useEffect(() => {
     async function load() {
@@ -76,6 +94,20 @@ export default function Dashboard() {
   }
   const paidByEntries = Object.entries(paidByTotals).sort((a, b) => b[1] - a[1])
 
+  // סיכום לתקופה שנבחרה: הכנסות (הזמנות שנספרות) מול הוצאות לפי תאריך
+  const from = periodStart(periodMonths)
+  const periodSales = sales.filter(o => !from || (o.order_date || '') >= from)
+  const periodIncome = periodSales.reduce((a, o) => a + (o.total_amount || 0), 0)
+  const periodExpenses = data.expenses
+    .filter(e => !from || (e.expense_date || e.created_at || '') >= from)
+    .reduce((a, e) => a + (e.amount || 0), 0)
+  const periodBalance = periodIncome - periodExpenses
+  // רווח ממכירות לאחר עלות סחורה ועמלת סליקה (רק הזמנות שיש עלות לכל מוצריהן)
+  const periodOrders = groupOrders(periodSales).map(calcOrder)
+  const productProfit = periodOrders.reduce((a, c) => a + (c.profit ?? 0), 0)
+  const missingCost = periodOrders.filter(c => c.profit === null).length
+  const periodLabel = PERIODS.find(x => x.months === periodMonths)?.label
+
   const activeProducts = data.products.filter(p => p.status === 'פעיל').length
 
   const openTasksSorted = [...openTasks].sort((a, b) => (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1)
@@ -85,12 +117,19 @@ export default function Dashboard() {
       <div className="module-head"><h2>📊 דאשבורד</h2></div>
 
       <div className="dash-section">
-        <h3>סיכום כספי</h3>
-        <div className="summary-row" style={{ marginBottom: 0 }}>
-          <div className="summary-card"><span>מכירות החודש</span><b className="pos">₪{monthIncome.toFixed(0)}</b></div>
-          <div className="summary-card"><span>סה"כ הכנסות</span><b className="pos">₪{totalIncome.toFixed(0)}</b></div>
-          <div className="summary-card"><span>סה"כ הוצאות</span><b className="neg">₪{totalExpenses.toFixed(0)}</b></div>
-          <div className="summary-card"><span>רווח</span><b className={profit >= 0 ? 'pos' : 'neg'}>₪{profit.toFixed(0)}</b></div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>סיכום כספי · {periodLabel}{from ? ` (מ-${formatDate(from)})` : ''}</h3>
+          <div className="status-filter" style={{ margin: 0 }}>
+            {PERIODS.map(x => (
+              <button key={x.months} className={periodMonths === x.months ? 'active' : ''} onClick={() => setPeriodMonths(x.months)}>{x.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="summary-row" style={{ marginBottom: 0, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+          <div className="summary-card"><span>הכנסות (מכירות כולל מע"מ)</span><b className="pos">₪{periodIncome.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
+          <div className="summary-card"><span>הוצאות</span><b className="neg">₪{periodExpenses.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
+          <div className="summary-card"><span>הכנסות פחות הוצאות</span><b className={periodBalance >= 0 ? 'pos' : 'neg'}>₪{periodBalance.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
+          <div className="summary-card"><span>רווח ממכירות (אחרי עלות סחורה ועמלה){missingCost ? ` · ${missingCost} הזמנות בלי עלות לא נכללו` : ''}</span><b className={productProfit >= 0 ? 'pos' : 'neg'}>₪{productProfit.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
         </div>
       </div>
 
