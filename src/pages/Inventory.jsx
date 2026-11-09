@@ -26,17 +26,28 @@ export default function Inventory() {
 
   async function load() {
     setError('')
-    const [p, s] = await Promise.all([
+    const [p, s, ri] = await Promise.all([
       supabase.from('products').select('id, name, sku, category, cost_after_discount, price, opening_stock, stock_min, wc_product_id, wc_parent_id, suppliers(name)').order('name'),
       supabase.from('product_stock').select('*'),
+      supabase.from('stock_receipt_items').select('product_id, quantity, unit_cost, discount_percent, stock_receipts(status)'),
     ])
-    const err = [p, s].find(x => x.error)
+    const err = [p, s, ri].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); return }
     const st = new Map(s.data.map(x => [x.product_id, x]))
+    // עלות ממוצעת ליחידה מהתעודות שסופקו (אחרי הנחה) — משמשת כשלא הוזנה עלות במוצר עצמו
+    const rc = new Map()
+    for (const i of ri.data) {
+      if ((i.stock_receipts?.status || 'סופק') !== 'סופק') continue
+      const net = (Number(i.unit_cost) || 0) * (1 - (Number(i.discount_percent) || 0) / 100)
+      const q = Number(i.quantity) || 0
+      const cur = rc.get(i.product_id) || { qty: 0, sum: 0 }
+      cur.qty += q; cur.sum += q * net
+      rc.set(i.product_id, cur)
+    }
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצרים ראשיים שפוצלו לוריאציות
     setRows(p.data.filter(pr => !parents.has(pr.wc_product_id)).map(pr => {
       const x = st.get(pr.id) || {}
-      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || 0, unit_price: Number(pr.price) || 0 }
+      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
     }))
   }
   useEffect(() => { load() }, [])

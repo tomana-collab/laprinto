@@ -37,7 +37,13 @@ export default function Receipts() {
   useEffect(() => { load() }, [])
 
   async function handleSave({ supplier_id, doc_number, doc_date, notes, status, items }) {
-    const clean = items.filter(i => i.product_id && Number(i.quantity) > 0)
+    // לא מדלגים בשקט על שורות בעייתיות — עוצרים ומראים איזו שורה לא תקינה
+    const filled = items.map((i, n) => ({ ...i, n: n + 1 })).filter(i => i.text || i.product_id || Number(i.quantity) > 0)
+    const bad = filled.find(i => !i.product_id)
+    if (bad) { setError(`שורה ${bad.n}: המוצר "${bad.text}" לא נמצא. בחר מוצר מהרשימה שנפתחת (לפי מק"ט או שם).`); return }
+    const noQty = filled.find(i => !(Number(i.quantity) > 0))
+    if (noQty) { setError(`שורה ${noQty.n}: חסרה כמות.`); return }
+    const clean = filled
     if (clean.length === 0) { setError('הוסף לפחות מוצר אחד עם כמות'); return }
     const fields = { supplier_id: supplier_id || null, doc_number, doc_date, notes, status }
     const rows = id => clean.map(i => ({ receipt_id: id, product_id: i.product_id, quantity: Number(i.quantity), unit_cost: Number(i.unit_cost) || 0, discount_percent: Number(i.discount_percent) || 0 }))
@@ -125,7 +131,7 @@ export default function Receipts() {
 
       {editing && (
         <ReceiptModal
-          initial={editing} products={products} suppliers={suppliers}
+          initial={editing} products={products} suppliers={suppliers} error={error}
           onCancel={() => setEditing(null)} onSave={handleSave}
           onDelete={editing.id ? () => handleDelete(editing.id) : null}
         />
@@ -134,7 +140,7 @@ export default function Receipts() {
   )
 }
 
-function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete }) {
+function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, onDelete }) {
   const [supplierId, setSupplierId] = useState(initial.supplier_id || '')
   const [docNumber, setDocNumber] = useState(initial.doc_number || '')
   const [docDate, setDocDate] = useState(initial.doc_date || today())
@@ -210,6 +216,7 @@ function ReceiptModal({ initial, products, suppliers, onCancel, onSave, onDelete
           <div className="summary-card"><span>מע״מ {Math.round(VAT_RATE * 100)}%</span><b>{money(withVat(total) - total)}</b></div>
           <div className="summary-card"><span>סה״כ כולל מע״מ (להשוואה לחשבונית)</span><b>{money(withVat(total))}</b></div>
         </div>
+        {error && <div className="err-inline" style={{ marginTop: 12 }}>{error}</div>}
         <div className="modal-actions">
           {onDelete && <button className="btn btn-danger" onClick={onDelete}>מחיקת תעודה</button>}
           <button className="btn btn-ghost" onClick={onCancel}>ביטול</button>
