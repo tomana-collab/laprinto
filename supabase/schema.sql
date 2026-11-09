@@ -178,6 +178,7 @@ create table if not exists expenses (
   expense_date date,
   payment_method text default 'אשראי',    -- מזומן / אשראי / העברה בנקאית
   status text default 'ממתין לתשלום',      -- ממתין לתשלום / שולם
+  invoice_on text default '',             -- על שם מי החשבונית
   receipt_path text,                      -- נתיב הקובץ ב-Storage bucket "attachments"
   notes text default '',
   created_by text,

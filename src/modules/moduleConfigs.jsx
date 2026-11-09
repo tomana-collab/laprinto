@@ -341,6 +341,7 @@ export const MODULES = {
       { key: 'paid_by', label: 'מי שילם', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
       { key: 'expense_date', label: 'תאריך', type: 'date' },
       { key: 'payment_method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'אשראי', 'העברה בנקאית'], default: 'אשראי' },
+      { key: 'invoice_on', label: 'על שם מי החשבונית', type: 'text' },
       { key: 'receipt_path', label: 'חשבונית רכישה', type: 'file' },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
@@ -354,6 +355,7 @@ export const MODULES = {
       { key: 'category', label: 'קטגוריה' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—' },
       { key: 'paid_by', label: 'מי שילם', render: row => row.team_members?.full_name || '—' },
+      { key: 'invoice_on', label: 'חשבונית על שם', render: row => row.invoice_on || '—' },
       { key: 'amount', label: 'סכום', render: row => `₪${row.amount}` },
       { key: 'receipt_path', label: 'קובץ', render: row => row.receipt_path ? '📎' : '—' },
     ],
@@ -361,6 +363,7 @@ export const MODULES = {
     searchLabel: 'חיפוש לפי שם',
     filters: [
       { key: 'supplier_id', label: 'כל הספקים', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
+      { key: 'invoice_on', label: 'כל השמות', type: 'values' },
       { key: 'expense_date', label: 'כל החודשים', type: 'month' },
     ],
   },
