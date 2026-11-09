@@ -92,6 +92,9 @@ export default function Inventory() {
   const toOrder = rows.filter(r => needToOrder(r) > 0)
   const inStock = rows.filter(r => r.stock > 0)
   const unsold = inStock.filter(r => r.sold_total === 0) // יש במלאי ועדיין לא נמכרה אפילו יחידה
+  const receivedUnits = rows.reduce((a, r) => a + r.received, 0)
+  const incomingUnits = rows.reduce((a, r) => a + r.incoming, 0)
+  const stockUnits = inStock.reduce((a, r) => a + r.stock, 0) // רק מלאי חיובי, בלי חוסרים
   const unsoldUnits = unsold.reduce((a, r) => a + r.stock, 0)
   const unsoldCost = unsold.reduce((a, r) => a + r.stock * r.unit_cost, 0)
   const unsoldSale = unsold.reduce((a, r) => a + r.stock * r.unit_price, 0)
@@ -111,6 +114,12 @@ export default function Inventory() {
         מצב ספירה: הזן בעמודה "ספירה בפועל" כמה יש לך במחסן. מוצר שלא תזין לו כמות לא ישתנה. אפשר לסנן לפי קטגוריה (למשל סביבונים) ואז לשמור.
       </div>}
       {error && <div className="err-inline">{error}</div>}
+
+      <div className="summary-row">
+        <div className="summary-card"><span>יחידות שנקלטו בתעודות (סה״כ שהגיעו)</span><b>{num(receivedUnits)}</b></div>
+        <div className="summary-card"><span>יחידות שהוזמנו וממתינות לאספקה</span><b>{num(incomingUnits)}</b></div>
+        <div className="summary-card"><span>יחידות במלאי כרגע</span><b>{num(stockUnits)}</b></div>
+      </div>
 
       <div className="summary-row">
         <div className="summary-card"><span>יחידות במלאי שטרם נמכרו ({unsold.length} מוצרים)</span><b>{num(unsoldUnits)}</b></div>
