@@ -341,7 +341,7 @@ export const MODULES = {
       { key: 'paid_by', label: 'מי שילם', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
       { key: 'expense_date', label: 'תאריך', type: 'date' },
       { key: 'payment_method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'אשראי', 'העברה בנקאית'], default: 'אשראי' },
-      { key: 'invoice_on', label: 'על שם מי החשבונית', type: 'select', options: ['', 'אמיר', 'רועי'] },
+      { key: 'invoice_on', label: 'על שם מי החשבונית', type: 'select', options: ['', 'אמיר', 'רועי', 'נטלי', 'כללי'] },
       { key: 'reported_to_accountant', label: 'דווח לרו"ח', type: 'checkbox', default: false },
       { key: 'receipt_path', label: 'חשבונית רכישה', type: 'file' },
       { key: 'notes', label: 'הערות', type: 'textarea' },
