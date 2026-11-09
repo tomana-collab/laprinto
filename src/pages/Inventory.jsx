@@ -62,6 +62,7 @@ export default function Inventory() {
   const toOrder = rows.filter(r => needToOrder(r) > 0)
   const inStock = rows.filter(r => r.stock > 0)
   const unsold = inStock.filter(r => r.sold_total === 0) // יש במלאי ועדיין לא נמכרה אפילו יחידה
+  const unsoldUnits = unsold.reduce((a, r) => a + r.stock, 0)
   const unsoldCost = unsold.reduce((a, r) => a + r.stock * r.unit_cost, 0)
   const unsoldSale = unsold.reduce((a, r) => a + r.stock * r.unit_price, 0)
 
@@ -71,7 +72,7 @@ export default function Inventory() {
       {error && <div className="err-inline">{error}</div>}
 
       <div className="summary-row">
-        <div className="summary-card"><span>מוצרים במלאי שטרם נמכרו</span><b>{unsold.length}</b></div>
+        <div className="summary-card"><span>יחידות במלאי שטרם נמכרו ({unsold.length} מוצרים)</span><b>{num(unsoldUnits)}</b></div>
         <div className="summary-card"><span>כסף תקוע בהם — לפי עלות (לפני מע״מ)</span><b>₪{num(Math.round(unsoldCost))}</b></div>
         <div className="summary-card"><span>שווי מכירה שלהם באתר (כולל מע״מ)</span><b>₪{num(Math.round(unsoldSale))}</b></div>
       </div>
