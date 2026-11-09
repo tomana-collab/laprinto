@@ -21,6 +21,10 @@ export default function Inventory() {
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('all')
   const [q, setQ] = useState('')
+  const [category, setCategory] = useState('')
+  const [countMode, setCountMode] = useState(false) // ספירת מלאי מרוכזת
+  const [counts, setCounts] = useState({}) // id -> כמות בפועל שהוזנה
+  const [savingCount, setSavingCount] = useState(false)
   const [sort, onSort] = useSort({ key: 'sold_total', dir: 'desc' }) // ברירת מחדל: הנמכרים ביותר למעלה
   const [counting, setCounting] = useState(null) // שורה לספירת מלאי
 
@@ -60,13 +64,28 @@ export default function Inventory() {
     setCounting(null); load()
   }
 
+  // שמירת ספירה מרוכזת: לכל מוצר שהוזנה לו כמות שונה מהמלאי הנוכחי מחשבים מלאי פתיחה חדש
+  async function saveCounts() {
+    const changed = (rows || []).filter(r => counts[r.id] !== undefined && counts[r.id] !== '' && Number(counts[r.id]) !== r.stock)
+    if (changed.length === 0) { setCountMode(false); setCounts({}); return }
+    if (!window.confirm(`לעדכן את המלאי של ${changed.length} מוצרים לפי הספירה?`)) return
+    setSavingCount(true)
+    const results = await Promise.all(changed.map(r =>
+      supabase.from('products').update({ opening_stock: Number(counts[r.id]) - r.received + r.sold }).eq('id', r.id)))
+    setSavingCount(false)
+    const failed = results.find(x => x.error)
+    if (failed) { setError(failed.error.message); return }
+    setCountMode(false); setCounts({}); load()
+  }
+
   const shown = useMemo(() => (rows || []).filter(r => {
+    if (category && r.category !== category) return false
     if (filter === 'sold') { if (!(r.sold_total > 0)) return false }
     else if (filter === 'unsold') { if (!(r.stock > 0 && r.sold_total === 0)) return false }
     else if (filter !== 'all' && status(r).key !== filter) return false
     const t = q.trim().toLowerCase()
     return !t || r.name.toLowerCase().includes(t) || (r.sku || '').toLowerCase().includes(t)
-  }), [rows, filter, q])
+  }), [rows, filter, q, category])
 
   if (rows === null) return <div className="loading">טוען מלאי...</div>
 
@@ -79,7 +98,18 @@ export default function Inventory() {
 
   return (
     <div>
-      <div className="module-head"><h2>📦 מלאי</h2></div>
+      <div className="module-head">
+        <h2>📦 מלאי</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {countMode && <button className="btn-add" onClick={() => { setCountMode(false); setCounts({}) }}>ביטול</button>}
+          <button className="btn-add" disabled={savingCount} onClick={() => countMode ? saveCounts() : setCountMode(true)}>
+            {countMode ? (savingCount ? 'שומר...' : 'שמירת ספירה') : '📝 ספירת מלאי'}
+          </button>
+        </div>
+      </div>
+      {countMode && <div className="summary-row" style={{ padding: '8px 12px', gridTemplateColumns: '1fr' }}>
+        מצב ספירה: הזן בעמודה "ספירה בפועל" כמה יש לך במחסן. מוצר שלא תזין לו כמות לא ישתנה. אפשר לסנן לפי קטגוריה (למשל סביבונים) ואז לשמור.
+      </div>}
       {error && <div className="err-inline">{error}</div>}
 
       <div className="summary-row">
@@ -96,6 +126,10 @@ export default function Inventory() {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
+        <select value={category} onChange={e => setCategory(e.target.value)}>
+          <option value="">כל הקטגוריות</option>
+          {[...new Set(rows.map(r => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
         <select value={filter} onChange={e => setFilter(e.target.value)}>
           <option value="all">הכל</option>
           <option value="unsold">במלאי ללא מכירה</option>
@@ -121,10 +155,11 @@ export default function Inventory() {
               <SortTh k="incoming" sort={sort} onSort={onSort}>בהמתנה לאספקה</SortTh>
               <SortTh k="stock" sort={sort} onSort={onSort}>מלאי נוכחי</SortTh>
               <SortTh k="status" sort={sort} onSort={onSort}>מצב</SortTh>
+              {countMode && <th>ספירה בפועל</th>}
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={9}>אין מוצרים</td></tr>}
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={10}>אין מוצרים</td></tr>}
             {sortRows(shown, {
               name: r => r.name, sku: r => r.sku || '', supplier: r => r.suppliers?.name || '',
               received: r => r.received, sold_total: r => r.sold_total,
@@ -132,7 +167,7 @@ export default function Inventory() {
             }, sort).map(r => {
               const s = status(r)
               return (
-                <tr key={r.id} onClick={() => setCounting(r)}>
+                <tr key={r.id} onClick={countMode ? undefined : () => setCounting(r)} style={countMode ? { cursor: 'default' } : undefined}>
                   <td><a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); openRecord('products', r.id) }}>{r.name}</a></td>
                   <td>{r.sku || '—'}</td>
                   <td>{r.suppliers?.name || '—'}</td>
@@ -142,6 +177,7 @@ export default function Inventory() {
                   <td>{r.incoming ? num(r.incoming) : '—'}</td>
                   <td><b className={s.cls}>{num(r.stock)}</b></td>
                   <td><span className={s.cls}>{s.text}</span></td>
+                  {countMode && <td><input type="number" min="0" style={{ width: 90 }} placeholder={String(r.stock)} value={counts[r.id] ?? ''} onChange={e => setCounts(c => ({ ...c, [r.id]: e.target.value }))} /></td>}
                 </tr>
               )
             })}
