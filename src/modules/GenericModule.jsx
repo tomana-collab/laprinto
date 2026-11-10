@@ -12,6 +12,7 @@ export default function GenericModule({ config, focusId = null }) {
   const { user } = useAuth()
   const nav = useNav()
   const [rows, setRows] = useState(null)
+  const [extra, setExtra] = useState(null) // נתוני עזר לעמודות (config.extraLoad), למשל מלאי להזמנות
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null) // row being edited, or {} for new, or null for closed
   const [statusFilter, setStatusFilter] = useState('הכל')
@@ -34,6 +35,7 @@ export default function GenericModule({ config, focusId = null }) {
       .order(config.orderBy || 'created_at', { ascending: false })
     if (error) setError(error.message)
     else setRows(data)
+    if (config.extraLoad) setExtra(await config.extraLoad(supabase))
   }
 
   useEffect(() => { load() }, [config.table])
@@ -337,7 +339,7 @@ export default function GenericModule({ config, focusId = null }) {
                 {g.rows.map(row => (
                   <tr key={row.id} onClick={() => setEditing(row)}>
                     {bulk && <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} /></td>}
-                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav) : (row[c.key] ?? '—')}</td>)}
+                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav, extra) : (row[c.key] ?? '—')}</td>)}
                     {config.statusField && (
                       <td onClick={e => e.stopPropagation()}>
                         <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>

@@ -224,6 +224,17 @@ export const MODULES = {
     ],
     bulkSyncNote: 'שים לב: הזמנות מהאתר מסונכרנות מחדש — סטטוס ישתנה חזרה לפי האתר, והזמנה שנמחקה תחזור בסנכרון הבא.',
     modalWide: true,
+    // מלאי קיים לכל מוצר, כדי להציג אותו ליד כל שורת הזמנה (מקושר לפי מק"ט כמו ב-view של המלאי, ואם אין — לפי המוצר)
+    extraLoad: async supabase => {
+      const [{ data: prods }, { data: stock }] = await Promise.all([
+        supabase.from('products').select('id, sku'),
+        supabase.from('product_stock').select('product_id, stock'),
+      ])
+      const byId = new Map((stock || []).map(r => [r.product_id, Number(r.stock) || 0]))
+      const bySku = new Map()
+      for (const p of prods || []) if (p.sku && !bySku.has(p.sku)) bySku.set(p.sku, byId.get(p.id) ?? 0)
+      return { byId, bySku }
+    },
     fields: [
       // מוצר/מחיר/כמות מסונכרנים מהאתר — מוצגים לעריכה רק בהזמנה ידנית
       { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true, manualOnly: true },
@@ -280,6 +291,15 @@ export const MODULES = {
           const units = row.lines.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
           return row.lines.length + (units > row.lines.length ? ` (${units} יח')` : '')
         },
+      },
+      {
+        // מלאי קיים = נקלט - נמכר (לפי מק"ט), כמו בעמוד המלאי
+        key: 'stock_left',
+        label: 'מלאי קיים',
+        render: (row, nav, extra) => row.lines.map(l => {
+          const v = extra ? (l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)) : undefined
+          return <div key={l.id}>{v === undefined ? '—' : <span className={v <= 0 ? 'neg' : ''}>{v}</span>}</div>
+        }),
       },
       { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },
       { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
