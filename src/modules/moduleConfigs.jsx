@@ -230,7 +230,7 @@ export const MODULES = {
       { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true, manualOnly: true },
       { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true, manualOnly: true },
       { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true, manualOnly: true },
-      { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES], default: 'נקלט ובטיפול' },
+      { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES] },
       { key: 'notes', label: 'הערות על ההזמנה (מה קורה איתה)', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)

@@ -146,7 +146,7 @@ create table if not exists orders (
   wc_line_item_id bigint unique,
   order_number text,
   wc_status text,                        -- ריק = הזמנה ידנית
-  handling_status text default 'נקלט ובטיפול',  -- סטטוס טיפול פנימי (לא מסונכרן)
+  handling_status text,                  -- סטטוס טיפול פנימי (לא מסונכרן), ריק עד שבוחרים
   product_name text,
   sku text default '',
   order_date timestamptz default now(),
