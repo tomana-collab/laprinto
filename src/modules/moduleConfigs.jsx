@@ -305,14 +305,6 @@ export const MODULES = {
       // מכירה = הסכום ששולם בפועל, כבר אחרי הנחת קופון
       { key: 'total_amount', label: 'מכירה', render: row => `₪${calcOrder(row).sale}` },
       {
-        key: 'discount',
-        label: 'הנחת קופון',
-        render: row => {
-          const { discount } = calcOrder(row)
-          return discount > 0 ? <span className="neg" title={row.coupons || ''}>−₪{discount}</span> : '—'
-        },
-      },
-      {
         key: 'cost',
         label: 'עלות (כולל מע"מ)',
         render: row => {
@@ -320,7 +312,6 @@ export const MODULES = {
           return cost === null ? <span title={`חסרה עלות: ${missing.join(', ')}`}>—</span> : `₪${cost}`
         },
       },
-      { key: 'fee', label: 'עמלת סליקה', render: row => `₪${calcOrder(row).fee}` },
       // רווח נטו בסוף: מכירה (אחרי קופון) - עלות - עמלה
       {
         key: 'profit',
