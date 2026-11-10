@@ -110,7 +110,7 @@ export default function Inventory() {
           </button>
         </div>
       </div>
-      {countMode && <div className="summary-row" style={{ padding: '8px 12px', gridTemplateColumns: '1fr' }}>
+      {countMode && <div className="summary-row" style={{ padding: '8px 12px', display: 'block' }}>
         מצב ספירה: הזן בעמודה "ספירה בפועל" כמה יש לך במחסן. מוצר שלא תזין לו כמות לא ישתנה. אפשר לסנן לפי קטגוריה (למשל סביבונים) ואז לשמור.
       </div>}
       {error && <div className="err-inline">{error}</div>}

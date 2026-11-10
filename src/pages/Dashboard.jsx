@@ -125,7 +125,7 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-        <div className="summary-row" style={{ marginBottom: 0, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <div className="summary-row wide" style={{ marginBottom: 0 }}>
           <div className="summary-card"><span>הכנסות (מכירות כולל מע"מ)</span><b className="pos">₪{periodIncome.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
           <div className="summary-card"><span>הוצאות</span><b className="neg">₪{periodExpenses.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
           <div className="summary-card"><span>הכנסות פחות הוצאות</span><b className={periodBalance >= 0 ? 'pos' : 'neg'}>₪{periodBalance.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
