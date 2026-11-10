@@ -153,7 +153,8 @@ export default function GenericModule({ config, focusId = null }) {
   if (rows === null) return <div className="loading">טוען {config.label}...</div>
 
   // הזמנות: שורות פריט מאותה הזמנת אתר מאוחדות להזמנה אחת
-  const viewRows = config.groupOrders ? groupOrders(rows) : rows
+  const baseRows = config.rowFilter ? rows.filter(config.rowFilter) : rows
+  const viewRows = config.groupOrders ? groupOrders(baseRows) : baseRows
 
   let filtered = (config.statusField && statusFilter !== 'הכל')
     ? viewRows.filter(r => r[config.statusField] === statusFilter)

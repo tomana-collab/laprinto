@@ -4,6 +4,8 @@
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrder } from '../lib/pricing'
 
+const SHOWN_ORDER_STATUSES = ['processing', 'completed']
+const SHOWN_ORDER_LABELS = Object.fromEntries(SHOWN_ORDER_STATUSES.map(k => [k, ORDER_STATUS_LABELS[k]]))
 const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / אריזה', 'יצא למשלוח', 'הגיע ללקוח']
 
 export const MODULES = {
@@ -220,8 +222,10 @@ export const MODULES = {
     bulkNoun: 'הזמנות',
     bulkStatus: [
       { field: 'handling_status', prompt: 'סטטוס טיפול ל...', labels: Object.fromEntries(HANDLING_STATUSES.map(h => [h, h])) },
-      { field: 'wc_status', labels: ORDER_STATUS_LABELS },
+      { field: 'wc_status', labels: SHOWN_ORDER_LABELS },
     ],
+    // ב-CRM מוצגות רק הזמנות בטיפול / שהושלמו (והזמנות ידניות). ממתינות לתשלום, מבוטלות וכו' לא נמשכות ולא מוצגות
+    rowFilter: r => !r.wc_status || SHOWN_ORDER_STATUSES.includes(r.wc_status),
     bulkSyncNote: 'שים לב: הזמנות מהאתר מסונכרנות מחדש — סטטוס ישתנה חזרה לפי האתר, והזמנה שנמחקה תחזור בסנכרון הבא.',
     modalWide: true,
     // מלאי קיים לכל מוצר, כדי להציג אותו ליד כל שורת הזמנה (מקושר לפי מק"ט כמו ב-view של המלאי, ואם אין — לפי המוצר)
@@ -255,13 +259,13 @@ export const MODULES = {
     filters: [
       // ברירת מחדל: רק הזמנות פתוחות (בטיפול / ממתינות לתשלום / בהמתנה). הזמנה ידנית נחשבת סגורה
       { key: 'view', type: 'preset', options: [
-        { value: 'open', label: 'הזמנות פתוחות', test: r => ['processing', 'pending', 'on-hold'].includes(r.wc_status) },
+        { value: 'open', label: 'בטיפול', test: r => r.wc_status === 'processing' },
         { value: 'completed', label: 'הושלמו / ידניות', test: r => !r.wc_status || r.wc_status === 'completed' },
         { value: 'all', label: 'הצג את כל ההזמנות' },
       ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
       { key: 'handling_status', label: 'כל סטטוסי הטיפול', type: 'values' },
-      { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: ORDER_STATUS_LABELS },
+      { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: SHOWN_ORDER_LABELS },
     ],
     // מספר הזמנה ופרטים מלאים — בתוך חלון העריכה בלבד
     columns: [

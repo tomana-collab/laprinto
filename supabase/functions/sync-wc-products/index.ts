@@ -272,6 +272,20 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
   const productByWcId = new Map<number, string>()
   for (const p of products || []) productByWcId.set(Number(p.wc_product_id), p.id)
 
+  // ב-CRM מוצגות רק הזמנות בטיפול / שהושלמו. אחרות (ממתינה לתשלום, מבוטלת...) לא נשמרות;
+  // הזמנה קיימת שהשתנה סטטוס שלה רק מעדכנת את הסטטוס (ומוסתרת מהתצוגה), כדי שלא תישאר "בטיפול" בטעות
+  const KEEP = ['processing', 'completed']
+  const droppedByStatus = new Map<string, number[]>()
+  for (const o of wcOrders) {
+    if (KEEP.includes(o.status)) continue
+    droppedByStatus.set(o.status, [...(droppedByStatus.get(o.status) || []), o.id])
+  }
+  for (const [st, ids] of droppedByStatus) {
+    for (let i = 0; i < ids.length; i += 100) {
+      await admin.from('orders').update({ wc_status: st }).in('wc_order_id', ids.slice(i, i + 100))
+    }
+  }
+
   const { data: existingRows } = await admin.from('orders').select('wc_line_item_id').not('wc_line_item_id', 'is', null)
   const existingIds = new Set((existingRows || []).map((r: any) => Number(r.wc_line_item_id)))
 
@@ -298,6 +312,7 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
 
   const rows: any[] = []
   for (const o of wcOrders) {
+    if (!KEEP.includes(o.status)) continue
     for (const li of o.line_items || []) {
       const qty = Number(li.quantity) || 1
       rows.push({
