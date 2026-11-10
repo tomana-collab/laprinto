@@ -232,7 +232,7 @@ export const MODULES = {
       { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true, manualOnly: true },
       { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES], default: 'נקלט ובטיפול' },
       { key: 'received_by', label: 'מי קיבל', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
-      { key: 'notes', label: 'הערות', type: 'textarea' },
+      { key: 'notes', label: 'הערות על ההזמנה (מה קורה איתה)', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
     isOrder: true,
@@ -300,6 +300,9 @@ export const MODULES = {
       },
       { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },
       { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
+      { key: 'notes', label: 'הערות', render: row => row.notes
+        ? <span title={row.notes} style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{row.notes}</span>
+        : '—' },
       { key: 'wc_status', label: 'סטטוס באתר', render: row => row.wc_status ? (ORDER_STATUS_LABELS[row.wc_status] || row.wc_status) : 'ידנית' },
       // מכירה = הסכום ששולם בפועל, כבר אחרי הנחת קופון
       { key: 'total_amount', label: 'מכירה', render: row => `₪${calcOrder(row).sale}` },
