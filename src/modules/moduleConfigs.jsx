@@ -231,7 +231,6 @@ export const MODULES = {
       { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true, manualOnly: true },
       { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true, manualOnly: true },
       { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES], default: 'נקלט ובטיפול' },
-      { key: 'received_by', label: 'מי קיבל', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
       { key: 'notes', label: 'הערות על ההזמנה (מה קורה איתה)', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
