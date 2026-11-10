@@ -5,6 +5,8 @@ import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrder } from '../lib/pricing'
 import { wpProductEditUrl } from '../lib/site'
 
+const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / אריזה', 'יצא למשלוח', 'הגיע ללקוח']
+
 export const MODULES = {
   tasks: {
     key: 'tasks',
@@ -217,7 +219,10 @@ export const MODULES = {
     // בחירה מרובה + פעולות בכמות (מחיקה / עדכון סטטוס)
     bulk: true,
     bulkNoun: 'הזמנות',
-    bulkStatus: { field: 'wc_status', labels: ORDER_STATUS_LABELS },
+    bulkStatus: [
+      { field: 'handling_status', prompt: 'סטטוס טיפול ל...', labels: Object.fromEntries(HANDLING_STATUSES.map(h => [h, h])) },
+      { field: 'wc_status', labels: ORDER_STATUS_LABELS },
+    ],
     bulkSyncNote: 'שים לב: הזמנות מהאתר מסונכרנות מחדש — סטטוס ישתנה חזרה לפי האתר, והזמנה שנמחקה תחזור בסנכרון הבא.',
     modalWide: true,
     fields: [
@@ -225,6 +230,7 @@ export const MODULES = {
       { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true, manualOnly: true },
       { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true, manualOnly: true },
       { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true, manualOnly: true },
+      { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES], default: 'נקלט ובטיפול' },
       { key: 'received_by', label: 'מי קיבל', type: 'relation', relation: { table: 'team_members', labelField: 'full_name' } },
       { key: 'notes', label: 'הערות', type: 'textarea' },
     ],
@@ -245,6 +251,7 @@ export const MODULES = {
         { value: 'all', label: 'הצג את כל ההזמנות' },
       ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
+      { key: 'handling_status', label: 'כל סטטוסי הטיפול', type: 'values' },
       { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: ORDER_STATUS_LABELS },
     ],
     // מספר הזמנה ופרטים מלאים — בתוך חלון העריכה בלבד
@@ -292,6 +299,7 @@ export const MODULES = {
         },
       },
       { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },
+      { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
       { key: 'wc_status', label: 'סטטוס באתר', render: row => row.wc_status ? (ORDER_STATUS_LABELS[row.wc_status] || row.wc_status) : 'ידנית' },
       // מכירה = הסכום ששולם בפועל, כבר אחרי הנחת קופון
       { key: 'total_amount', label: 'מכירה', render: row => `₪${calcOrder(row).sale}` },

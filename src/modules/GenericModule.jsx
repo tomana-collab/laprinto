@@ -137,11 +137,12 @@ export default function GenericModule({ config, focusId = null }) {
     if (error) { setError(error.message); return }
     setSelected(new Set()); load()
   }
-  async function bulkSetStatus(list, status) {
+  const bulkStatuses = [].concat(config.bulkStatus || [])
+  async function bulkSetStatus(list, status, bs) {
     if (!status) return
-    const label = config.bulkStatus.labels?.[status] || status
+    const label = bs.labels?.[status] || status
     if (!window.confirm(`לעדכן ${list.length} ${config.bulkNoun || 'רשומות'} לסטטוס "${label}"?${config.bulkSyncNote ? `\n${config.bulkSyncNote}` : ''}`)) return
-    const { error } = await supabase.from(config.table).update({ [config.bulkStatus.field]: status === 'true' ? true : status === 'false' ? false : status }).in('id', list.flatMap(idsOf))
+    const { error } = await supabase.from(config.table).update({ [bs.field]: status === 'true' ? true : status === 'false' ? false : status }).in('id', list.flatMap(idsOf))
     if (error) { setError(error.message); return }
     setSelected(new Set()); load()
   }
@@ -296,12 +297,12 @@ export default function GenericModule({ config, focusId = null }) {
       {bulk && selectedRows.length > 0 && (
         <div className="bulk-bar">
           <b>נבחרו {selectedRows.length}</b>
-          {config.bulkStatus && (
-            <select value="" onChange={e => bulkSetStatus(selectedRows, e.target.value)}>
-              <option value="">{config.bulkStatus.prompt || 'עדכון סטטוס ל...'}</option>
-              {Object.entries(config.bulkStatus.labels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          {bulkStatuses.map(bs => (
+            <select key={bs.field} value="" onChange={e => bulkSetStatus(selectedRows, e.target.value, bs)}>
+              <option value="">{bs.prompt || 'עדכון סטטוס ל...'}</option>
+              {Object.entries(bs.labels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-          )}
+          ))}
           <button className="btn-add" onClick={() => bulkDelete(selectedRows)}>מחיקה</button>
           <button className="btn-add" onClick={() => setSelected(new Set())}>ביטול בחירה</button>
         </div>
