@@ -302,7 +302,6 @@ export const MODULES = {
       { key: 'notes', label: 'הערות', render: row => row.notes
         ? <span title={row.notes} style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{row.notes}</span>
         : '—' },
-      { key: 'wc_status', label: 'סטטוס באתר', render: row => row.wc_status ? (ORDER_STATUS_LABELS[row.wc_status] || row.wc_status) : 'ידנית' },
       // מכירה = הסכום ששולם בפועל, כבר אחרי הנחת קופון
       { key: 'total_amount', label: 'מכירה', render: row => `₪${calcOrder(row).sale}` },
       {
