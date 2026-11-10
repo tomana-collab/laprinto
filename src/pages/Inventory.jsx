@@ -78,14 +78,25 @@ export default function Inventory() {
     setCountMode(false); setCounts({}); load()
   }
 
-  const shown = useMemo(() => (rows || []).filter(r => {
+  // כפתורי סינון מהיר. "במלאי" = יש יחידות (מלאי חיובי)
+  const FILTERS = [
+    { key: 'all', label: 'הכל', test: () => true },
+    { key: 'instock', label: 'במלאי', test: r => r.stock > 0 },
+    { key: 'unsold', label: 'במלאי ללא מכירה', test: r => r.stock > 0 && r.sold_total === 0 },
+    { key: 'sold', label: 'נמכר', test: r => r.sold_total > 0 },
+    { key: 'order', label: 'חסר — להזמין', test: r => status(r).key === 'order' },
+    { key: 'incoming', label: 'בהמתנה לאספקה', test: r => status(r).key === 'incoming' },
+    { key: 'out', label: 'אזל', test: r => status(r).key === 'out' },
+    { key: 'low', label: 'מלאי נמוך', test: r => status(r).key === 'low' },
+  ]
+  // קטגוריה וחיפוש חלים על הכול, כך שגם המספרים על הכפתורים מתעדכנים
+  const base = useMemo(() => (rows || []).filter(r => {
     if (category && r.category !== category) return false
-    if (filter === 'sold') { if (!(r.sold_total > 0)) return false }
-    else if (filter === 'unsold') { if (!(r.stock > 0 && r.sold_total === 0)) return false }
-    else if (filter !== 'all' && status(r).key !== filter) return false
     const t = q.trim().toLowerCase()
     return !t || r.name.toLowerCase().includes(t) || (r.sku || '').toLowerCase().includes(t)
-  }), [rows, filter, q, category])
+  }), [rows, q, category])
+  const activeTest = FILTERS.find(f => f.key === filter)?.test || (() => true)
+  const shown = base.filter(activeTest)
 
   if (rows === null) return <div className="loading">טוען מלאי...</div>
 
@@ -139,16 +150,15 @@ export default function Inventory() {
           <option value="">כל הקטגוריות</option>
           {[...new Set(rows.map(r => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <select value={filter} onChange={e => setFilter(e.target.value)}>
-          <option value="all">הכל</option>
-          <option value="unsold">במלאי ללא מכירה</option>
-          <option value="sold">נמכר (נמכרו יחידות)</option>
-          <option value="order">חסר — להזמין</option>
-          <option value="incoming">הוזמן, בהמתנה לאספקה</option>
-          <option value="out">אזל</option>
-          <option value="low">מלאי נמוך</option>
-          <option value="ok">במלאי</option>
-        </select>
+
+      </div>
+
+      <div className="status-filter">
+        {FILTERS.map(f => (
+          <button key={f.key} className={filter === f.key ? 'active' : ''} onClick={() => setFilter(f.key)}>
+            {f.label} <span style={{ opacity: 0.6 }}>({base.filter(f.test).length})</span>
+          </button>
+        ))}
       </div>
 
       <div className="table-wrap">
