@@ -3,7 +3,6 @@
 
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrder } from '../lib/pricing'
-import { wpProductEditUrl } from '../lib/site'
 
 const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / אריזה', 'יצא למשלוח', 'הגיע ללקוח']
 
@@ -269,21 +268,6 @@ export const MODULES = {
               {l.product_id
                 ? <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); nav.openRecord('products', l.product_id) }}>{label}</a>
                 : label}
-            </div>
-          )
-        }),
-      },
-      {
-        // לחיצה על מק"ט פותחת את עריכת המוצר באתר האמיתי (wp-admin)
-        key: 'sku',
-        label: 'מק"ט',
-        render: row => row.lines.map(l => {
-          const href = wpProductEditUrl(l.products?.wc_product_id)
-          return (
-            <div key={l.id}>
-              {l.sku && href
-                ? <a href={href} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{l.sku}</a>
-                : (l.sku || '—')}
             </div>
           )
         }),
