@@ -96,6 +96,24 @@ export default function Competitors() {
   )
 }
 
+// סינון לפי מצב המוצר במעקב המתחרים
+const STATE_LABELS = {
+  none: 'ללא מתחרים',
+  research: 'ממתינים למחקר',
+  pending: 'התאמה ממתינה לאישור',
+  approved: 'התאמה מאושרת',
+  rejected: 'התאמה שנדחתה',
+  scan_failed: 'סריקת מחיר נכשלה',
+}
+const STATE_TESTS = {
+  none: r => r.offers.length === 0,
+  research: r => r.research,
+  pending: r => r.offers.some(o => o.review_status === 'pending'),
+  approved: r => r.offers.some(o => o.review_status === 'approved'),
+  rejected: r => r.rejected.length > 0,
+  scan_failed: r => r.offers.some(o => o.review_status === 'approved' && o.last_scan && o.last_scan !== 'success'),
+}
+
 function ComparisonView({ onChanged }) {
   const [stores, setStores] = useState(null)       // חנויות פעילות (עמודות בטבלה)
   const [allStores, setAllStores] = useState([])   // כולל לא פעילות, לניהול
@@ -105,18 +123,24 @@ function ComparisonView({ onChanged }) {
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
   const [loadedAt, setLoadedAt] = useState(null)
-  const [f, setF] = useState({ q: '', cat: '', sub: '', store: '', pricier: false, noCost: false, exact: false, withOffers: false, sort: 'name' })
+  const [f, setF] = useState({ q: '', cat: '', sub: '', store: '', pricier: false, noCost: false, exact: false, withOffers: false, state: '', sort: 'name' })
   const [openId, setOpenId] = useState(null)
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
   const open = openId ? (rows || []).find(r => r.id === openId) : null
 
   async function load() {
     setError('')
-    const [m, s, p] = await Promise.all([
+    const [m, s, p, pr, sa] = await Promise.all([
       supabase.from('v_competitor_matrix').select('*'),
       supabase.from('competitor_stores').select('id, name, domain, enabled, priority').order('priority'),
       supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url, image_url'),
+      // מוצרים שממתינים למחקר מתחרים, והניסיון האחרון של סריקת מחיר לכל התאמה (לסינון "סריקה נכשלה")
+      supabase.from('v_products_pending_research').select('id'),
+      supabase.from('competitor_scan_attempts').select('offer_id, result, attempted_at').order('attempted_at', { ascending: false }).limit(1000),
     ])
+    const pendingResearch = new Set((pr.data || []).map(x => x.id))
+    const lastScan = new Map()
+    for (const a of sa.data || []) if (!lastScan.has(a.offer_id)) lastScan.set(a.offer_id, a.result)
     const err = [m, s, p].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); setStores([]); return }
     setStores(s.data.filter(x => x.enabled !== false))
@@ -137,7 +161,7 @@ function ComparisonView({ onChanged }) {
           cost: num(pr.cost ?? r.supplier_cost), cost_with_vat: num(pr.cost_with_vat ?? r.cost_with_vat),
           extra_expenses: num(pr.extra_expenses), price: num(pr.price ?? r.my_price),
           profit: num(pr.profit ?? r.calculated_profit), margin: num(pr.margin_percent ?? r.calculated_margin_percent),
-          offers: [], rejected: [],
+          offers: [], rejected: [], research: pendingResearch.has(r.product_id),
         }
         byProduct.set(r.product_id, row)
       }
@@ -150,6 +174,7 @@ function ComparisonView({ onChanged }) {
         note: r.observation_note, variant_notes: r.variant_notes, engraving_notes: r.engraving_notes,
         package_notes: r.package_notes, shipping_notes: r.shipping_notes,
         collection_method: r.collection_method, price_scan_enabled: r.price_scan_enabled, entry_method: r.entry_method,
+        last_scan: lastScan.get(r.offer_id) || null,
       })
     }
     const list = [...byProduct.values()].filter(r => !parents.has(r.wc_product_id) || r.offers.length)
@@ -208,6 +233,7 @@ function ComparisonView({ onChanged }) {
       if ((f.store || f.exact || f.withOffers) && !offers.length) return false
       if (f.pricier && !offers.some(o => gap(o, r.price)?.diff < 0 && isFinal(o))) return false
       if (f.noCost && hasCost(r)) return false
+      if (f.state && !STATE_TESTS[f.state](r)) return false
       return true
     })
     const by = {
@@ -232,7 +258,7 @@ function ComparisonView({ onChanged }) {
   const iAmCheapest = rows.filter(r => r.lowestGap && r.lowestGap.diff > 0)
   const missingCost = rows.filter(r => !hasCost(r))
   const activeStores = new Set(rows.flatMap(r => r.offers.filter(isFinal).map(o => o.store_id)))
-  const anyFilter = f.q || f.cat || f.sub || f.store || f.pricier || f.noCost || f.exact || f.withOffers
+  const anyFilter = f.q || f.cat || f.sub || f.store || f.pricier || f.noCost || f.exact || f.withOffers || f.state
 
   return (
     <div>
@@ -246,6 +272,8 @@ function ComparisonView({ onChanged }) {
       </div>
       {error && <div className="err-inline">{error}</div>}
 
+      <JobStatusBox pendingMatches={awaiting.length} onSynced={load} />
+      <StoreCandidates onApproved={st => storeSaved(st)} />
       <ScanPanel rows={rows} onDone={load} />
 
       <div className="cmp-kpis">
@@ -271,6 +299,10 @@ function ComparisonView({ onChanged }) {
           <option value="">כל המתחרים</option>
           {(stores || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        <select value={f.state} onChange={e => set('state', e.target.value)}>
+          <option value="">כל המצבים</option>
+          {Object.entries(STATE_LABELS).map(([k, l]) => <option key={k} value={k}>{l} ({rows.filter(STATE_TESTS[k]).length})</option>)}
+        </select>
         <select value={f.sort} onChange={e => set('sort', e.target.value)}>
           <option value="name">מיון: שם מוצר</option>
           <option value="gap">מיון: מתחרה הכי זול ממני</option>
@@ -285,7 +317,7 @@ function ComparisonView({ onChanged }) {
           <Chip on={f.pricier} onClick={() => set('pricier', !f.pricier)}>אני יקר יותר</Chip>
           <Chip on={f.exact} onClick={() => set('exact', !f.exact)}>התאמות מדויקות בלבד</Chip>
           <Chip on={f.noCost} onClick={() => set('noCost', !f.noCost)}>ללא עלות ספק</Chip>
-          {anyFilter && <button className="link-btn" onClick={() => setF(s => ({ q: '', cat: '', sub: '', store: '', pricier: false, noCost: false, exact: false, withOffers: false, sort: s.sort }))}>ניקוי סינון</button>}
+          {anyFilter && <button className="link-btn" onClick={() => setF(s => ({ q: '', cat: '', sub: '', store: '', pricier: false, noCost: false, exact: false, withOffers: false, state: '', sort: s.sort }))}>ניקוי סינון</button>}
         </div>
       </div>
 
@@ -439,6 +471,24 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
   const [err, setErr] = useState('')
   const [mode, setMode] = useState({}) // offer_id → 'edit' | 'price'
   const [notice, setNotice] = useState({}) // offer_id → { ok, text }
+  const [scanning, setScanning] = useState(null) // offer_id שנסרק כרגע
+
+  // סריקת מחיר אמיתית להתאמה אחת (אותה Edge Function של הסריקה היומית)
+  async function scanOne(o) {
+    setScanning(o.offer_id); setNotice(x => ({ ...x, [o.offer_id]: null }))
+    const { data, error } = await invokeScan({ offer_id: o.offer_id })
+    setScanning(null)
+    const res = data?.results?.[0]
+    if (error || !res) { setNotice(x => ({ ...x, [o.offer_id]: { ok: false, text: error || 'ההתאמה לא נמצאה ברשימת הסריקה' } })); return }
+    if (res.result === 'success' && res.price != null) {
+      onPatch(o.offer_id, { price: Number(res.price), checked_at: new Date().toISOString(), collection_method: 'direct_product_page', last_scan: 'success' })
+      setNotice(x => ({ ...x, [o.offer_id]: { ok: true, text: `נסרק: ${ils(res.price)}` } }))
+      loadChecks()
+    } else {
+      onPatch(o.offer_id, { last_scan: res.result })
+      setNotice(x => ({ ...x, [o.offer_id]: { ok: false, text: `הסריקה לא הצליחה: ${RESULT_LABEL[res.result] || res.result}. המחיר האחרון נשמר.` } }))
+    }
+  }
   const setOfferMode = (id, m) => setMode(x => ({ ...x, [id]: m }))
   const storeName = id => stores.find(s => s.id === id)?.name || row.offers.find(o => o.store_id === id)?.store_name || '—'
 
@@ -542,6 +592,9 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
                       <div className="cmp-offer-tools">
                         <button className="cmp-tool" onClick={() => { setNotice(x => ({ ...x, [o.offer_id]: null })); setOfferMode(o.offer_id, 'edit') }}>✎ עריכה</button>
                         {o.review_status !== 'rejected' && <button className="cmp-tool" onClick={() => { setNotice(x => ({ ...x, [o.offer_id]: null })); setOfferMode(o.offer_id, 'price') }}>₪ עדכן מחיר</button>}
+                        {o.review_status === 'approved' && o.price_scan_enabled !== false && (
+                          <button className="cmp-tool" disabled={scanning === o.offer_id} onClick={() => scanOne(o)}>{scanning === o.offer_id ? 'סורק…' : '⟳ סרוק מחיר'}</button>
+                        )}
                       </div>
                     </>
                   )}
@@ -1094,6 +1147,118 @@ function StoreEditModal({ store, stores, onCancel, onSaved }) {
   )
 }
 
+// ---------- סטטוס משימות אוטומטיות ----------
+// מקור: job_runs (נכתב ע"י ה-Edge Functions והתזמונים במסד). הכפתור מפעיל סנכרון אמיתי מול WooCommerce.
+const JOB_STATUS = { success: 'הצליח', partial: 'הצליח חלקית', failed: 'נכשל', running: 'רץ כעת' }
+
+function JobStatusBox({ pendingMatches, onSynced }) {
+  const [jobs, setJobs] = useState(null) // { wc_sync, price_scan, health_check }
+  const [tracked, setTracked] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null) // { ok, text }
+
+  async function loadJobs() {
+    const [j, t] = await Promise.all([
+      supabase.from('job_runs').select('job_type, status, trigger, started_at, finished_at, records_total, success_count, failure_count, next_run_at').order('started_at', { ascending: false }).limit(30),
+      supabase.from('v_competitor_price_targets').select('product_id'),
+    ])
+    if (j.error) { setJobs({}); return }
+    const latest = {}
+    for (const r of j.data) if (!latest[r.job_type]) latest[r.job_type] = r
+    setJobs(latest)
+    if (!t.error) setTracked(new Set(t.data.map(x => x.product_id)).size)
+  }
+  useEffect(() => { loadJobs() }, [])
+
+  async function syncNow() {
+    setBusy(true); setMsg(null)
+    const { data, error } = await supabase.functions.invoke('sync-wc-products', { body: { target: 'products' } })
+    setBusy(false)
+    let text = error?.message
+    if (error?.context?.json) { try { text = (await error.context.json())?.error || text } catch {} }
+    if (error || data?.error) setMsg({ ok: false, text: `הסנכרון נכשל: ${text || data?.error}` })
+    else {
+      const p = data?.products
+      setMsg({ ok: !p?.errors?.length, text: p ? `סונכרנו ${p.total} מוצרים (${p.inserted} חדשים, ${p.updated} עודכנו${p.errors.length ? `, ${p.errors.length} שגיאות` : ''})` : 'הסנכרון הסתיים' })
+      onSynced?.()
+    }
+    loadJobs()
+  }
+
+  if (!jobs) return null
+  const sync = jobs.wc_sync, scan = jobs.price_scan
+  const when = r => r ? <span dir="ltr">{formatDateTime(r.finished_at || r.started_at)}</span> : 'עדיין לא רץ'
+  const bad = [sync, scan].some(r => r && r.status === 'failed')
+  return (
+    <div className={`cmp-scan ${bad ? 'is-warn' : ''}`}>
+      <div className="cmp-scan-head">
+        <div>
+          <b>סנכרון וסריקה אוטומטיים</b>
+          <div className="cmp-sub">סנכרון מוצרים כל יום ב-06:00 · סריקת מחירים ב-08:00 · בדיקת תקינות ב-09:00</div>
+        </div>
+        <button className="btn-add" onClick={syncNow} disabled={busy}>{busy ? 'מסנכרן…' : '⟳ סנכרן מוצרים עכשיו'}</button>
+      </div>
+      <div className="cmp-scan-stats">
+        <span>סנכרון אחרון: <b>{when(sync)}</b>{sync && <> ({JOB_STATUS[sync.status] || sync.status})</>}</span>
+        <span>סריקה אחרונה: <b>{when(scan)}</b>{scan && <> ({JOB_STATUS[scan.status] || scan.status})</>}</span>
+        <span>סריקה הבאה: <b>{scan?.next_run_at ? <span dir="ltr">{formatDateTime(scan.next_run_at)}</span> : 'מחר ב-08:00'}</b></span>
+        <span>מוצרים במעקב: <b>{tracked ?? '…'}</b></span>
+        {scan && <span className="pos">הצלחות בסריקה: <b>{scan.success_count ?? 0}</b></span>}
+        {scan && <span className={scan.failure_count ? 'neg' : ''}>שגיאות בסריקה: <b>{scan.failure_count ?? 0}</b></span>}
+        <span>התאמות ממתינות: <b>{pendingMatches}</b></span>
+      </div>
+      {msg && <div className={`cmp-scan-msg ${msg.ok ? 'ok' : 'warn'}`}>{msg.text}</div>}
+    </div>
+  )
+}
+
+// ---------- חנויות מתחרות שהוצעו במחקר ----------
+// מקור: competitor_store_candidates. אישור = הוספה ל-competitor_stores (רק אדמין, לפי ה-RLS הקיים). דחייה לא מוחקת.
+function StoreCandidates({ onApproved }) {
+  const [items, setItems] = useState([])
+  const [busy, setBusy] = useState(null)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    supabase.from('competitor_store_candidates').select('id, name, domain, evidence_url, notes').eq('status', 'pending').order('created_at')
+      .then(({ data }) => setItems(data || [])) // הטבלה עדיין לא קיימת / אין הרשאה → פשוט לא מציגים
+  }, [])
+
+  async function decide(c, approve) {
+    setBusy(c.id); setErr('')
+    if (approve) {
+      const { data, error } = await supabase.from('competitor_stores').insert({ name: c.name, domain: c.domain }).select('id, name, domain, enabled, priority').single()
+      if (error) { setBusy(null); setErr(`${c.name}: ${error.message}`); return }
+      onApproved?.(data)
+    }
+    const { error } = await supabase.from('competitor_store_candidates').update({ status: approve ? 'approved' : 'rejected', reviewed_at: new Date().toISOString() }).eq('id', c.id)
+    setBusy(null)
+    if (error) { setErr(`${c.name}: ${error.message}`); return }
+    setItems(list => list.filter(x => x.id !== c.id))
+  }
+
+  if (!items.length) return null
+  return (
+    <div className="cmp-scan is-running">
+      <b>חנויות מתחרות חדשות שהוצעו במחקר ({items.length})</b>
+      {err && <div className="err-inline">{err}</div>}
+      {items.map(c => (
+        <div key={c.id} className="cmp-scan-head">
+          <div>
+            <b>{c.name}</b> <span dir="ltr" className="cmp-sub">{c.domain}</span>
+            {c.notes && <div className="cmp-sub">{c.notes}</div>}
+            {c.evidence_url && <a className="cmp-sub" href={c.evidence_url} target="_blank" rel="noopener noreferrer">דוגמה למוצר ↗</a>}
+          </div>
+          <div className="cmp-offer-tools">
+            <button className="cmp-tool" disabled={busy === c.id} onClick={() => decide(c, true)}>✓ הוספה למתחרים</button>
+            <button className="cmp-tool" disabled={busy === c.id} onClick={() => decide(c, false)}>✕ דחייה</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ---------- סנכרון מחירים ידני ----------
 // מפעיל את competitor-price-scan הקיימת בקבוצות קטנות לפי next_after. הסריקה עצמה רק מוסיפה תצפיות מחיר
 // על קישורים מאושרים (v_competitor_price_targets) — הממשק לא נוגע ב-competitor_offers בזמן סנכרון.
@@ -1119,7 +1284,7 @@ async function invokeScan(body) {
     return { error: e.message || 'הבקשה לפונקציית הסריקה נכשלה' }
   }
 }
-const RESULT_LABEL = { success: 'הצליח', failed: 'נכשל', error: 'שגיאה', blocked: 'נחסם', no_price: 'לא זוהה מחיר', not_found: 'העמוד לא נמצא', timeout: 'פג זמן' }
+const RESULT_LABEL = { success: 'הצליח', failed: 'נכשל', error: 'שגיאה', blocked: 'נחסם', no_price: 'לא זוהה מחיר', not_found: 'העמוד לא נמצא', not_available: 'המוצר לא זמין', invalid_page: 'עמוד לא תקין', http_error: 'שגיאת שרת', timeout: 'פג זמן' }
 
 function ScanPanel({ rows, onDone }) {
   const [total, setTotal] = useState(null)

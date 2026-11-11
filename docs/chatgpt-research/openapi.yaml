@@ -1,0 +1,69 @@
+openapi: 3.1.0
+info:
+  title: Laprinto Competitor Research API
+  version: "1.0"
+  description: Restricted API for competitor research. Products and competitors only. No orders, customers, costs or profit.
+servers:
+  - url: https://oicyoddiruiryktaupem.supabase.co/functions/v1
+paths:
+  /competitor-research-api:
+    post:
+      operationId: research
+      summary: Run one research action (see the action field)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [list_categories, list_products, get_product, list_stores, claim_batch, progress, add_candidate, record_price, propose_store, mark_researched]
+                category: { type: string, description: "list_products, claim_batch: filter by category name" }
+                search: { type: string, description: "list_products: product name or SKU" }
+                research_status: { type: string, enum: [pending, partial, researched, no_competitors, all], description: "list_products (default pending = waiting for research now)" }
+                limit: { type: integer, description: "list_products: 1-50" }
+                offset: { type: integer }
+                size: { type: integer, description: "claim_batch: 10-20 products" }
+                batch_id: { type: string, description: "progress: batch to report on" }
+                product_id: { type: string, description: "get_product, add_candidate, mark_researched" }
+                sku: { type: string, description: "get_product: alternative to product_id" }
+                store_id: { type: string, description: "add_candidate (optional; resolved from the URL domain if omitted)" }
+                product_url: { type: string, description: "add_candidate: https URL of the specific competitor product page" }
+                competitor_title: { type: string }
+                competitor_sku: { type: string }
+                competitor_image_url: { type: string }
+                match_type: { type: string, enum: [exact, variant, similar, candidate] }
+                confidence: { type: number, description: "0-1" }
+                variant_notes: { type: string, description: "only if the competitor item differs (color, size, engraving, pack size); omit for identical items" }
+                sku_verification_source: { type: string, enum: [unverified, product_page, url, structured_data] }
+                notes: { type: string, description: "add_candidate: why this is a match. mark_researched: summary. propose_store: about the store" }
+                evidence: { type: string }
+                offer_id: { type: string, description: "record_price" }
+                price: { type: number, description: "ILS including VAT, without shipping" }
+                price_source: { type: string, enum: [product_page, structured_data, store_api, search_result], description: "required for record_price; where exactly the price was seen" }
+                price_evidence: { type: string, description: "short quote / location of the price on the page" }
+                availability: { type: string, enum: [in_stock, out_of_stock, unknown] }
+                shipping_price: { type: number }
+                name: { type: string, description: "propose_store: store name" }
+                domain: { type: string, description: "propose_store: store domain" }
+                evidence_url: { type: string, description: "propose_store: https page showing a relevant product" }
+                status: { type: string, enum: [researched, partial, no_competitors], description: "mark_researched" }
+                stores_checked: { type: array, items: { type: string }, description: "mark_researched: ids of stores that were checked; no_competitors requires all enabled stores" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        "400": { description: Bad request }
+        "401": { description: Unauthorized }
+        "409": { description: Conflict }
+        "422": { description: Rejected by database rules }
+        "429": { description: Rate limited }
+components:
+  securitySchemes:
+    researchKey:
+      type: apiKey
+      in: header
+      name: x-research-key
+security:
+  - researchKey: []

@@ -8,6 +8,7 @@ import Receipts from './pages/Receipts'
 import Inventory from './pages/Inventory'
 import Competitors from './pages/Competitors'
 import Sidebar from './components/Sidebar'
+import JobAlert from './components/JobAlert'
 import GenericModule from './modules/GenericModule'
 import { MODULES } from './modules/moduleConfigs'
 import { NavProvider } from './contexts/NavContext'
@@ -60,6 +61,7 @@ export default function App() {
       />
       <main>
         <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)}>☰ תפריט</button>
+        <JobAlert />
         {active === 'settings' ? <Settings />
           : active === 'dashboard' ? <Dashboard />
           : active === 'bundles' ? <Bundles />

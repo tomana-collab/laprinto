@@ -39,6 +39,15 @@ const num = (v: unknown) => (v === '' || v === null || v === undefined || isNaN(
 const decode = (s: string) =>
   s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
+// קריאה מתוזמנת (pg_cron) מזוהה לפי סוד פנימי שנבדק מול ה-Vault במסד
+async function isCron(req: Request): Promise<boolean> {
+  const s = req.headers.get('x-cron-secret')
+  if (!s) return false
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+  const { data } = await admin.rpc('verify_cron_secret', { p: s })
+  return data === true
+}
+
 async function authorized(req: Request): Promise<boolean> {
   const secretHeader = req.headers.get('x-sync-secret')
   if (SYNC_SECRET && secretHeader && secretHeader === SYNC_SECRET) return true
@@ -127,13 +136,16 @@ function mainImage(wc: any, parent: any | null): string | null {
   return imageSrc(wc.images?.[0])
 }
 
+const plainText = (html: unknown) => decode(String(html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')).trim()
+const hasDims = (d: any) => !!d && [d.length, d.width, d.height].some(v => v !== '' && v != null)
+
 type Stats = { total: number; inserted: number; updated: number; errors: string[] }
 
 async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Stats> {
   const wcProducts = await fetchAllWcProducts()
   const catMap = await fetchAllWcCategories()
 
-  const { data: existing, error: existingErr } = await admin.from('products').select('id, name, wc_product_id, cost, supplier_id, supplier_url, supplier_discount_percent, extra_expenses')
+  const { data: existing, error: existingErr } = await admin.from('products').select('id, name, wc_product_id, wc_removed_at, cost, supplier_id, supplier_url, supplier_discount_percent, extra_expenses')
   if (existingErr) throw new Error(existingErr.message)
 
   const byWcId = new Map<number, any>()
@@ -179,6 +191,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
     }
   }
 
+  const seenWcIds = new Set<number>(wcProducts.map((p: any) => Number(p.id)))
   for (const { wc, name, parent } of items) {
     if (!name) continue
     const siteData = {
@@ -194,7 +207,21 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
       sale_price: num(wc.sale_price),
       synced_at: now,
       status: wc.status === 'publish' ? 'פעיל' : 'לא פעיל', // פעיל = מפורסם באתר
+      // פרטים למחקר מתחרים (תיאור, מידות, מאפיינים, תמונות, מלאי באתר)
+      description: plainText(wc.description || parent?.description).slice(0, 6000),
+      short_description: plainText(wc.short_description || parent?.short_description).slice(0, 2000),
+      images: [imageSrc(wc.image), ...((wc.images || parent?.images || []).map(imageSrc))].filter((v, i, a) => v && a.indexOf(v) === i),
+      attributes: (wc.attributes || []).map((a: any) => ({ name: decode(String(a.name || '')), value: a.option != null ? decode(String(a.option)) : (a.options || []).map((o: any) => decode(String(o))) })),
+      dimensions: hasDims(wc.dimensions) ? wc.dimensions : (hasDims(parent?.dimensions) ? parent.dimensions : null),
+      weight: String(wc.weight || parent?.weight || ''),
+      stock_status: wc.stock_status || null,
+      stock_quantity: num(wc.stock_quantity),
+      wc_type: parent ? 'variation' : String(wc.type || ''),
+      wc_categories: (wc.categories || []).map((c: any) => decode(String(c.name || ''))).filter(Boolean),
+      wc_modified_at: wc.date_modified_gmt ? `${wc.date_modified_gmt}Z` : null,
+      wc_removed_at: null,
     }
+    seenWcIds.add(Number(wc.id))
     const match = byWcId.get(wc.id) || unlinkedByName.get(name.toLowerCase())
     if (match) toUpdate.push({ id: match.id, data: siteData })
     else {
@@ -223,6 +250,15 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
       if (r.error) errors.push(`${chunk[idx].data.name || chunk[idx].id}: ${r.error.message}`)
       else updated++
     })
+  }
+
+  // מוצר שכבר לא קיים בחנות: מסומן כהוסר בלבד. לא נמחק, וכל ההיסטוריה וההתאמות שלו נשמרות
+  if (wcProducts.length > 0) {
+    const gone = (existing || []).filter((p: any) => p.wc_product_id && !seenWcIds.has(Number(p.wc_product_id)) && !p.wc_removed_at).map((p: any) => p.id)
+    for (let i = 0; i < gone.length; i += 100) {
+      const { error } = await admin.from('products').update({ wc_removed_at: now }).in('id', gone.slice(i, i + 100))
+      if (error) errors.push(`סימון מוצרים שהוסרו: ${error.message}`)
+    }
   }
 
   return { total: items.length, inserted, updated, errors }
@@ -351,7 +387,8 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
-  if (!(await authorized(req))) return json({ error: 'לא מורשה' }, 401)
+  const cron = await isCron(req)
+  if (!cron && !(await authorized(req))) return json({ error: 'לא מורשה' }, 401)
 
   if (!WC_SITE_URL || !WC_KEY || !WC_SECRET) {
     return json({ error: 'חסרים WC_SITE_URL / WC_CONSUMER_KEY / WC_CONSUMER_SECRET ב-secrets של הפרויקט' }, 500)
@@ -362,15 +399,51 @@ Deno.serve(async (req) => {
   if (!['products', 'orders', 'all'].includes(target)) return json({ error: 'target לא תקין' }, 400)
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
-  const result: Record<string, Stats> = {}
-  try {
-    // מוצרים קודם, כדי שהזמנות יקושרו למוצרים חדשים באותה ריצה
-    if (target === 'products' || target === 'all') result.products = await syncProducts(admin)
-    if (target === 'orders' || target === 'all') result.orders = await syncOrders(admin)
-  } catch (e) {
-    return json({ error: (e as Error).message }, 502)
+
+  // תיעוד הריצה ביומן המשימות + מניעת ריצה כפולה (אינדקס ייחודי על ריצה פעילה)
+  await admin.from('job_runs').update({ status: 'failed', finished_at: new Date().toISOString(), errors: [{ error: 'נתקעה ולא הסתיימה' }] })
+    .eq('job_type', 'wc_sync').eq('status', 'running').lt('started_at', new Date(Date.now() - 20 * 60 * 1000).toISOString())
+  const { data: run, error: runErr } = await admin.from('job_runs')
+    .insert({ job_type: 'wc_sync', trigger: cron ? 'cron' : 'manual', status: 'running', meta: { target } }).select('id').single()
+  if (runErr) {
+    if (runErr.code === '23505') return json({ error: 'סנכרון אחר כבר רץ כרגע. נסה שוב בעוד כמה דקות.' }, 409)
+    return json({ error: runErr.message }, 500)
   }
 
+  const work = async () => {
+    const result: Record<string, Stats> = {}
+    let fatal = ''
+    try {
+      // מוצרים קודם, כדי שהזמנות יקושרו למוצרים חדשים באותה ריצה
+      if (target === 'products' || target === 'all') result.products = await syncProducts(admin)
+      if (target === 'orders' || target === 'all') result.orders = await syncOrders(admin)
+    } catch (e) {
+      fatal = (e as Error).message
+    }
+    const all = Object.values(result)
+    const errs = [...all.flatMap(r => r.errors), ...(fatal ? [fatal] : [])]
+    const total = all.reduce((a, r) => a + r.total, 0)
+    await admin.from('job_runs').update({
+      status: fatal ? 'failed' : errs.length ? 'partial' : 'success',
+      finished_at: new Date().toISOString(),
+      records_total: total,
+      success_count: Math.min(total, all.reduce((a, r) => a + r.inserted + r.updated, 0)),
+      failure_count: errs.length,
+      errors: errs.slice(0, 50).map(e => ({ error: String(e).slice(0, 300) })),
+    }).eq('id', run.id)
+    return { result, fatal }
+  }
+
+  // ריצה מתוזמנת: עונים מיד והעבודה ממשיכה ברקע (ה-cron לא מחכה לתשובה)
+  if (cron) {
+    const p = work().catch(e => console.error('wc_sync', e))
+    // @ts-ignore EdgeRuntime קיים בסביבת Supabase
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(p)
+    return json({ ok: true, background: true, run_id: run.id }, 202)
+  }
+
+  const { result, fatal } = await work()
+  if (fatal) return json({ error: fatal }, 502)
   const ok = Object.values(result).every(r => r.errors.length === 0)
   return json({ ok, ...result })
 })
