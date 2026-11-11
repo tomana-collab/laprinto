@@ -220,6 +220,16 @@ async function continueRun(){
  }
 }
 
+// אימות דו-שלבי: למשתמש עם גורם אימות מאומת, טוקן של שלב ראשון בלבד (aal1) לא מספיק
+function mfaSatisfied(user: any, bearer: string): boolean {
+  const hasMfa = (user?.factors || []).some((f: any) => f.status === 'verified')
+  if (!hasMfa) return true
+  try {
+    const payload = JSON.parse(atob(bearer.replace(/^Bearer\s+/i, '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.aal === 'aal2'
+  } catch { return false }
+}
+
 // מי קורא: סוד פנימי של ה-cron (נבדק מול Vault), או אדמין מחובר
 async function authenticate(req:Request):Promise<"cron"|"admin"|null>{
  const cron=req.headers.get("x-cron-secret");
@@ -232,6 +242,7 @@ async function authenticate(req:Request):Promise<"cron"|"admin"|null>{
  const client=createClient(url,anon,{global:{headers:{Authorization:bearer}}});
  const {data:{user},error:userError}=await client.auth.getUser();
  if(userError||!user?.email)return null;
+ if(!mfaSatisfied(user,bearer))return null;
  const {data:members,error:memErr}=await admin.from("team_members").select("id").ilike("email",user.email).eq("role","אדמין").limit(1);
  return !memErr&&members?.length?"admin":null;
 }

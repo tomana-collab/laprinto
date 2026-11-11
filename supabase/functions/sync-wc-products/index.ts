@@ -39,6 +39,16 @@ const num = (v: unknown) => (v === '' || v === null || v === undefined || isNaN(
 const decode = (s: string) =>
   s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
+// אימות דו-שלבי: למשתמש עם גורם אימות מאומת, טוקן של שלב ראשון בלבד (aal1) לא מספיק
+function mfaSatisfied(user: any, bearer: string): boolean {
+  const hasMfa = (user?.factors || []).some((f: any) => f.status === 'verified')
+  if (!hasMfa) return true
+  try {
+    const payload = JSON.parse(atob(bearer.replace(/^Bearer\s+/i, '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.aal === 'aal2'
+  } catch { return false }
+}
+
 // קריאה מתוזמנת (pg_cron) מזוהה לפי סוד פנימי שנבדק מול ה-Vault במסד
 async function isCron(req: Request): Promise<boolean> {
   const s = req.headers.get('x-cron-secret')
@@ -57,6 +67,7 @@ async function authorized(req: Request): Promise<boolean> {
   const callerClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } })
   const { data: { user } } = await callerClient.auth.getUser()
   if (!user?.email) return false
+  if (!mfaSatisfied(user, authHeader)) return false
 
   // רק מי שרשום ב-team_members (אותה הגבלה כמו ההרשמה ל-CRM)
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)

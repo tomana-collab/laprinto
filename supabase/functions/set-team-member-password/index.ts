@@ -33,6 +33,12 @@ Deno.serve(async (req) => {
   })
   const { data: { user: caller }, error: callerErr } = await callerClient.auth.getUser()
   if (callerErr || !caller?.email) return json({ error: 'לא מחובר' }, 401)
+  // אימות דו-שלבי: למי שהגדיר גורם אימות, טוקן של שלב ראשון בלבד (aal1) לא מספיק לפעולה הזאת
+  if ((caller.factors || []).some((f: any) => f.status === 'verified')) {
+    let aal = ''
+    try { aal = JSON.parse(atob(authHeader.replace(/^Bearer\s+/i, '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).aal } catch { /* טוקן לא תקין */ }
+    if (aal !== 'aal2') return json({ error: 'נדרש אימות דו-שלבי' }, 401)
+  }
 
   // לקוח עם service_role — לבדיקת הרשאת אדמין ולפעולת היצירה/עדכון בפועל
   const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)

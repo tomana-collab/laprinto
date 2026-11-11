@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 const DEV_GROUP = ['ideas', 'opportunities', 'trends']
 
 export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
-  const { user, signOut } = useAuth()
+  const { user, signOut, signOutAllDevices } = useAuth()
   const [role, setRole] = useState(null) // null עד שנטען, כדי לא להבזיק תפריטים אדמין לפני שידוע שהם מותרים
 
   useEffect(() => {
@@ -71,6 +71,7 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
           >⚙️ הגדרות</button>
           <div className="user-line">{user?.email}</div>
           <button className="signout" onClick={signOut}>התנתקות</button>
+          <button className="signout" onClick={() => { if (window.confirm('להתנתק מכל המכשירים והדפדפנים שמחוברים לחשבון הזה?')) signOutAllDevices() }}>התנתקות מכל המכשירים</button>
         </div>
       </aside>
     </>

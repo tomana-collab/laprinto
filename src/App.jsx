@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
+import MfaGate from './pages/MfaGate'
 import Settings from './pages/Settings'
 import Dashboard from './pages/Dashboard'
 import Bundles from './pages/Bundles'
@@ -51,6 +52,7 @@ export default function App() {
   const select = key => { setFocus(null); setActive(key) }
 
   return (
+    <MfaGate>
     <NavProvider value={{ openRecord }}>
     <div className="layout">
       <Sidebar
@@ -72,5 +74,6 @@ export default function App() {
       </main>
     </div>
     </NavProvider>
+    </MfaGate>
   )
 }
