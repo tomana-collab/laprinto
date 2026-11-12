@@ -48,3 +48,16 @@ export function calcOrder(order) {
     profit: cost === null ? null : r2(sale - cost - fee),
   }
 }
+
+// הוצאות לפי קליטת תעודות ספק: כמות × עלות ליחידה אחרי הנחת ספק, כולל מע"מ (כמו בסה"כ שבמסך התעודות).
+// receipts = stock_receipts עם stock_receipt_items(quantity, unit_cost, discount_percent); from = 'YYYY-MM-DD' (כולל)
+export function receiptsTotalWithVat(receipts, from = '') {
+  let sum = 0
+  for (const r of receipts || []) {
+    if (from && String(r.doc_date || r.created_at || '').slice(0, 10) < from) continue
+    for (const i of r.stock_receipt_items || []) {
+      sum += (Number(i.quantity) || 0) * (Number(i.unit_cost) || 0) * (1 - (Number(i.discount_percent) || 0) / 100)
+    }
+  }
+  return r2(sum * (1 + VAT_RATE))
+}

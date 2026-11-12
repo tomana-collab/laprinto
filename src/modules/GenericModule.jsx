@@ -2,9 +2,9 @@ import { Fragment, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { calcProduct, calcOrder } from '../lib/pricing'
+import { calcProduct, calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import { groupOrders } from '../lib/orders'
-import { isCountedOrder, ORDER_STATUS_LABELS } from '../lib/format'
+import { isCountedOrder, ORDER_STATUS_LABELS, FINANCE_START, formatDate } from '../lib/format'
 import { useNav } from '../contexts/NavContext'
 import { wpOrderEditUrl, wpProductEditUrl } from '../lib/site'
 
@@ -396,8 +396,15 @@ function ExpensesSummary({ rows }) {
 }
 
 function OrdersSummary({ rows: allRows }) {
-  // ביטולים/החזרים/ממתינות לתשלום לא נספרים כמכירה
-  const rows = allRows.filter(isCountedOrder)
+  // ביטולים/החזרים/ממתינות לתשלום לא נספרים כמכירה; הסיכום נספר מ-FINANCE_START ואילך
+  const rows = allRows.filter(isCountedOrder).filter(r => String(r.order_date || r.created_at || '').slice(0, 10) >= FINANCE_START)
+  // הוצאות = קליטת תעודות ספק (כולל מע"מ) מאותו תאריך
+  const [receipts, setReceipts] = useState(null)
+  useEffect(() => {
+    supabase.from('stock_receipts').select('doc_date, created_at, stock_receipt_items(quantity, unit_cost, discount_percent)')
+      .then(({ data }) => setReceipts(data || []))
+  }, [])
+  const expenses = receipts ? receiptsTotalWithVat(receipts, FINANCE_START) : null
   const totalRevenue = rows.reduce((a, r) => a + (r.total_amount || 0), 0)
   const totalQuantity = rows.reduce((a, r) => a + (r.quantity || 0), 0)
   // רווח נטו רק על שורות עם עלות ידועה (מקושרות למוצר שהוזנה לו עלות)
@@ -406,14 +413,17 @@ function OrdersSummary({ rows: allRows }) {
   const totalProfit = known.reduce((a, l) => a + l.profit, 0)
   const unknownCount = lines.length - known.length
   const totalDiscount = lines.reduce((a, l) => a + l.discount, 0)
+  const balance = expenses === null ? null : totalRevenue - expenses
   return (
     <div className="summary-row">
-      <div className="summary-card"><span>סה"כ הזמנות</span><b>{rows.length}</b></div>
+      <div className="summary-card"><span>סה"כ הזמנות (מ-{formatDate(FINANCE_START)})</span><b>{rows.length}</b></div>
       <div className="summary-card"><span>סה"כ יחידות</span><b>{totalQuantity}</b></div>
       <div className="summary-card"><span>סה"כ הכנסות (אחרי קופונים)</span><b className="pos">₪{totalRevenue.toFixed(0)}</b></div>
+      <div className="summary-card"><span>הוצאות (קליטת תעודות, כולל מע"מ)</span><b className="neg">{expenses === null ? '...' : `₪${expenses.toFixed(0)}`}</b></div>
+      <div className="summary-card"><span>הכנסות פחות הוצאות</span><b className={balance === null || balance >= 0 ? 'pos' : 'neg'}>{balance === null ? '...' : `₪${balance.toFixed(0)}`}</b></div>
       {totalDiscount > 0 && <div className="summary-card"><span>הנחות קופונים</span><b className="neg">−₪{totalDiscount.toFixed(0)}</b></div>}
       <div className="summary-card">
-        <span>רווח נטו{unknownCount > 0 ? ` (${unknownCount} הזמנות בלי עלות)` : ''}</span>
+        <span>רווח נטו ממכירות{unknownCount > 0 ? ` (${unknownCount} הזמנות בלי עלות)` : ''}</span>
         <b className={totalProfit >= 0 ? 'pos' : 'neg'}>₪{totalProfit.toFixed(0)}</b>
       </div>
     </div>

@@ -26,3 +26,6 @@ const COUNTED_ORDER_STATUSES = ['processing', 'completed']
 
 // הזמנה ידנית (בלי סטטוס אתר) נספרת תמיד
 export const isCountedOrder = row => !row.wc_status || COUNTED_ORDER_STATUSES.includes(row.wc_status)
+
+// הסיכומים הכספיים (דשבורד והזמנות) נספרים מתאריך זה ואילך
+export const FINANCE_START = '2026-10-01'

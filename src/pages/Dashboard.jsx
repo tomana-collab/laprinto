@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { formatDate, formatDateTime, isCountedOrder } from '../lib/format'
-import { calcOrder } from '../lib/pricing'
+import { formatDate, formatDateTime, isCountedOrder, FINANCE_START } from '../lib/format'
+import { calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import { groupOrders } from '../lib/orders'
 
 const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
@@ -32,9 +32,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      const [tasks, expenses, orders, opportunities, products, suppliers, teamMembers, ideas, trends] = await Promise.all([
+      const [tasks, expenses, receipts, orders, opportunities, products, suppliers, teamMembers, ideas, trends] = await Promise.all([
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
+        supabase.from('stock_receipts').select('doc_date, created_at, stock_receipt_items(quantity, unit_cost, discount_percent)'),
         supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
@@ -44,13 +45,14 @@ export default function Dashboard() {
         supabase.from('trends').select('id', { count: 'exact', head: true }),
       ])
 
-      const firstError = [tasks, expenses, orders, opportunities, products, suppliers, teamMembers, ideas, trends]
+      const firstError = [tasks, expenses, receipts, orders, opportunities, products, suppliers, teamMembers, ideas, trends]
         .find(r => r.error)
       if (firstError) { setError(firstError.error.message); return }
 
       setData({
         tasks: tasks.data,
         expenses: expenses.data,
+        receipts: receipts.data,
         orders: orders.data,
         opportunities: opportunities.data,
         products: products.data,
@@ -95,12 +97,12 @@ export default function Dashboard() {
   const paidByEntries = Object.entries(paidByTotals).sort((a, b) => b[1] - a[1])
 
   // סיכום לתקופה שנבחרה: הכנסות (הזמנות שנספרות) מול הוצאות לפי תאריך
-  const from = periodStart(periodMonths)
+  // לא סופרים לפני FINANCE_START, גם ב"הכל" וגם בתקופות ארוכות
+  const from = [periodStart(periodMonths), FINANCE_START].sort().pop()
   const periodSales = sales.filter(o => !from || (o.order_date || '') >= from)
   const periodIncome = periodSales.reduce((a, o) => a + (o.total_amount || 0), 0)
-  const periodExpenses = data.expenses
-    .filter(e => !from || (e.expense_date || e.created_at || '') >= from)
-    .reduce((a, e) => a + (e.amount || 0), 0)
+  // הוצאות = קליטת תעודות ספק (כולל מע"מ) בתקופה
+  const periodExpenses = receiptsTotalWithVat(data.receipts, from)
   const periodBalance = periodIncome - periodExpenses
   // רווח ממכירות לאחר עלות סחורה ועמלת סליקה (רק הזמנות שיש עלות לכל מוצריהן)
   const periodOrders = groupOrders(periodSales).map(calcOrder)
@@ -127,7 +129,7 @@ export default function Dashboard() {
         </div>
         <div className="summary-row wide" style={{ marginBottom: 0 }}>
           <div className="summary-card"><span>הכנסות (מכירות כולל מע"מ)</span><b className="pos">₪{periodIncome.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
-          <div className="summary-card"><span>הוצאות</span><b className="neg">₪{periodExpenses.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
+          <div className="summary-card"><span>הוצאות (קליטת תעודות, כולל מע"מ)</span><b className="neg">₪{periodExpenses.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
           <div className="summary-card"><span>הכנסות פחות הוצאות</span><b className={periodBalance >= 0 ? 'pos' : 'neg'}>₪{periodBalance.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
           <div className="summary-card"><span>רווח ממכירות (אחרי עלות סחורה ועמלה){missingCost ? ` · ${missingCost} הזמנות בלי עלות לא נכללו` : ''}</span><b className={productProfit >= 0 ? 'pos' : 'neg'}>₪{productProfit.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
         </div>
