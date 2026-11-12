@@ -385,6 +385,11 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
     }
   }
 
+  // הזמנה שסומנה ב-CRM "הגיע ללקוח" נשארת "הושלם" גם אם באתר היא עדיין בטיפול (לא מחזירים אותה אחורה)
+  const { data: deliveredRows } = await admin.from('orders').select('wc_line_item_id').eq('handling_status', 'הגיע ללקוח').not('wc_line_item_id', 'is', null)
+  const delivered = new Set((deliveredRows || []).map((r: any) => Number(r.wc_line_item_id)))
+  for (const r of rows) if (delivered.has(Number(r.wc_line_item_id))) r.wc_status = 'completed'
+
   const errors: string[] = []
   for (let i = 0; i < rows.length; i += 200) {
     const { error } = await admin.from('orders').upsert(rows.slice(i, i + 200), { onConflict: 'wc_line_item_id' })

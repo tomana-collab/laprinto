@@ -54,6 +54,24 @@ export default function Settings() {
     setTheme(t)
   }
 
+  const isAdmin = profile?.role === 'אדמין'
+  const [hook, setHook] = useState({ is_set: false, tail: null })
+  const [hookUrl, setHookUrl] = useState('')
+  const [hookMsg, setHookMsg] = useState(null)
+  async function loadHook() {
+    const { data } = await supabase.rpc('get_make_webhook_status')
+    if (data) setHook(data)
+  }
+  useEffect(() => { if (isAdmin) loadHook() }, [isAdmin])
+  async function saveHook(url) {
+    setHookMsg(null)
+    const { error } = await supabase.rpc('set_make_webhook_url', { p_url: url })
+    if (error) { setHookMsg({ type: 'err', text: error.message }); return }
+    setHookUrl('')
+    setHookMsg({ type: 'ok', text: url ? 'הכתובת נשמרה' : 'הכתובת הוסרה' })
+    loadHook()
+  }
+
   return (
     <div>
       <div className="module-head"><h2>⚙️ הגדרות</h2></div>
@@ -101,7 +119,29 @@ export default function Settings() {
         </div>
       </div>
 
-      {profile?.role === 'אדמין' && (
+      {isAdmin && (
+        <div className="settings-section">
+          <h3>Webhook: עדכון סטטוס הזמנה באתר</h3>
+          <div className="settings-readonly">
+            כשסטטוס הטיפול של הזמנה משתנה ל"הגיע ללקוח", ההזמנה עוברת ל"הושלם" ב-CRM ונשלח לכתובת הזו מספר ההזמנה בלבד
+            (<code dir="ltr">{'{"order_number": "12345"}'}</code>). הכתובת מיועדת לסצנריו שמעדכן את סטטוס ההזמנה באתר.
+          </div>
+          <div className="settings-readonly">
+            מצב: {hook.is_set ? `מוגדר (מסתיים ב-${hook.tail})` : 'לא מוגדר. כל עוד אין כתובת, שום דבר לא נשלח'}
+          </div>
+          <form onSubmit={e => { e.preventDefault(); if (hookUrl.trim()) saveHook(hookUrl.trim()) }}>
+            <div className="field">
+              <label>כתובת Webhook (https://...)</label>
+              <input type="url" dir="ltr" value={hookUrl} onChange={e => setHookUrl(e.target.value)} placeholder={hook.is_set ? 'הזן כתובת חדשה כדי להחליף' : 'https://hook.make.com/...'} autoComplete="off" />
+            </div>
+            <button className="btn btn-primary" type="submit" disabled={!hookUrl.trim()}>שמירה</button>
+            {hook.is_set && <button className="btn" type="button" style={{ marginInlineStart: 8 }} onClick={() => confirm('להסיר את כתובת ה-Webhook? לא יישלח כלום עד שתוגדר כתובת חדשה.') && saveHook('')}>הסרה</button>}
+            {hookMsg && <div className={`settings-msg ${hookMsg.type}`}>{hookMsg.text}</div>}
+          </form>
+        </div>
+      )}
+
+      {isAdmin && (
         <div className="settings-users">
           <GenericModule config={MODULES.team_members} />
         </div>

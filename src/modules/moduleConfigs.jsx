@@ -222,7 +222,7 @@ export const MODULES = {
     bulkNoun: 'הזמנות',
     bulkStatus: [
       { field: 'handling_status', prompt: 'סטטוס טיפול ל...', labels: Object.fromEntries(HANDLING_STATUSES.map(h => [h, h])) },
-      { field: 'wc_status', labels: SHOWN_ORDER_LABELS },
+      { field: 'wc_status', prompt: 'סטטוס הזמנה ל...', labels: SHOWN_ORDER_LABELS },
     ],
     // ב-CRM מוצגות רק הזמנות בטיפול / שהושלמו (והזמנות ידניות). ממתינות לתשלום, מבוטלות וכו' לא נמשכות ולא מוצגות
     rowFilter: r => !r.wc_status || SHOWN_ORDER_STATUSES.includes(r.wc_status),
@@ -265,7 +265,7 @@ export const MODULES = {
       ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
       { key: 'handling_status', label: 'כל סטטוסי הטיפול', type: 'values' },
-      { key: 'wc_status', label: 'כל הסטטוסים', type: 'values', labels: SHOWN_ORDER_LABELS },
+      { key: 'wc_status', label: 'סטטוס הזמנה', type: 'values', labels: SHOWN_ORDER_LABELS },
     ],
     // מספר הזמנה ופרטים מלאים — בתוך חלון העריכה בלבד
     columns: [

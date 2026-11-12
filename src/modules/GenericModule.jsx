@@ -622,7 +622,7 @@ function OrderDetails({ order }) {
           ? <span><a href={`tel:${order.customer_phone}`}>{order.customer_phone}</a>{' · '}<a href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer">וואטסאפ</a></span>
           : null)}
         {item('אימייל', order.customer_email ? <a href={`mailto:${order.customer_email}`}>{order.customer_email}</a> : null)}
-        {item('סטטוס באתר', ORDER_STATUS_LABELS[order.wc_status] || order.wc_status)}
+        {item('סטטוס הזמנה', ORDER_STATUS_LABELS[order.wc_status] || order.wc_status)}
         <div className="field full" style={{ margin: 0 }}>{item('כתובת למשלוח', order.shipping_address)}</div>
         {item('שיטת משלוח', order.shipping_method)}
         {item('דמי משלוח', order.shipping_total != null ? `₪${order.shipping_total}` : null)}
