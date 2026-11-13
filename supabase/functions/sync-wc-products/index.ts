@@ -83,7 +83,7 @@ async function fetchAllWcProducts() {
     const res = await fetch(url, { headers: { Authorization: auth } })
     if (!res.ok) throw new Error(`WooCommerce החזיר ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const batch = await res.json()
-    all.push(...batch)
+    all.push(...batch.filter((p: any) => p.status !== 'draft')) // מוצרי טיוטה לא נמשכים
     const totalPages = Number(res.headers.get('x-wp-totalpages') || 1)
     if (page >= totalPages) break
   }
