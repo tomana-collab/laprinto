@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import { MODULES } from '../modules/moduleConfigs'
 import { useAuth } from '../contexts/AuthContext'
 
-const DEV_GROUP = ['ideas', 'opportunities', 'trends']
+const DEV_GROUP = ['tasks', 'ideas', 'opportunities', 'trends', 'suppliers']
 
 export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
   const { user, signOut, signOutAllDevices } = useAuth()
@@ -28,7 +28,7 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
     inventory: { icon: '📦', label: 'מלאי' },
     receipts: { icon: '📥', label: 'קליטת תעודות' },
   }
-  const ORDER = ['dashboard', 'tasks', 'orders', 'competitors', 'products', 'bundles', 'inventory', 'receipts', 'expenses', 'suppliers', 'dev']
+  const ORDER = ['dashboard', 'orders', 'competitors', 'products', 'inventory', 'receipts', 'expenses', 'dev']
 
   const item = key => {
     if (key === 'dev') return devGroup
