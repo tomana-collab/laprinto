@@ -23,7 +23,7 @@ function pageFromHash() {
   const path = window.location.pathname.replace(/^\/+|\/+$/g, '')
   if (path && isPage(path)) { window.history.replaceState(null, '', '/#/' + path); return path }
   const k = decodeURIComponent(window.location.hash.replace(/^#\/?/, ''))
-  return isPage(k) ? k : 'tasks'
+  return isPage(k) ? k : 'orders'
 }
 
 export default function App() {
