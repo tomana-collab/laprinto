@@ -10,12 +10,57 @@ const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigit
 //   הוזמן      = כמות בהזמנות פתוחות
 //   חסר        = הוזמן − מלאי קיים
 //   להזמנה     = חסר − מה שכבר הוזמן מהספק ומחכה לאספקה
+const LOGO_URL = 'https://laprinto.co.il/wp-content/uploads/2026/08/logolaprinto.png'
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+
+// הזמנה לספק כ-PDF: נפתח חלון הדפסה מעוצב (עברית RTL, לוגו, שם ספק, טבלה) ושם בוחרים "שמירה כ-PDF".
+// לכל ספק עמוד נפרד. כמות רצויה = כמה להזמין מהספק (חסר פחות מה שכבר הוזמן ומחכה לאספקה).
+function exportOrderPdf(rows) {
+  const bySupplier = new Map()
+  for (const r of rows.filter(r => r.toOrder > 0)) {
+    const k = r.supplier || 'ללא ספק'
+    bySupplier.set(k, [...(bySupplier.get(k) || []), r])
+  }
+  if (!bySupplier.size) return false
+  const date = new Date().toLocaleDateString('he-IL')
+  const pages = [...bySupplier.entries()].sort((a, b) => a[0].localeCompare(b[0], 'he')).map(([name, items]) => `
+    <section>
+      <header><img src="${LOGO_URL}" alt="Laprinto" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'Laprinto'}))"><div class="meta">הזמנת סחורה<br>${esc(date)}</div></header>
+      <h1>${esc(name)}</h1>
+      <table>
+        <thead><tr><th class="n">#</th><th>מוצר</th><th>מק״ט</th><th class="q">כמות רצויה</th></tr></thead>
+        <tbody>${items.sort((a, b) => a.name.localeCompare(b.name, 'he')).map((r, i) => `<tr><td class="n">${i + 1}</td><td>${esc(r.name)}</td><td dir="ltr" class="sku">${esc(r.sku || '—')}</td><td class="q">${esc(r.toOrder)}</td></tr>`).join('')}</tbody>
+      </table>
+    </section>`).join('')
+  const w = window.open('', '_blank')
+  if (!w) return 'blocked'
+  w.document.write(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>הזמנת סחורה</title><style>
+    @page { size: A4; margin: 16mm }
+    body { font-family: Arial, 'Segoe UI', sans-serif; color: #1c1c28; margin: 0 }
+    section { page-break-after: always } section:last-child { page-break-after: auto }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1c1c28; padding-bottom: 10px }
+    header img { height: 56px } .meta { text-align: left; font-size: 13px; color: #555 }
+    h1 { font-size: 24px; margin: 18px 0 14px }
+    table { width: 100%; border-collapse: collapse; font-size: 14px }
+    th, td { border: 1px solid #bbb; padding: 7px 10px; text-align: right } th { background: #f0f0f4 }
+    .n { width: 36px; text-align: center } .q { width: 110px; text-align: center; font-weight: 700 } .sku { text-align: left }
+    tr { page-break-inside: avoid }
+  </style></head><body>${pages}</body></html>`)
+  w.document.close()
+  // מחכים לטעינת הלוגו לפני ההדפסה
+  const go = () => { w.focus(); w.print() }
+  const imgs = [...w.document.images]
+  Promise.all(imgs.map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r }))).then(() => setTimeout(go, 200))
+  return true
+}
+
 export default function Restock() {
   const { openRecord } = useNav()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
   const [showAll, setShowAll] = useState(false)
   const [q, setQ] = useState('')
+  const [supplier, setSupplier] = useState('')
   const [sort, onSort] = useSort({ key: 'toOrder', dir: 'desc' })
 
   useEffect(() => {
@@ -43,10 +88,19 @@ export default function Restock() {
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return (rows || []).filter(r => (showAll || r.missing > 0) &&
+      (!supplier || (r.supplier || 'ללא ספק') === supplier) &&
       (!needle || r.name.toLowerCase().includes(needle) || (r.sku || '').toLowerCase().includes(needle)))
-  }, [rows, showAll, q])
+  }, [rows, showAll, q, supplier])
 
   if (rows === null) return <div className="loading">טוען...</div>
+
+  const suppliers = [...new Set(rows.map(r => r.supplier || 'ללא ספק'))].sort((a, b) => a.localeCompare(b, 'he'))
+  const exportRows = shown.filter(r => r.toOrder > 0)
+  function doExport() {
+    const res = exportOrderPdf(exportRows)
+    if (res === false) alert('אין מה להזמין: אין חוסרים שעדיין לא הוזמנו מהספק בסינון הנוכחי.')
+    else if (res === 'blocked') alert('הדפדפן חסם את החלון. אפשר חלונות קופצים לאתר ונסה שוב.')
+  }
 
   const missingRows = rows.filter(r => r.missing > 0)
   const toOrderRows = rows.filter(r => r.toOrder > 0)
@@ -64,9 +118,16 @@ export default function Restock() {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
+        <select value={supplier} onChange={e => setSupplier(e.target.value)}>
+          <option value="">כל הספקים</option>
+          {suppliers.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} /> הצג גם מוצרים שיש להם מספיק במלאי
         </label>
+        <button className="btn-add" onClick={doExport} disabled={exportRows.length === 0} title="פותח הזמנה להדפסה / שמירה כ-PDF">
+          📄 ייצוא הזמנה ל-PDF{supplier ? ` (${supplier})` : ''} · {exportRows.length}
+        </button>
       </div>
 
       <div className="table-wrap">
