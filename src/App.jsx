@@ -3,6 +3,7 @@ import { useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
 import MfaGate from './pages/MfaGate'
 import Settings from './pages/Settings'
+import Restock from './pages/Restock'
 import Dashboard from './pages/Dashboard'
 import Bundles from './pages/Bundles'
 import Receipts from './pages/Receipts'
@@ -14,7 +15,7 @@ import GenericModule from './modules/GenericModule'
 import { MODULES } from './modules/moduleConfigs'
 import { NavProvider } from './contexts/NavContext'
 
-const PAGES = ['dashboard', 'settings', 'bundles', 'receipts', 'inventory', 'competitors']
+const PAGES = ['dashboard', 'settings', 'bundles', 'receipts', 'inventory', 'competitors', 'restock']
 const isPage = k => PAGES.includes(k) || !!MODULES[k]
 
 // הדף הפעיל נשמר ב-hash של ה-URL, כך שרענון (או חזרה אחורה) נשארים על אותו דף
@@ -69,6 +70,7 @@ export default function App() {
           : active === 'bundles' ? <Bundles />
           : active === 'receipts' ? <Receipts />
           : active === 'inventory' ? <Inventory />
+          : active === 'restock' ? <Restock />
           : active === 'competitors' ? <Competitors />
           : <GenericModule key={active} config={MODULES[active]} focusId={focus?.module === active ? focus.id : null} />}
       </main>

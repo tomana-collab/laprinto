@@ -5,12 +5,14 @@ import { useSort, sortRows, SortTh } from '../lib/sort'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
-// מצב מלאי: מלאי שלילי = נמכר יותר ממה שנקלט, כלומר צריך להזמין מהספק.
-const needToOrder = r => Math.max(0, -r.stock - r.incoming) // חסר שעדיין לא הוזמן
+// מצב מלאי: מלאי = מה שנקלט פחות הזמנות שנקבע להן סטטוס טיפול. הזמנות פתוחות (בלי סטטוס טיפול) לא מורידות מהמלאי,
+// אבל אם הן גדולות מהמלאי הקיים — חסר, ואז צריך להשלים מהספק.
+const shortage = r => Math.max(0, r.open_orders - Math.max(0, r.stock))      // הוזמן ואין במלאי
+const needToOrder = r => Math.max(0, shortage(r) - r.incoming)                // חסר שעדיין לא הוזמן מהספק
 function status(r) {
-  if (r.stock < 0 && needToOrder(r) === 0) return { key: 'incoming', text: `חסר ${num(-r.stock)} — הוזמן, בהמתנה לאספקה`, cls: 'pos' }
-  if (r.stock < 0) return { key: 'order', text: `חסר ${num(needToOrder(r))} — להזמין מהספק`, cls: 'neg' }
-  if (r.stock === 0) return { key: 'out', text: 'אזל', cls: 'neg' }
+  if (shortage(r) > 0 && needToOrder(r) === 0) return { key: 'incoming', text: `חסר ${num(shortage(r))} להזמנות פתוחות — הוזמן, בהמתנה לאספקה`, cls: 'pos' }
+  if (shortage(r) > 0) return { key: 'order', text: `חסר ${num(needToOrder(r))} — להזמין מהספק`, cls: 'neg' }
+  if (r.stock <= 0) return { key: 'out', text: 'אזל', cls: 'neg' }
   if (r.stock_min > 0 && r.stock <= r.stock_min) return { key: 'low', text: 'מלאי נמוך', cls: 'neg' }
   return { key: 'ok', text: 'במלאי', cls: 'pos' }
 }
@@ -51,7 +53,7 @@ export default function Inventory() {
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצרים ראשיים שפוצלו לוריאציות
     setRows(p.data.filter(pr => !parents.has(pr.wc_product_id)).map(pr => {
       const x = st.get(pr.id) || {}
-      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
+      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, open_orders: Number(x.open_orders) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
     }))
   }
   useEffect(() => { load() }, [])
@@ -204,7 +206,7 @@ export default function Inventory() {
         </table>
       </div>
       <p style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginTop: 10 }}>
-        מלאי נוכחי = מלאי פתיחה + מה שנקלט בתעודות שסופקו − מה שנמכר מתאריך תחילת המעקב. "נמכר (סה״כ הזמנות)" סופר את כל ההזמנות שבטיפול/הושלמו, גם מלפני תחילת המעקב; "ירד מהמלאי" הוא החלק שמנוכה מהמלאי. לחיצה על שורה = ספירת מלאי.
+        מלאי נוכחי = מלאי פתיחה + מה שנקלט בתעודות שסופקו − הזמנות שנקבע להן סטטוס טיפול (נקלט ובטיפול / חריטה-אריזה / יצא למשלוח / הגיע ללקוח) או שהושלמו באתר. הזמנה בלי סטטוס טיפול לא מורידה מהמלאי; חוסר מחושב מולה במסך "השלמת מוצרים". "נמכר (סה״כ הזמנות)" סופר את כל ההזמנות שבטיפול/הושלמו. לחיצה על שורה = ספירת מלאי.
       </p>
 
       {counting && <CountModal row={counting} onCancel={() => setCounting(null)} onSave={saveCount} />}

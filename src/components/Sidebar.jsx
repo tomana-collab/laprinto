@@ -26,9 +26,10 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
     competitors: { icon: '🔎', label: 'השוואת מחירים' },
     bundles: { icon: '🎁', label: 'מארזים' },
     inventory: { icon: '📦', label: 'מלאי' },
+    restock: { icon: '🧩', label: 'השלמת מוצרים' },
     receipts: { icon: '📥', label: 'קליטת תעודות' },
   }
-  const ORDER = ['dashboard', 'orders', 'competitors', 'products', 'inventory', 'receipts', 'expenses', 'dev']
+  const ORDER = ['dashboard', 'orders', 'competitors', 'products', 'inventory', 'restock', 'receipts', 'expenses', 'dev']
 
   const item = key => {
     if (key === 'dev') return devGroup
