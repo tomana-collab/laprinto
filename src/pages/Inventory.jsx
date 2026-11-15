@@ -6,9 +6,9 @@ import { SupplierStock } from '../components/SupplierStock'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
-// מצב מלאי: מלאי = מה שנקלט פחות הזמנות שנקבע להן סטטוס טיפול. הזמנות פתוחות (בלי סטטוס טיפול) לא מורידות מהמלאי,
-// אבל אם הן גדולות מהמלאי הקיים — חסר, ואז צריך להשלים מהספק.
-const shortage = r => Math.max(0, r.open_orders - Math.max(0, r.stock))      // הוזמן ואין במלאי
+// מצב מלאי: מלאי = מה שנקלט פחות כל ההזמנות (גם פתוחות): הזמנה פתוחה מחזיקה מלאי. מלאי שלילי = חוסר.
+// physical = מה שיש פיזית במחסן לפני ההזמנות הפתוחות (stock + reserved). אם ההזמנות הפתוחות גדולות ממנו — חסר, ואז צריך להשלים מהספק.
+const shortage = r => Math.max(0, r.open_orders - Math.max(0, r.physical))   // הוזמן ואין במלאי
 const needToOrder = r => Math.max(0, shortage(r) - r.incoming)                // חסר שעדיין לא הוזמן מהספק
 function status(r) {
   if (shortage(r) > 0 && needToOrder(r) === 0) return { key: 'incoming', text: `חסר ${num(shortage(r))} להזמנות פתוחות — הוזמן, בהמתנה לאספקה`, cls: 'pos' }
@@ -54,14 +54,15 @@ export default function Inventory() {
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצרים ראשיים שפוצלו לוריאציות
     setRows(p.data.filter(pr => !parents.has(pr.wc_product_id)).map(pr => {
       const x = st.get(pr.id) || {}
-      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, open_orders: Number(x.open_orders) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
+      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, reserved: Number(x.reserved) || 0, physical: (Number(x.stock) || 0) + (Number(x.reserved) || 0), incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, open_orders: Number(x.open_orders) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
     }))
   }
   useEffect(() => { load() }, [])
 
   // ספירת מלאי: המשתמש מזין כמה יש בפועל, ואנחנו מחשבים מלאי פתיחה כך שהמלאי הנוכחי יתאים
   async function saveCount(row, actual, min) {
-    const opening = Number(actual) - row.received + row.sold
+    // הספירה היא מה שיש פיזית במחסן; הזמנות פתוחות שמורות (reserved) יורדות ממנו בתצוגה
+    const opening = Number(actual) - row.received + row.sold - row.reserved
     const { error: e } = await supabase.from('products').update({ opening_stock: opening, stock_min: Number(min) || 0 }).eq('id', row.id)
     if (e) { setError(e.message); return }
     setCounting(null); load()
@@ -69,12 +70,12 @@ export default function Inventory() {
 
   // שמירת ספירה מרוכזת: לכל מוצר שהוזנה לו כמות שונה מהמלאי הנוכחי מחשבים מלאי פתיחה חדש
   async function saveCounts() {
-    const changed = (rows || []).filter(r => counts[r.id] !== undefined && counts[r.id] !== '' && Number(counts[r.id]) !== r.stock)
+    const changed = (rows || []).filter(r => counts[r.id] !== undefined && counts[r.id] !== '' && Number(counts[r.id]) !== r.physical)
     if (changed.length === 0) { setCountMode(false); setCounts({}); return }
     if (!window.confirm(`לעדכן את המלאי של ${changed.length} מוצרים לפי הספירה?`)) return
     setSavingCount(true)
     const results = await Promise.all(changed.map(r =>
-      supabase.from('products').update({ opening_stock: Number(counts[r.id]) - r.received + r.sold }).eq('id', r.id)))
+      supabase.from('products').update({ opening_stock: Number(counts[r.id]) - r.received + r.sold - r.reserved }).eq('id', r.id)))
     setSavingCount(false)
     const failed = results.find(x => x.error)
     if (failed) { setError(failed.error.message); return }
@@ -176,13 +177,14 @@ export default function Inventory() {
               <SortTh k="sold_total" sort={sort} onSort={onSort}>נמכר (סה״כ הזמנות)</SortTh>
               <SortTh k="sold" sort={sort} onSort={onSort}>ירד מהמלאי</SortTh>
               <SortTh k="incoming" sort={sort} onSort={onSort}>בהמתנה לאספקה</SortTh>
+              <th title="יחידות שמורות להזמנות פתוחות (עוד בלי סטטוס טיפול). הן כבר יורדות מהמלאי הנוכחי">שמור להזמנות פתוחות</th>
               <SortTh k="stock" sort={sort} onSort={onSort}>מלאי נוכחי</SortTh>
               <SortTh k="status" sort={sort} onSort={onSort}>מצב</SortTh>
               {countMode && <th>ספירה בפועל</th>}
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={11}>אין מוצרים</td></tr>}
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={12}>אין מוצרים</td></tr>}
             {sortRows(shown, {
               name: r => r.name, sku: r => r.sku || '', supplier: r => r.suppliers?.name || '',
               received: r => r.received, sold_total: r => r.sold_total,
@@ -199,9 +201,10 @@ export default function Inventory() {
                   <td><b>{num(r.sold_total)}</b></td>
                   <td>{num(r.sold)}</td>
                   <td>{r.incoming ? num(r.incoming) : '—'}</td>
+                  <td>{r.reserved ? num(r.reserved) : '—'}</td>
                   <td><b className={s.cls}>{num(r.stock)}</b></td>
                   <td><span className={s.cls}>{s.text}</span></td>
-                  {countMode && <td><input type="number" min="0" style={{ width: 90 }} placeholder={String(r.stock)} value={counts[r.id] ?? ''} onChange={e => setCounts(c => ({ ...c, [r.id]: e.target.value }))} /></td>}
+                  {countMode && <td><input type="number" min="0" style={{ width: 90 }} placeholder={String(r.physical)} value={counts[r.id] ?? ''} onChange={e => setCounts(c => ({ ...c, [r.id]: e.target.value }))} /></td>}
                 </tr>
               )
             })}
@@ -218,7 +221,7 @@ export default function Inventory() {
 }
 
 function CountModal({ row, onCancel, onSave }) {
-  const [actual, setActual] = useState(row.stock)
+  const [actual, setActual] = useState(row.physical)
   const [min, setMin] = useState(row.stock_min || 0)
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>

@@ -656,9 +656,7 @@ function AddFreeProduct({ order, onChanged }) {
 
   const needle = q.trim().toLowerCase()
   const matches = needle && products ? products.filter(x => x.name.toLowerCase().includes(needle) || x.sku.toLowerCase().includes(needle)).slice(0, 8) : []
-  // ירידה מהמלאי: כמו שאר ההזמנה, כשיש לה סטטוס טיפול או שהושלמה
   const first = order.lines?.[0] || order
-  const willDeduct = order.wc_status === 'completed' || String(first.handling_status || '').trim() !== ''
 
   async function add() {
     if (!picked) return
@@ -709,8 +707,7 @@ function AddFreeProduct({ order, onChanged }) {
         <button type="button" className="cmp-tool" onClick={() => { setOpen(false); setPicked(null); setQ('') }}>ביטול</button>
       </div>
       <div className="cmp-sub">
-        המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא יורד מהמלאי יחד עם ההזמנה.{' '}
-        {willDeduct ? 'ההזמנה כבר בטיפול או הושלמה, לכן הוא יירד מהמלאי מיד.' : 'להזמנה עוד אין סטטוס טיפול, ולכן הוא יירד מהמלאי כשתקבל סטטוס טיפול או תושלם.'}
+        המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא מוחזק במלאי יחד עם ההזמנה (יורד מהמלאי מיד).
       </div>
       {err && <div className="err-inline">{err}</div>}
     </div>

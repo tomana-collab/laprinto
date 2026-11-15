@@ -45,7 +45,7 @@ function OrderDetail({ row, nav, extra, ui }) {
                 </td>
                 <td>{l.sku || '—'}</td>
                 <td>{l.quantity}</td>
-                <td>{l.not_supplied ? '—' : v === undefined ? '—' : <b className={v <= 0 ? 'neg' : ''}>{v}</b>}</td>
+                <td>{l.not_supplied ? '—' : v === undefined ? '—' : <b className={v < 0 ? 'neg' : ''}>{v}</b>}</td>
                 <td><SupplierStock status={l.products?.supplier_stock_status} checkedAt={l.products?.supplier_stock_checked_at} /></td>
                 <td><button type="button" className="cmp-tool" title={l.not_supplied ? 'להחזיר: המוצר יסופק' : 'לא לספק את המוצר (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l, ui)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button></td>
               </tr>
@@ -369,8 +369,9 @@ export const MODULES = {
           const live = row.lines.filter(l => !l.not_supplied)
           if (!live.length) return '—'
           const vals = live.map(l => stockOf(extra, l))
-          if (row.lines.length === 1) return vals[0] === undefined ? '—' : <span className={vals[0] <= 0 ? 'neg' : ''}>{vals[0]}</span>
-          const short = vals.filter(v => v !== undefined && v <= 0).length
+          // מלאי נוכחי כבר מנוכה מההזמנות הפתוחות. 0 = נשאר בדיוק למה שהוזמן; שלילי = חוסר
+          if (row.lines.length === 1) return vals[0] === undefined ? '—' : <span className={vals[0] < 0 ? 'neg' : ''}>{vals[0]}</span>
+          const short = vals.filter(v => v !== undefined && v < 0).length
           return short ? <span className="neg" title="מוצרים בהזמנה שאין להם מלאי">חסר ב-{short}</span> : <span className="pos">✓ במלאי</span>
         },
       },

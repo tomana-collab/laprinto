@@ -68,7 +68,7 @@ export default function Restock() {
     async function load() {
       const [p, s] = await Promise.all([
         supabase.from('products').select('id, name, sku, category, wc_product_id, wc_parent_id, supplier_stock_status, supplier_stock_checked_at, suppliers(name)'),
-        supabase.from('product_stock').select('product_id, stock, incoming, open_orders'),
+        supabase.from('product_stock').select('product_id, stock, reserved, incoming, open_orders'),
       ])
       const err = [p, s].find(x => x.error)
       if (err) { setError(err.error.message); setRows([]); return }
@@ -76,7 +76,8 @@ export default function Restock() {
       const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean))
       setRows(p.data.filter(pr => !parents.has(pr.wc_product_id)).map(pr => {
         const x = st.get(pr.id) || {}
-        const stock = Number(x.stock) || 0
+        // מלאי קיים = מה שיש פיזית לפני ההזמנות הפתוחות (stock כבר מנוכה מהן, לכן מוסיפים בחזרה את reserved)
+        const stock = (Number(x.stock) || 0) + (Number(x.reserved) || 0)
         const ordered = Number(x.open_orders) || 0
         const incoming = Number(x.incoming) || 0
         const missing = Math.max(0, ordered - Math.max(0, stock))
