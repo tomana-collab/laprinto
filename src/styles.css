@@ -492,3 +492,4 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .free-option:hover{ background:var(--hover-bg); }
 .free-picked{ display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--teal-soft); border-radius:8px; padding:8px 10px; }
 .free-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.ns-name{ text-decoration:line-through; color:var(--coral) !important; }

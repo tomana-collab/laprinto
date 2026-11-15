@@ -365,7 +365,7 @@ export default function GenericModule({ config, focusId = null }) {
                   </tr>
                   {config.expandRender && expanded.has(row.id) && (
                     <tr className="expand-row">
-                      <td colSpan={colCount}>{config.expandRender(row, nav, extra, { open: () => setEditing(row), close: () => toggleExpand(row.id) })}</td>
+                      <td colSpan={colCount}>{config.expandRender(row, nav, extra, { open: () => setEditing(row), close: () => toggleExpand(row.id), reload: load })}</td>
                     </tr>
                   )}
                   </Fragment>
@@ -578,6 +578,12 @@ function OrderPanel({ order, onChanged }) {
 function OrderLines({ order, onChanged }) {
   const nav = useNav()
   const lines = order.lines || [order]
+  // "לא לספק": השורה נשארת בהזמנה (באדום), הכסף לא משתנה, והיא לא יורדת מהמלאי ולא נספרת כחוסר
+  async function toggleSupplied(l) {
+    const { error } = await supabase.from('orders').update({ not_supplied: !l.not_supplied }).eq('id', l.id)
+    if (error) { window.alert('העדכון נכשל: ' + error.message); return }
+    onChanged?.()
+  }
   async function removeFree(l) {
     if (!window.confirm(`להסיר את "${l.products?.name || l.product_name}" מההזמנה? זה יחזיר אותו למלאי.`)) return
     const { error } = await supabase.from('orders').delete().eq('id', l.id).eq('manual_line', true)
@@ -599,8 +605,8 @@ function OrderLines({ order, onChanged }) {
             return (
               <tr key={l.id} style={{ cursor: 'default' }}>
                 <td>{l.product_id
-                  ? <a href="#" onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
-                  : name}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}</td>
+                  ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
+                  : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}</td>
                 <td>{l.sku && href ? <a href={href} target="_blank" rel="noreferrer">{l.sku}</a> : (l.sku || '—')}</td>
                 <td>{l.quantity}</td>
                 <td>₪{l.price}</td>
@@ -608,7 +614,10 @@ function OrderLines({ order, onChanged }) {
                 <td>₪{c.sale}</td>
                 <td>{c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`}</td>
                 <td>{c.cost === null ? '—' : <span className={c.sale - c.cost >= 0 ? 'pos' : 'neg'}>₪{Math.round((c.sale - c.cost) * 100) / 100}</span>}</td>
-                <td>{l.manual_line && <button type="button" className="cmp-tool" title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>✕ הסר</button>}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button type="button" className="cmp-tool" title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
+                  {l.manual_line && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>🗑 הסר</button>}
+                </td>
               </tr>
             )
           })}

@@ -3,6 +3,7 @@
 
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrder } from '../lib/pricing'
+import { supabase } from '../supabaseClient'
 import { SupplierStock, SUPPLIER_STOCK_LABEL } from '../components/SupplierStock'
 
 const SHOWN_ORDER_STATUSES = ['processing', 'completed']
@@ -21,22 +22,32 @@ const stockOf = (extra, l) => {
   return l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)
 }
 
+async function toggleSupplied(l, ui) {
+  const { error } = await supabase.from('orders').update({ not_supplied: !l.not_supplied }).eq('id', l.id)
+  if (error) { window.alert('העדכון נכשל: ' + error.message); return }
+  ui?.reload?.()
+}
+
 // פירוט הזמנה עם כמה מוצרים: מלאי קיים ומלאי אצל הספק לכל מוצר, וכפתור לפתיחת ההזמנה
 function OrderDetail({ row, nav, extra, ui }) {
   return (
     <div className="order-detail">
       <table className="data-table">
-        <thead><tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מלאי קיים</th><th>מלאי אצל הספק</th></tr></thead>
+        <thead><tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מלאי קיים</th><th>מלאי אצל הספק</th><th></th></tr></thead>
         <tbody>
           {row.lines.map(l => {
             const v = stockOf(extra, l)
             return (
               <tr key={l.id} style={{ cursor: 'default' }}>
-                <td>{l.product_id ? <a href="#" onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{lineName(l)}</a> : lineName(l)}</td>
+                <td>
+                  {l.product_id ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{lineName(l)}</a> : <span className={l.not_supplied ? 'ns-name' : ''}>{lineName(l)}</span>}
+                  {l.not_supplied && <span style={{ marginInlineStart: 8 }}><NotSupplied n={1} /></span>}
+                </td>
                 <td>{l.sku || '—'}</td>
                 <td>{l.quantity}</td>
-                <td>{v === undefined ? '—' : <b className={v <= 0 ? 'neg' : ''}>{v}</b>}</td>
+                <td>{l.not_supplied ? '—' : v === undefined ? '—' : <b className={v <= 0 ? 'neg' : ''}>{v}</b>}</td>
                 <td><SupplierStock status={l.products?.supplier_stock_status} checkedAt={l.products?.supplier_stock_checked_at} /></td>
+                <td><button type="button" className="cmp-tool" title={l.not_supplied ? 'להחזיר: המוצר יסופק' : 'לא לספק את המוצר (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l, ui)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button></td>
               </tr>
             )
           })}
@@ -50,6 +61,8 @@ function OrderDetail({ row, nav, extra, ui }) {
   )
 }
 
+// שורה שסומנה "לא לספק": שם חתוך באדום + תווית. הכסף וההזמנה לא משתנים
+const NotSupplied = ({ n }) => <span className="sup-stock sup-out_of_stock" title="מוצר שהוחלט לא לספק (לא יורד מהמלאי)">לא לספק{n > 1 ? ` ×${n}` : ''}</span>
 function OneLine({ main, count, tip, bad }) {
   return (
     <div className="order-cell" title={tip}>
@@ -317,6 +330,7 @@ export const MODULES = {
       { key: 'view', type: 'preset', options: [
         { value: 'open', label: 'בטיפול', test: r => r.wc_status === 'processing' },
         { value: 'completed', label: 'הושלמו / ידניות', test: r => !r.wc_status || r.wc_status === 'completed' },
+        { value: 'not_supplied', label: 'עם "לא לספק"', test: r => r.lines?.some(l => l.not_supplied) },
         { value: 'all', label: 'הצג את כל ההזמנות' },
       ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
@@ -331,11 +345,23 @@ export const MODULES = {
         // הזמנה עם מוצר אחד: שם המוצר. עם כמה מוצרים: "3 מוצרים", ולחיצה עליהם פותחת פירוט (עם מלאי) מתחת לשורה
         key: 'product',
         label: 'מוצר',
-        render: (row, nav, extra, ui) => row.lines.length === 1
-          ? <OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} />
-          : <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
-              {row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
-            </button>,
+        render: (row, nav, extra, ui) => {
+          const ns = row.lines.filter(l => l.not_supplied).length
+          if (row.lines.length === 1) {
+            const l = row.lines[0]
+            return l.not_supplied
+              ? <div className="order-cell"><span className="order-cell-main ns-name" title={lineLabel(l)}>{lineLabel(l)}</span><NotSupplied n={1} /></div>
+              : <OneLine main={lineLabel(l)} count={1} tip={lineLabel(l)} />
+          }
+          return (
+            <div className="order-cell">
+              <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
+                {row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
+              </button>
+              {ns > 0 && <NotSupplied n={ns} />}
+            </div>
+          )
+        },
       },
       {
         // מספר המוצרים (שורות פריט) בהזמנה; בסוגריים סך היחידות אם יש כמות גדולה מ-1
@@ -351,7 +377,10 @@ export const MODULES = {
         key: 'stock_left',
         label: 'מלאי קיים',
         render: (row, nav, extra) => {
-          const vals = row.lines.map(l => stockOf(extra, l))
+          // מוצר שסומן "לא לספק" לא נספר (לא יורד מהמלאי)
+          const live = row.lines.filter(l => !l.not_supplied)
+          if (!live.length) return '—'
+          const vals = live.map(l => stockOf(extra, l))
           if (row.lines.length === 1) return vals[0] === undefined ? '—' : <span className={vals[0] <= 0 ? 'neg' : ''}>{vals[0]}</span>
           const short = vals.filter(v => v !== undefined && v <= 0).length
           return short ? <span className="neg" title="מוצרים בהזמנה שאין להם מלאי">חסר ב-{short}</span> : <span className="pos">✓ במלאי</span>
