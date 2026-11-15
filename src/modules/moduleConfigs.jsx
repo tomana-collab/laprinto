@@ -330,7 +330,6 @@ export const MODULES = {
       { key: 'view', type: 'preset', options: [
         { value: 'open', label: 'בטיפול', test: r => r.wc_status === 'processing' },
         { value: 'completed', label: 'הושלמו / ידניות', test: r => !r.wc_status || r.wc_status === 'completed' },
-        { value: 'not_supplied', label: 'עם "לא לספק"', test: r => r.lines?.some(l => l.not_supplied) },
         { value: 'all', label: 'הצג את כל ההזמנות' },
       ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
@@ -345,23 +344,12 @@ export const MODULES = {
         // הזמנה עם מוצר אחד: שם המוצר. עם כמה מוצרים: "3 מוצרים", ולחיצה עליהם פותחת פירוט (עם מלאי) מתחת לשורה
         key: 'product',
         label: 'מוצר',
-        render: (row, nav, extra, ui) => {
-          const ns = row.lines.filter(l => l.not_supplied).length
-          if (row.lines.length === 1) {
-            const l = row.lines[0]
-            return l.not_supplied
-              ? <div className="order-cell"><span className="order-cell-main ns-name" title={lineLabel(l)}>{lineLabel(l)}</span><NotSupplied n={1} /></div>
-              : <OneLine main={lineLabel(l)} count={1} tip={lineLabel(l)} />
-          }
-          return (
-            <div className="order-cell">
-              <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
-                {row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
-              </button>
-              {ns > 0 && <NotSupplied n={ns} />}
-            </div>
-          )
-        },
+        // בלי סימון "לא לספק" ברשימה: הוא מופיע רק בחלון ההזמנה ובפירוט שנפתח מתחת לשורה
+        render: (row, nav, extra, ui) => row.lines.length === 1
+          ? <OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} />
+          : <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
+              {row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
+            </button>,
       },
       {
         // מספר המוצרים (שורות פריט) בהזמנה; בסוגריים סך היחידות אם יש כמות גדולה מ-1
