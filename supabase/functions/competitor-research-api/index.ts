@@ -18,6 +18,8 @@ const respond = (body: unknown, status = 200) => new Response(JSON.stringify(bod
 
 // השדות היחידים שהסוכן רואה על מוצר. בלי cost / profit / margin / supplier.
 const PRODUCT_COLS = 'id, wc_product_id, wc_parent_id, name, sku, category, subcategory, wc_categories, price, regular_price, sale_price, product_url, image_url, images, description, short_description, attributes, dimensions, weight, stock_status, research_status, last_researched_at, research_notes'
+// מוצר שאזל מהמלאי באתר (או טיוטה — status לא 'פעיל') לא נשלח למחקר מתחרים
+const IN_STOCK = 'stock_status.is.null,stock_status.neq.outofstock'
 const PRODUCT_LIST_COLS = 'id, name, sku, category, subcategory, price, product_url, image_url, research_status, last_researched_at, next_research_at'
 const OFFER_COLS = 'id, product_id, store_id, product_url, competitor_sku, competitor_title, match_type, confidence, review_status, price_scan_enabled, created_at'
 
@@ -53,7 +55,7 @@ async function parentIds(): Promise<Set<number>> {
 
 const actions: Record<string, (b: any) => Promise<unknown>> = {
   async list_categories() {
-    const { data, error } = await admin.from('products').select('category, subcategory, research_status').eq('status', 'פעיל').is('wc_removed_at', null)
+    const { data, error } = await admin.from('products').select('category, subcategory, research_status').eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK)
     if (error) throw new ApiError(500, error.message)
     const map = new Map<string, { category: string; products: number; pending_research: number; subcategories: Set<string> }>()
     for (const p of data || []) {
@@ -73,7 +75,7 @@ const actions: Record<string, (b: any) => Promise<unknown>> = {
     const offset = clampInt(b.offset, 0, 100000, 0)
     const status = ['pending', 'partial', 'researched', 'no_competitors', 'all'].includes(b.research_status) ? b.research_status : 'pending'
     let q = admin.from('products').select(PRODUCT_LIST_COLS + ', wc_product_id', { count: 'exact' })
-      .eq('status', 'פעיל').is('wc_removed_at', null).order('category').order('name')
+      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK).order('category').order('name')
     // "pending" = כל מה שממתין למחקר עכשיו: חדש, או שהגיע מועד המחקר החוזר שלו (30 יום)
     if (status === 'pending') q = q.or(`research_status.eq.pending,next_research_at.lte.${new Date().toISOString()}`)
     else if (status !== 'all') q = q.eq('research_status', status)
@@ -211,7 +213,7 @@ const actions: Record<string, (b: any) => Promise<unknown>> = {
     const nowIso = new Date().toISOString()
     const staleIso = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
     let q = admin.from('products').select('id, wc_product_id, name, sku, category')
-      .eq('status', 'פעיל').is('wc_removed_at', null)
+      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK)
       .or(`research_status.eq.pending,next_research_at.lte.${nowIso}`)
       .or(`research_claimed_at.is.null,research_claimed_at.lt.${staleIso}`)
       .order('category').order('name').limit(size * 3)
@@ -231,7 +233,7 @@ const actions: Record<string, (b: any) => Promise<unknown>> = {
   // התקדמות: מה נשאר במנה, וכמה מוצרים בכל סטטוס מחקר
   async progress(b) {
     const { data, error } = await admin.from('products').select('id, wc_product_id, research_status, next_research_at, research_batch_id, research_claimed_at')
-      .eq('status', 'פעיל').is('wc_removed_at', null)
+      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK)
     if (error) throw new ApiError(500, error.message)
     const parents = await parentIds()
     const rows = (data || []).filter((p: any) => !parents.has(Number(p.wc_product_id)))

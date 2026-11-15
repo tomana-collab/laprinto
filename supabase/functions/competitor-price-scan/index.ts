@@ -172,6 +172,14 @@ async function removedProducts(rows:any[]):Promise<Set<string>>{
  return new Set((data||[]).map((p:any)=>p.id));
 }
 
+// מוצרים שאזלו מהמלאי באתר או לא מפורסמים (טיוטה) — מדלגים עליהם בלי לסרוק ובלי לרשום כישלון
+async function skippedProducts(rows:any[]):Promise<Set<string>>{
+ const ids=[...new Set(rows.map(r=>r.product_id))];
+ if(!ids.length)return new Set();
+ const {data}=await admin.from("products").select("id").in("id",ids).or("stock_status.eq.outofstock,status.neq.פעיל");
+ return new Set((data||[]).map((p:any)=>p.id));
+}
+
 function chainNext(){
  // ממשיכים לקבוצה הבאה מיד (בנוסף ל-cron שרץ כל 2 דקות ככיסוי)
  background((async()=>{await sleep(1500);await admin.rpc("cron_continue_scan");})());
@@ -200,8 +208,10 @@ async function continueRun(){
   const {data:rows,error}=await admin.from("v_competitor_price_targets").select("*").order("offer_id").gt("offer_id",run.cursor||"00000000-0000-0000-0000-000000000000").limit(BATCH);
   if(error)throw new Error(error.message);
   const removed=await removedProducts(rows||[]);
+  const skipped=await skippedProducts(rows||[]);
   let ok=0,bad=0;const errs:any[]=Array.isArray(run.errors)?[...run.errors]:[];
   for(const row of rows||[]){
+   if(skipped.has(row.product_id)&&!removed.has(row.product_id))continue;
    const r:any=await runOne(row,removed.has(row.product_id));
    if(r.result==="success")ok++;else{bad++;if(errs.length<50)errs.push({offer_id:r.offer_id,result:r.result,detail:r.detail||null});}
   }
