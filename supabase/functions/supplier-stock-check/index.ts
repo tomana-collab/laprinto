@@ -242,6 +242,21 @@ Deno.serve(async (req: Request) => {
   if (!who) return respond({ error: 'Unauthorized' }, 401)
   const body = await req.json().catch(() => ({}))
   try {
+    // בדיקת גישה: פותח עד 5 עמודי מוצר ישירות (לפי קוד פנימי של הספק) ומחזיר מה התקבל. לא כותב כלום במסד
+    if (Array.isArray(body?.probe)) {
+      const out: unknown[] = []
+      for (const code of body.probe.slice(0, 5)) {
+        if (!/^\d{3,8}$/.test(String(code))) continue
+        try {
+          const r = await politeFetch(`https://${SUPPLIER_HOST}/index.php?option=com_art&view=product&code=${code}&Itemid=280&lang=he`)
+          const loc = r.headers.get('location')
+          const html = r.status === 200 ? await r.text() : (await r.body?.cancel(), '')
+          const info = html.match(/<div class="product-info">([\s\S]*?)<!-- addthis/)?.[1] || ''
+          out.push({ code, http: r.status, location: loc, sku: info.match(/class="product-sku">\s*([^<\s]+)/)?.[1] || null, out_of_stock: info ? /class="out-of-stock"/.test(info) : null })
+        } catch (e) { out.push({ code, error: String(e instanceof Error ? e.message : e).slice(0, 100) }) }
+      }
+      return respond({ probe: out })
+    }
     if (body?.start) {
       const r = await startRun(who === 'cron' ? 'cron' : 'manual')
       if ('already_running' in r) return respond({ ok: false, already_running: true }, 409)
