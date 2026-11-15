@@ -485,3 +485,10 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .expand-row:hover > td{ background:var(--hover-bg); }
 .order-detail .data-table{ background:var(--paper); }
 .order-detail-actions{ display:flex; gap:8px; margin-top:10px; }
+
+/* הוספת מוצר ללא חיוב בחלון הזמנה */
+.free-add{ border:1px dashed var(--line); border-radius:12px; padding:12px 14px; margin:8px 0 14px; display:flex; flex-direction:column; gap:8px; }
+.free-option{ text-align:right; background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13.5px; display:flex; justify-content:space-between; gap:10px; }
+.free-option:hover{ background:var(--hover-bg); }
+.free-picked{ display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--teal-soft); border-radius:8px; padding:8px 10px; }
+.free-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }

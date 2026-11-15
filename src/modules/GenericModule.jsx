@@ -42,6 +42,17 @@ export default function GenericModule({ config, focusId = null }) {
 
   useEffect(() => { load() }, [config.table])
 
+  // אחרי הוספה/מחיקה של שורת פריט בתוך חלון ההזמנה: טוען מחדש ומשאיר את החלון פתוח על ההזמנה המעודכנת
+  async function reloadOpenOrder() {
+    const { data, error } = await supabase.from(config.table).select(config.selectQuery || '*').order(config.orderBy || 'created_at', { ascending: false })
+    if (error) { setError(error.message); return }
+    setRows(data)
+    if (config.extraLoad) setExtra(await config.extraLoad(supabase))
+    const base = config.rowFilter ? data.filter(config.rowFilter) : data
+    const fresh = groupOrders(base).find(g => g.wc_order_id && g.wc_order_id === editing?.wc_order_id)
+    if (fresh) setEditing(fresh)
+  }
+
   // מעבר ממודול אחר (למשל הזמנה → מוצר): פותח את הרשומה לעריכה ברגע שהנתונים נטענו
   useEffect(() => {
     if (!focusId || !rows) return
@@ -371,6 +382,7 @@ export default function GenericModule({ config, focusId = null }) {
           initial={editing}
           onCancel={() => setEditing(null)}
           onSave={handleSave}
+          onOrderChanged={reloadOpenOrder}
           onDelete={editing.id ? () => handleDelete(editing.id) : null}
         />
       )}
@@ -552,25 +564,32 @@ function SetPasswordAction({ email }) {
   )
 }
 
-function OrderPanel({ order }) {
+function OrderPanel({ order, onChanged }) {
   return (
     <>
       {order.wc_order_id && <OrderDetails order={order} />}
-      <OrderLines order={order} />
+      <OrderLines order={order} onChanged={onChanged} />
       <OrderBreakdown order={order} />
     </>
   )
 }
 
 // כל הפריטים בהזמנה (מוצר ב-CRM, מק"ט באתר, כמות, מכירה, עלות ורווח לכל פריט)
-function OrderLines({ order }) {
+function OrderLines({ order, onChanged }) {
   const nav = useNav()
   const lines = order.lines || [order]
+  async function removeFree(l) {
+    if (!window.confirm(`להסיר את "${l.products?.name || l.product_name}" מההזמנה? זה יחזיר אותו למלאי.`)) return
+    const { error } = await supabase.from('orders').delete().eq('id', l.id).eq('manual_line', true)
+    if (error) { window.alert('ההסרה נכשלה: ' + error.message); return }
+    onChanged?.()
+  }
   return (
+    <>
     <div className="table-wrap" style={{ margin: '12px 0' }}>
       <table className="data-table">
         <thead>
-          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מחיר ליחידה</th><th>הנחת קופון</th><th>מכירה</th><th>עלות</th><th>רווח לפני עמלה</th></tr>
+          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מחיר ליחידה</th><th>הנחת קופון</th><th>מכירה</th><th>עלות</th><th>רווח לפני עמלה</th><th></th></tr>
         </thead>
         <tbody>
           {lines.map(l => {
@@ -581,7 +600,7 @@ function OrderLines({ order }) {
               <tr key={l.id} style={{ cursor: 'default' }}>
                 <td>{l.product_id
                   ? <a href="#" onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
-                  : name}</td>
+                  : name}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}</td>
                 <td>{l.sku && href ? <a href={href} target="_blank" rel="noreferrer">{l.sku}</a> : (l.sku || '—')}</td>
                 <td>{l.quantity}</td>
                 <td>₪{l.price}</td>
@@ -589,11 +608,102 @@ function OrderLines({ order }) {
                 <td>₪{c.sale}</td>
                 <td>{c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`}</td>
                 <td>{c.cost === null ? '—' : <span className={c.sale - c.cost >= 0 ? 'pos' : 'neg'}>₪{Math.round((c.sale - c.cost) * 100) / 100}</span>}</td>
+                <td>{l.manual_line && <button type="button" className="cmp-tool" title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>✕ הסר</button>}</td>
               </tr>
             )
           })}
         </tbody>
       </table>
+    </div>
+    {order.wc_order_id && <AddFreeProduct order={order} onChanged={onChanged} />}
+    </>
+  )
+}
+
+// הוספת מוצר ללא חיוב (מתנה) להזמנת אתר. נשמר כשורת פריט נוספת באותה הזמנה, במחיר 0, ויורד מהמלאי יחד עם ההזמנה.
+// סנכרון ההזמנות מהאתר לא נוגע בשורה הזו (אין לה wc_line_item_id).
+function AddFreeProduct({ order, onChanged }) {
+  const { user } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [products, setProducts] = useState(null) // [{ id, name, sku, stock }]
+  const [q, setQ] = useState('')
+  const [picked, setPicked] = useState(null)
+  const [qty, setQty] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    if (!open || products) return
+    Promise.all([
+      supabase.from('products').select('id, name, sku, wc_product_id, wc_parent_id').eq('status', 'פעיל').is('wc_removed_at', null).order('name'),
+      supabase.from('product_stock').select('product_id, stock'),
+    ]).then(([p, st]) => {
+      if (p.error) { setErr(p.error.message); setProducts([]); return }
+      const stock = new Map((st.data || []).map(x => [x.product_id, Number(x.stock) || 0]))
+      const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצר ראשי שפוצל לוריאציות לא נבחר, רק הוריאציות
+      setProducts(p.data.filter(x => !parents.has(x.wc_product_id)).map(x => ({ id: x.id, name: x.name, sku: x.sku || '', stock: stock.get(x.id) ?? 0 })))
+    })
+  }, [open])
+
+  const needle = q.trim().toLowerCase()
+  const matches = needle && products ? products.filter(x => x.name.toLowerCase().includes(needle) || x.sku.toLowerCase().includes(needle)).slice(0, 8) : []
+  // ירידה מהמלאי: כמו שאר ההזמנה, כשיש לה סטטוס טיפול או שהושלמה
+  const first = order.lines?.[0] || order
+  const willDeduct = order.wc_status === 'completed' || String(first.handling_status || '').trim() !== ''
+
+  async function add() {
+    if (!picked) return
+    const n = Number(qty)
+    if (!(n > 0)) { setErr('כמות חייבת להיות גדולה מ-0'); return }
+    setBusy(true); setErr('')
+    const t = (order.lines || [order]).find(l => !l.manual_line) || first
+    const { error } = await supabase.from('orders').insert({
+      product_id: picked.id, product_name: picked.name, sku: picked.sku, quantity: n, price: 0, discount_amount: 0, manual_line: true,
+      created_by: user?.email || '',
+      // פרטי ההזמנה והסטטוס מועתקים מהשורה הקיימת, כדי שהשורה תתנהג כחלק מההזמנה
+      wc_order_id: t.wc_order_id, wc_line_item_id: null, order_number: t.order_number, order_date: t.order_date, wc_status: t.wc_status,
+      handling_status: t.handling_status, received_by: t.received_by, delivered_notified_at: t.delivered_notified_at,
+      customer_name: t.customer_name, customer_phone: t.customer_phone, customer_email: t.customer_email,
+      shipping_address: t.shipping_address, shipping_method: t.shipping_method, payment_method: t.payment_method,
+      customer_note: t.customer_note, coupons: t.coupons, shipping_total: t.shipping_total, order_total: t.order_total,
+    })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    setPicked(null); setQ(''); setQty(1); setOpen(false)
+    onChanged?.()
+  }
+
+  if (!open) return <button type="button" className="cmp-tool" onClick={() => setOpen(true)}>➕ הוסף מוצר ללא חיוב</button>
+  return (
+    <div className="free-add">
+      <b>הוספת מוצר ללא חיוב</b>
+      {picked ? (
+        <div className="free-picked">
+          <span>{picked.name}{picked.sku ? ` · ${picked.sku}` : ''} <span className="cmp-sub">(מלאי כעת: {picked.stock})</span></span>
+          <button type="button" className="link-btn" onClick={() => setPicked(null)}>החלף</button>
+        </div>
+      ) : (
+        <>
+          <input autoFocus placeholder="חפש מוצר לפי שם או מק״ט" value={q} onChange={e => setQ(e.target.value)} />
+          {products === null && <div className="cmp-sub">טוען מוצרים…</div>}
+          {matches.map(m => (
+            <button key={m.id} type="button" className="free-option" onClick={() => setPicked(m)}>
+              {m.name} <span className="cmp-sub">{m.sku} · מלאי {m.stock}</span>
+            </button>
+          ))}
+          {needle && products && matches.length === 0 && <div className="cmp-sub">לא נמצא מוצר</div>}
+        </>
+      )}
+      <div className="free-row">
+        <label>כמות <input type="number" min="1" style={{ width: 80 }} value={qty} onChange={e => setQty(e.target.value)} /></label>
+        <button type="button" className="btn-add" disabled={!picked || busy} onClick={add}>{busy ? 'מוסיף…' : 'הוסף להזמנה'}</button>
+        <button type="button" className="cmp-tool" onClick={() => { setOpen(false); setPicked(null); setQ('') }}>ביטול</button>
+      </div>
+      <div className="cmp-sub">
+        המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא יורד מהמלאי יחד עם ההזמנה.{' '}
+        {willDeduct ? 'ההזמנה כבר בטיפול או הושלמה, לכן הוא יירד מהמלאי מיד.' : 'להזמנה עוד אין סטטוס טיפול, ולכן הוא יירד מהמלאי כשתקבל סטטוס טיפול או תושלם.'}
+      </div>
+      {err && <div className="err-inline">{err}</div>}
     </div>
   )
 }
@@ -674,7 +784,7 @@ function ProductBreakdown({ form }) {
   )
 }
 
-function EditModal({ config, initial, onCancel, onSave, onDelete }) {
+function EditModal({ config, initial, onCancel, onSave, onDelete, onOrderChanged }) {
   // שדות manualOnly (מסונכרנים מהאתר) לא ניתנים לעריכה בהזמנת אתר
   const fieldsFor = config.fields.filter(f => !(f.manualOnly && initial.wc_order_id))
   const [form, setForm] = useState(() => {
@@ -690,7 +800,7 @@ function EditModal({ config, initial, onCancel, onSave, onDelete }) {
       <div className={`modal${config.modalWide ? ' wide' : ''}`}>
         <h2>{initial.id ? (initial.order_number ? `הזמנה #${initial.order_number}` : 'עריכה') : `${config.label.slice(0, -1) || config.label} חדש`}</h2>
 
-        {config.isOrder && initial.id && <OrderPanel order={initial} />}
+        {config.isOrder && initial.id && <OrderPanel order={initial} onChanged={onOrderChanged} />}
 
         <div className="fields-grid">
         {fieldsFor.map(fld => (
