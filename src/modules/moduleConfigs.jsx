@@ -317,6 +317,7 @@ export const MODULES = {
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
     isOrder: true,
+    liveTables: ['orders', 'stock_receipts', 'stock_receipt_items', 'products'],
     expandRender: (row, nav, extra, ui) => row.lines.length > 1 ? <OrderDetail row={row} nav={nav} extra={extra} ui={ui} /> : null,
     // כפתור "סנכרן הזמנות מהאתר" — אותה Edge Function, target=orders
     syncFunction: 'sync-wc-products',

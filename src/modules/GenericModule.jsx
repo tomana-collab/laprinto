@@ -6,6 +6,7 @@ import { calcProduct, calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import { groupOrders } from '../lib/orders'
 import { isCountedOrder, ORDER_STATUS_LABELS, FINANCE_START, formatDate } from '../lib/format'
 import { useNav } from '../contexts/NavContext'
+import { useLiveReload } from '../lib/useLive'
 import { wpOrderEditUrl, wpProductEditUrl } from '../lib/site'
 
 export default function GenericModule({ config, focusId = null }) {
@@ -41,6 +42,8 @@ export default function GenericModule({ config, focusId = null }) {
   }
 
   useEffect(() => { load() }, [config.table])
+  // מסך הזמנות: המלאי ליד כל מוצר מתעדכן מיד כשנקלטת תעודה או מגיעה הזמנה (config.liveTables)
+  useLiveReload(load, config.liveTables || [])
 
   // אחרי הוספה/מחיקה של שורת פריט בתוך חלון ההזמנה: טוען מחדש ומשאיר את החלון פתוח על ההזמנה המעודכנת
   async function reloadOpenOrder() {

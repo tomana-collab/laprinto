@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
 import { useSort, sortRows, SortTh } from '../lib/sort'
 import { SupplierStock } from '../components/SupplierStock'
+import { useLiveReload } from '../lib/useLive'
+import LiveStatus from '../components/LiveStatus'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -64,8 +66,8 @@ export default function Restock() {
   const [supplier, setSupplier] = useState('')
   const [sort, onSort] = useSort({ key: 'toOrder', dir: 'desc' })
 
-  useEffect(() => {
-    async function load() {
+  async function load() {
+    {
       const [p, s] = await Promise.all([
         supabase.from('products').select('id, name, sku, category, wc_product_id, wc_parent_id, supplier_stock_status, supplier_stock_checked_at, suppliers(name)'),
         supabase.from('product_stock').select('product_id, stock, reserved, incoming, open_orders'),
@@ -84,8 +86,9 @@ export default function Restock() {
         return { ...pr, supplier: pr.suppliers?.name || '', stock, ordered, incoming, missing, toOrder: Math.max(0, missing - incoming) }
       }).filter(r => r.ordered > 0))
     }
-    load()
-  }, [])
+  }
+  useEffect(() => { load() }, [])
+  const liveState = useLiveReload(load, ['stock_receipts', 'stock_receipt_items', 'orders', 'products'])
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -109,7 +112,7 @@ export default function Restock() {
 
   return (
     <div>
-      <div className="module-head"><h2>🧩 השלמת מוצרים</h2></div>
+      <div className="module-head"><h2>🧩 השלמת מוצרים <LiveStatus {...liveState} onRefresh={liveState.refresh} /></h2></div>
       {error && <div className="err-inline">{error}</div>}
 
       <div className="summary-row">

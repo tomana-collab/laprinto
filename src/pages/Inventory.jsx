@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
 import { useSort, sortRows, SortTh } from '../lib/sort'
 import { SupplierStock } from '../components/SupplierStock'
+import { useLiveReload } from '../lib/useLive'
+import LiveStatus from '../components/LiveStatus'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -58,6 +60,8 @@ export default function Inventory() {
     }))
   }
   useEffect(() => { load() }, [])
+  // המסך חי: מתעדכן מיד כשנקלטת תעודה / מגיעה הזמנה / משתנה מוצר, וגם בחזרה ללשונית וכל דקה
+  const liveState = useLiveReload(load, ['stock_receipts', 'stock_receipt_items', 'orders', 'products'])
 
   // ספירת מלאי: המשתמש מזין כמה יש בפועל, ואנחנו מחשבים מלאי פתיחה כך שהמלאי הנוכחי יתאים
   async function saveCount(row, actual, min) {
@@ -109,7 +113,13 @@ export default function Inventory() {
   const unsold = inStock.filter(r => r.sold_total === 0) // יש במלאי ועדיין לא נמכרה אפילו יחידה
   const receivedUnits = rows.reduce((a, r) => a + r.received, 0)
   const incomingUnits = rows.reduce((a, r) => a + r.incoming, 0)
-  const stockUnits = inStock.reduce((a, r) => a + r.stock, 0) // רק מלאי חיובי, בלי חוסרים
+  const stockUnits = inStock.reduce((a, r) => a + r.stock, 0) // פנויות למכירה: רק מלאי חיובי, בלי חוסרים
+  // פיזית במחסן (לפני הזמנות פתוחות שמורות) ושווי הסחורה שבמלאי: יחידות × עלות (לפני מע"מ) ושווי מכירה באתר
+  const onShelf = rows.filter(r => r.physical > 0)
+  const physicalUnits = onShelf.reduce((a, r) => a + r.physical, 0)
+  const reservedUnits = rows.reduce((a, r) => a + Math.min(r.reserved, Math.max(0, r.physical)), 0)
+  const stockCost = onShelf.reduce((a, r) => a + r.physical * r.unit_cost, 0)
+  const stockSale = onShelf.reduce((a, r) => a + r.physical * r.unit_price, 0)
   const unsoldUnits = unsold.reduce((a, r) => a + r.stock, 0)
   const unsoldCost = unsold.reduce((a, r) => a + r.stock * r.unit_cost, 0)
   const unsoldSale = unsold.reduce((a, r) => a + r.stock * r.unit_price, 0)
@@ -117,7 +127,7 @@ export default function Inventory() {
   return (
     <div>
       <div className="module-head">
-        <h2>📦 מלאי</h2>
+        <h2>📦 מלאי <LiveStatus {...liveState} onRefresh={liveState.refresh} /></h2>
         <div style={{ display: 'flex', gap: 8 }}>
           {countMode && <button className="btn-add" onClick={() => { setCountMode(false); setCounts({}) }}>ביטול</button>}
           <button className="btn-add" disabled={savingCount} onClick={() => countMode ? saveCounts() : setCountMode(true)}>
@@ -133,17 +143,24 @@ export default function Inventory() {
       <div className="summary-row">
         <div className="summary-card"><span>יחידות שנקלטו בתעודות (סה״כ שהגיעו)</span><b>{num(receivedUnits)}</b></div>
         <div className="summary-card"><span>יחידות שהוזמנו וממתינות לאספקה</span><b>{num(incomingUnits)}</b></div>
-        <div className="summary-card"><span>יחידות במלאי כרגע</span><b>{num(stockUnits)}</b></div>
+        <div className="summary-card"><span>יחידות במחסן (פיזית)</span><b>{num(physicalUnits)}</b></div>
+        <div className="summary-card"><span>מתוכן שמורות להזמנות פתוחות</span><b>{num(reservedUnits)}</b></div>
+        <div className="summary-card"><span>פנויות למכירה</span><b>{num(stockUnits)}</b></div>
       </div>
 
       <div className="summary-row">
-        <div className="summary-card"><span>יחידות במלאי שטרם נמכרו ({unsold.length} מוצרים)</span><b>{num(unsoldUnits)}</b></div>
-        <div className="summary-card"><span>כסף תקוע בהם — לפי עלות (לפני מע״מ)</span><b>₪{num(Math.round(unsoldCost))}</b></div>
-        <div className="summary-card"><span>שווי מכירה שלהם באתר (כולל מע״מ)</span><b>₪{num(Math.round(unsoldSale))}</b></div>
+        <div className="summary-card"><span>עלות הסחורה שבמלאי (לפני מע״מ)</span><b>₪{num(Math.round(stockCost))}</b></div>
+        <div className="summary-card"><span>שווי מכירה שלה באתר (כולל מע״מ)</span><b>₪{num(Math.round(stockSale))}</b></div>
+        <div className="summary-card"><span>מוצרים במלאי</span><b>{onShelf.length}</b></div>
       </div>
 
       <div className="summary-row">
-        <div className="summary-card"><span>מוצרים במלאי</span><b>{inStock.length}</b></div>
+        <div className="summary-card"><span>יחידות שטרם נמכרה אפילו אחת מהן ({unsold.length} מוצרים)</span><b>{num(unsoldUnits)}</b></div>
+        <div className="summary-card"><span>כסף תקוע בהן — לפי עלות (לפני מע״מ)</span><b>₪{num(Math.round(unsoldCost))}</b></div>
+        <div className="summary-card"><span>שווי מכירה שלהן באתר (כולל מע״מ)</span><b>₪{num(Math.round(unsoldSale))}</b></div>
+      </div>
+
+      <div className="summary-row">
         <div className="summary-card"><span>מוצרים שחסרים — להזמין מהספק</span><b className={toOrder.length ? 'neg' : ''}>{toOrder.length}</b></div>
         <div className="summary-card"><span>יחידות להזמנה</span><b>{num(toOrder.reduce((a, r) => a + needToOrder(r), 0))}</b></div>
       </div>
