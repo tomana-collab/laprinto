@@ -462,3 +462,14 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .cmp-history[open]{ padding-bottom:12px; }
 .prod-cell{ display:flex; align-items:center; gap:10px; min-width:200px; }
 .thumb-empty{ font-size:18px; opacity:.45; filter:grayscale(1); }
+
+/* מלאי אצל הספק + הודעות חשובות */
+.sup-stock{ display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap; background:var(--line); color:var(--ink-soft); }
+.sup-stock.sup-in_stock{ color:var(--teal); }
+.sup-stock.sup-out_of_stock{ background:var(--coral); color:#fff; }
+.nav-badge{ margin-inline-start:auto; background:var(--coral); color:#fff; border-radius:999px; font-size:11.5px; font-weight:700; padding:1px 8px; min-width:20px; text-align:center; }
+.notif-card{ border:1px solid var(--line); border-radius:14px; background:var(--paper); padding:14px 16px; margin-bottom:12px; }
+.notif-card.unread{ border-color:var(--coral); box-shadow:0 0 0 1px var(--coral) inset; }
+.notif-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+.notif-head b{ font-size:15px; }
+.notif-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--coral); margin-inline-end:8px; }

@@ -1165,12 +1165,16 @@ function JobStatusBox({ pendingMatches, onSynced }) {
 
   async function loadJobs() {
     const [j, t] = await Promise.all([
-      supabase.from('job_runs').select('job_type, status, trigger, started_at, finished_at, records_total, success_count, failure_count, next_run_at').order('started_at', { ascending: false }).limit(30),
+      supabase.from('job_runs').select('job_type, status, trigger, started_at, finished_at, records_total, success_count, failure_count, next_run_at, meta').order('started_at', { ascending: false }).limit(40),
       supabase.from('v_competitor_price_targets').select('product_id'),
     ])
     if (j.error) { setJobs({}); return }
     const latest = {}
-    for (const r of j.data) if (!latest[r.job_type]) latest[r.job_type] = r
+    // סנכרון wc_sync רץ יומית להזמנות בלבד ופעם בשבוע (או בלחיצה) גם למוצרים: כאן מוצג סנכרון המוצרים האחרון
+    for (const r of j.data) {
+      const key = r.job_type === 'wc_sync' && !['products', 'all'].includes(r.meta?.target || 'products') ? 'wc_sync_orders' : r.job_type
+      if (!latest[key]) latest[key] = r
+    }
     setJobs(latest)
     if (!t.error) setTracked(new Set(t.data.map(x => x.product_id)).size)
   }
@@ -1194,7 +1198,7 @@ function JobStatusBox({ pendingMatches, onSynced }) {
   if (!jobs) return null
   const sync = jobs.wc_sync, scan = jobs.price_scan
   const when = r => r ? <span dir="ltr">{formatDateTime(r.finished_at || r.started_at)}</span> : 'עדיין לא רץ'
-  const bad = [sync, scan].some(r => r && r.status === 'failed')
+  const bad = [sync, scan, jobs.wc_sync_orders].some(r => r && r.status === 'failed')
   // סנכרון מוצלח בשעה האחרונה → הכפתור מראה שכבר סונכרן (עדיין אפשר ללחוץ שוב)
   const syncAgeMs = sync?.status === 'success' && sync.finished_at ? Date.now() - new Date(sync.finished_at).getTime() : null
   const recentSyncMin = syncAgeMs !== null && syncAgeMs >= 0 && syncAgeMs < 60 * 60 * 1000 ? Math.floor(syncAgeMs / 60000) : null
@@ -1203,7 +1207,7 @@ function JobStatusBox({ pendingMatches, onSynced }) {
       <div className="cmp-scan-head">
         <div>
           <b>סנכרון וסריקה אוטומטיים</b>
-          <div className="cmp-sub">סנכרון מוצרים כל יום ב-06:00 · סריקת מחירים פעם בשבוע (יום ראשון 08:00) או בלחיצה ידנית</div>
+          <div className="cmp-sub">סנכרון הזמנות כל יום ב-06:00 · סנכרון מוצרים וסריקת מחירים פעם בשבוע (יום ראשון) או בלחיצה ידנית</div>
         </div>
         <button className={recentSyncMin !== null ? 'btn-outline' : 'btn-add'} style={{ borderRadius: 999, padding: '9px 16px', fontWeight: 700 }}
           onClick={syncNow} disabled={busy} title={recentSyncMin !== null ? 'המוצרים סונכרנו לאחרונה. אפשר ללחוץ כדי לסנכרן שוב' : undefined}>
@@ -1211,7 +1215,7 @@ function JobStatusBox({ pendingMatches, onSynced }) {
         </button>
       </div>
       <div className="cmp-scan-stats">
-        <span>סנכרון אחרון: <b>{when(sync)}</b>{sync && <> ({JOB_STATUS[sync.status] || sync.status})</>}</span>
+        <span>סנכרון מוצרים אחרון: <b>{when(sync)}</b>{sync && <> ({JOB_STATUS[sync.status] || sync.status})</>}</span>
         <span>סריקה אחרונה: <b>{when(scan)}</b>{scan && <> ({JOB_STATUS[scan.status] || scan.status})</>}</span>
         <span>סריקה הבאה: <b>{scan?.next_run_at ? <span dir="ltr">{formatDateTime(scan.next_run_at)}</span> : 'יום ראשון ב-08:00'}</b></span>
         <span>מוצרים במעקב: <b>{tracked ?? '…'}</b></span>

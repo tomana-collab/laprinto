@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { MODULES } from '../modules/moduleConfigs'
 import { useAuth } from '../contexts/AuthContext'
+import { NOTIFICATIONS_CHANGED } from '../pages/Notifications'
 
 const DEV_GROUP = ['tasks', 'ideas', 'opportunities', 'trends', 'suppliers']
 
@@ -15,6 +16,16 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
       .then(({ data }) => setRole(data?.role || null))
   }, [user?.email])
 
+  // הדגל: מספר ההודעות החשובות שלא נקראו. נטען בכניסה, בכל מעבר דף ואחרי סימון נקרא (בלי רענון מחזורי)
+  const [unread, setUnread] = useState(0)
+  useEffect(() => {
+    const load = () => supabase.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null)
+      .then(({ count }) => setUnread(count || 0))
+    load()
+    window.addEventListener(NOTIFICATIONS_CHANGED, load)
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED, load)
+  }, [active])
+
   const [devOpen, setDevOpen] = useState(false)
   const devActive = DEV_GROUP.includes(active)
   const isAdmin = role === 'אדמין'
@@ -23,13 +34,14 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
   // משתמשים — בתוך עמוד ההגדרות (לאדמין).
   const PAGES = {
     dashboard: { icon: '📊', label: 'דאשבורד', admin: true },
+    notifications: { icon: '🔔', label: 'הודעות חשובות' },
     competitors: { icon: '🔎', label: 'השוואת מחירים' },
     bundles: { icon: '🎁', label: 'מארזים' },
     inventory: { icon: '📦', label: 'מלאי' },
     restock: { icon: '🧩', label: 'השלמת מוצרים' },
     receipts: { icon: '📥', label: 'קליטת תעודות' },
   }
-  const ORDER = ['dashboard', 'orders', 'competitors', 'products', 'inventory', 'restock', 'receipts', 'expenses', 'dev']
+  const ORDER = ['dashboard', 'notifications', 'orders', 'competitors', 'products', 'inventory', 'restock', 'receipts', 'expenses', 'dev']
 
   const item = key => {
     if (key === 'dev') return devGroup
@@ -39,6 +51,7 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
     return (
       <button key={key} className={active === key ? 'active' : ''} onClick={() => { onSelect(key); onClose() }}>
         <span className="nav-icon">{page.icon}</span> {page.label}
+        {key === 'notifications' && unread > 0 && <span className="nav-badge">{unread}</span>}
       </button>
     )
   }

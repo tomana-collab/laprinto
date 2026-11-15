@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
 import { useSort, sortRows, SortTh } from '../lib/sort'
+import { SupplierStock } from '../components/SupplierStock'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -66,7 +67,7 @@ export default function Restock() {
   useEffect(() => {
     async function load() {
       const [p, s] = await Promise.all([
-        supabase.from('products').select('id, name, sku, category, wc_product_id, wc_parent_id, suppliers(name)'),
+        supabase.from('products').select('id, name, sku, category, wc_product_id, wc_parent_id, supplier_stock_status, supplier_stock_checked_at, suppliers(name)'),
         supabase.from('product_stock').select('product_id, stock, incoming, open_orders'),
       ])
       const err = [p, s].find(x => x.error)
@@ -137,6 +138,7 @@ export default function Restock() {
               <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
               <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
               <SortTh k="supplier" sort={sort} onSort={onSort}>ספק</SortTh>
+              <th>מלאי אצל הספק</th>
               <SortTh k="ordered" sort={sort} onSort={onSort}>הוזמן (בהזמנות פתוחות)</SortTh>
               <SortTh k="stock" sort={sort} onSort={onSort}>מלאי קיים</SortTh>
               <SortTh k="missing" sort={sort} onSort={onSort}>חסר</SortTh>
@@ -145,7 +147,7 @@ export default function Restock() {
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={8}>{showAll ? 'אין מוצרים בהזמנות פתוחות' : 'אין מוצרים שחסרים. כל מה שהוזמן קיים במלאי'}</td></tr>}
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={9}>{showAll ? 'אין מוצרים בהזמנות פתוחות' : 'אין מוצרים שחסרים. כל מה שהוזמן קיים במלאי'}</td></tr>}
             {sortRows(shown, {
               name: r => r.name, sku: r => r.sku || '', supplier: r => r.supplier, ordered: r => r.ordered,
               stock: r => r.stock, missing: r => r.missing, incoming: r => r.incoming, toOrder: r => r.toOrder,
@@ -154,6 +156,7 @@ export default function Restock() {
                 <td><a href="#" onClick={e => { e.preventDefault(); openRecord('products', r.id) }}>{r.name}</a></td>
                 <td>{r.sku || '—'}</td>
                 <td>{r.supplier || '—'}</td>
+                <td><SupplierStock status={r.supplier_stock_status} checkedAt={r.supplier_stock_checked_at} /></td>
                 <td><b>{num(r.ordered)}</b></td>
                 <td><b className={r.stock <= 0 ? 'neg' : ''}>{num(r.stock)}</b></td>
                 <td>{r.missing ? <b className="neg">{num(r.missing)}</b> : '—'}</td>
