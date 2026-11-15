@@ -5,6 +5,7 @@ import { useSort, sortRows, SortTh } from '../lib/sort'
 import { SupplierStock } from '../components/SupplierStock'
 import { useLiveReload } from '../lib/useLive'
 import LiveStatus from '../components/LiveStatus'
+import CollapsibleSummary from '../components/CollapsibleSummary'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -140,6 +141,7 @@ export default function Inventory() {
       </div>}
       {error && <div className="err-inline">{error}</div>}
 
+      <CollapsibleSummary title="📊 סיכום מלאי" preview={`${num(physicalUnits)} יח׳ במחסן · עלות ₪${num(Math.round(stockCost))}`}>
       <div className="summary-row">
         <div className="summary-card"><span>יחידות שנקלטו בתעודות (סה״כ שהגיעו)</span><b>{num(receivedUnits)}</b></div>
         <div className="summary-card"><span>יחידות שהוזמנו וממתינות לאספקה</span><b>{num(incomingUnits)}</b></div>
@@ -164,6 +166,7 @@ export default function Inventory() {
         <div className="summary-card"><span>מוצרים שחסרים — להזמין מהספק</span><b className={toOrder.length ? 'neg' : ''}>{toOrder.length}</b></div>
         <div className="summary-card"><span>יחידות להזמנה</span><b>{num(toOrder.reduce((a, r) => a + needToOrder(r), 0))}</b></div>
       </div>
+      </CollapsibleSummary>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
