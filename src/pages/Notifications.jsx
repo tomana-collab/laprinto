@@ -53,13 +53,13 @@ export default function Notifications() {
       <div className="module-head">
         <h2>🔔 הודעות חשובות</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn-add" onClick={checkNow} disabled={busy}>{busy ? 'בודק…' : '⟳ בדוק מלאי אצל הספק עכשיו'}</button>
+          <button className="btn-outline" style={{ borderRadius: 999, padding: '9px 16px', fontWeight: 700 }} disabled title="אתר הספק חוסם בקשות מהשרת">בדיקה מול הספק מושהית</button>
           {unread.length > 0 && <button className="btn-outline" style={{ borderRadius: 999, padding: '9px 16px', fontWeight: 700 }} onClick={() => setRead(unread.map(r => r.id), true)}>סמן הכול כנקרא</button>}
         </div>
       </div>
       <div className="cmp-sub" style={{ marginBottom: 14 }}>
-        בדיקת מלאי אצל ארט יודאיקה: כל יום ב-07:00 או בלחיצה. הבדיקה פונה לאתר הספק בלבד ולא משנה כלום באתר שלך.
-        {lastRun && <> בדיקה אחרונה: <b dir="ltr">{formatDateTime(lastRun.finished_at || lastRun.started_at)}</b> ({lastRun.status === 'running' ? 'רצה כעת' : lastRun.status === 'failed' ? 'נכשלה' : `נבדקו ${lastRun.success_count ?? 0}, שגיאות ${lastRun.failure_count ?? 0}`})</>}
+        הבדיקה האוטומטית של מלאי אצל ארט יודאיקה מושהית: אתר הספק חוסם בקשות מהשרת. ההודעות יופיעו כאן כשתהיה דרך לקבל את המלאי שלהם.
+        {lastRun && <> בדיקה אחרונה: <b dir="ltr">{formatDateTime(lastRun.finished_at || lastRun.started_at)}</b></>}
       </div>
       {msg && <div className={`cmp-scan-msg ${msg.ok ? 'ok' : 'warn'}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
       {error && <div className="err-inline">{error}</div>}

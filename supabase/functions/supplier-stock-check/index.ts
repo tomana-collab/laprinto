@@ -21,6 +21,8 @@ const cors = {
 const respond = (obj: unknown, status = 200) => new Response(JSON.stringify(obj), { status, headers: cors })
 
 const JOB = 'supplier_stock'
+// מושהה: אתר הספק חוסם בקשות מהשרת. לא פונים אליו עד שיימצא פתרון (קובץ מלאי / גישה אחרת). להפעלה מחדש: false
+const PAUSED = true
 const SUPPLIER_HOST = 'www.israel-judaica.com'
 const SEARCH_URL = `https://${SUPPLIER_HOST}/index.php?option=com_art&task=search.searchRedirect&lang=he`
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
@@ -257,6 +259,7 @@ Deno.serve(async (req: Request) => {
       }
       return respond({ probe: out })
     }
+    if (PAUSED && (body?.start || body?.continue || Array.isArray(body?.probe))) return respond({ error: 'בדיקת מלאי הספק מושהית: האתר חוסם בקשות מהשרת' }, 503)
     if (body?.start) {
       const r = await startRun(who === 'cron' ? 'cron' : 'manual')
       if ('already_running' in r) return respond({ ok: false, already_running: true }, 409)
