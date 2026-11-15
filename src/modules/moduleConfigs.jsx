@@ -13,7 +13,13 @@ const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / �
 // ריחוף מציג את כל המוצרים, ולחיצה על השורה פותחת את ההזמנה המלאה (שם כל הפריטים מופיעים בטבלה).
 const lineName = l => l.products?.name || l.product_name || '—'
 const lineLabel = l => (Number(l.quantity) > 1 ? `${lineName(l)} ×${l.quantity}` : lineName(l))
-const stockOf = (extra, l) => (extra ? (l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)) : undefined)
+// מלאי קיים לשורת הזמנה: קודם המוצר המקושר בשורה (כולל וריאציה) כשהמק"ט שלו זהה למק"ט בשורה, ורק אחרת לפי מק"ט.
+// כך וריאציה והמוצר הראשי שלה, שחולקים מק"ט, לא מתערבבים.
+const stockOf = (extra, l) => {
+  if (!extra) return undefined
+  if (l.product_id && extra.byId.has(l.product_id) && (!l.sku || extra.skuById.get(l.product_id) === l.sku)) return extra.byId.get(l.product_id)
+  return l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)
+}
 
 // פירוט הזמנה עם כמה מוצרים: מלאי קיים ומלאי אצל הספק לכל מוצר, וכפתור לפתיחת ההזמנה
 function OrderDetail({ row, nav, extra, ui }) {
@@ -278,13 +284,15 @@ export const MODULES = {
     // מלאי קיים לכל מוצר, כדי להציג אותו ליד כל שורת הזמנה (מקושר לפי מק"ט כמו ב-view של המלאי, ואם אין — לפי המוצר)
     extraLoad: async supabase => {
       const [{ data: prods }, { data: stock }] = await Promise.all([
-        supabase.from('products').select('id, sku'),
+        supabase.from('products').select('id, sku, wc_product_id, wc_parent_id'),
         supabase.from('product_stock').select('product_id, stock'),
       ])
       const byId = new Map((stock || []).map(r => [r.product_id, Number(r.stock) || 0]))
+      const skuById = new Map((prods || []).map(p => [p.id, p.sku]))
+      const parents = new Set((prods || []).map(p => p.wc_parent_id).filter(Boolean)) // מוצר ראשי של וריאציות לא משמש לחיפוש לפי מק"ט
       const bySku = new Map()
-      for (const p of prods || []) if (p.sku && !bySku.has(p.sku)) bySku.set(p.sku, byId.get(p.id) ?? 0)
-      return { byId, bySku }
+      for (const p of prods || []) if (p.sku && !parents.has(p.wc_product_id) && !bySku.has(p.sku)) bySku.set(p.sku, byId.get(p.id) ?? 0)
+      return { byId, bySku, skuById }
     },
     fields: [
       // מוצר/מחיר/כמות מסונכרנים מהאתר — מוצגים לעריכה רק בהזמנה ידנית
