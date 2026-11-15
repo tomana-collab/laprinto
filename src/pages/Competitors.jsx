@@ -1203,7 +1203,7 @@ function JobStatusBox({ pendingMatches, onSynced }) {
       <div className="cmp-scan-head">
         <div>
           <b>סנכרון וסריקה אוטומטיים</b>
-          <div className="cmp-sub">סנכרון מוצרים כל יום ב-06:00 · סריקת מחירים ב-08:00 · בדיקת תקינות ב-09:00</div>
+          <div className="cmp-sub">סנכרון מוצרים כל יום ב-06:00 · סריקת מחירים פעם בשבוע (יום ראשון 08:00) או בלחיצה ידנית</div>
         </div>
         <button className={recentSyncMin !== null ? 'btn-outline' : 'btn-add'} style={{ borderRadius: 999, padding: '9px 16px', fontWeight: 700 }}
           onClick={syncNow} disabled={busy} title={recentSyncMin !== null ? 'המוצרים סונכרנו לאחרונה. אפשר ללחוץ כדי לסנכרן שוב' : undefined}>
@@ -1213,7 +1213,7 @@ function JobStatusBox({ pendingMatches, onSynced }) {
       <div className="cmp-scan-stats">
         <span>סנכרון אחרון: <b>{when(sync)}</b>{sync && <> ({JOB_STATUS[sync.status] || sync.status})</>}</span>
         <span>סריקה אחרונה: <b>{when(scan)}</b>{scan && <> ({JOB_STATUS[scan.status] || scan.status})</>}</span>
-        <span>סריקה הבאה: <b>{scan?.next_run_at ? <span dir="ltr">{formatDateTime(scan.next_run_at)}</span> : 'מחר ב-08:00'}</b></span>
+        <span>סריקה הבאה: <b>{scan?.next_run_at ? <span dir="ltr">{formatDateTime(scan.next_run_at)}</span> : 'יום ראשון ב-08:00'}</b></span>
         <span>מוצרים במעקב: <b>{tracked ?? '…'}</b></span>
         {scan && <span className="pos">הצלחות בסריקה: <b>{scan.success_count ?? 0}</b></span>}
         {scan && <span className={scan.failure_count ? 'neg' : ''}>שגיאות בסריקה: <b>{scan.failure_count ?? 0}</b></span>}
