@@ -133,7 +133,7 @@ function ComparisonView({ onChanged }) {
     const [m, s, p, pr, sa] = await Promise.all([
       supabase.from('v_competitor_matrix').select('*'),
       supabase.from('competitor_stores').select('id, name, domain, enabled, priority').order('priority'),
-      supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url, image_url'),
+      supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url, image_url, status, stock_status, wc_removed_at'),
       // מוצרים שממתינים למחקר מתחרים, והניסיון האחרון של סריקת מחיר לכל התאמה (לסינון "סריקה נכשלה")
       supabase.from('v_products_pending_research').select('id'),
       supabase.from('competitor_scan_attempts').select('offer_id, result, attempted_at').order('attempted_at', { ascending: false }).limit(1000),
@@ -177,7 +177,9 @@ function ComparisonView({ onChanged }) {
         last_scan: lastScan.get(r.offer_id) || null,
       })
     }
-    const list = [...byProduct.values()].filter(r => !parents.has(r.wc_product_id) || r.offers.length)
+    // מוצר שהוסר מהאתר, לא מפורסם (טיוטה) או שאזל מהמלאי לא מוצג בהשוואה
+    const hidden = id => { const x = prodById.get(id); return !x || x.wc_removed_at || x.status !== 'פעיל' || x.stock_status === 'outofstock' }
+    const list = [...byProduct.values()].filter(r => !hidden(r.id) && (!parents.has(r.wc_product_id) || r.offers.length))
     list.forEach(withLowest)
     setRows(list)
     setLoadedAt(new Date())
