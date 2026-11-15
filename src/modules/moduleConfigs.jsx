@@ -13,6 +13,37 @@ const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / �
 // ריחוף מציג את כל המוצרים, ולחיצה על השורה פותחת את ההזמנה המלאה (שם כל הפריטים מופיעים בטבלה).
 const lineName = l => l.products?.name || l.product_name || '—'
 const lineLabel = l => (Number(l.quantity) > 1 ? `${lineName(l)} ×${l.quantity}` : lineName(l))
+const stockOf = (extra, l) => (extra ? (l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)) : undefined)
+
+// פירוט הזמנה עם כמה מוצרים: מלאי קיים ומלאי אצל הספק לכל מוצר, וכפתור לפתיחת ההזמנה
+function OrderDetail({ row, nav, extra, ui }) {
+  return (
+    <div className="order-detail">
+      <table className="data-table">
+        <thead><tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מלאי קיים</th><th>מלאי אצל הספק</th></tr></thead>
+        <tbody>
+          {row.lines.map(l => {
+            const v = stockOf(extra, l)
+            return (
+              <tr key={l.id} style={{ cursor: 'default' }}>
+                <td>{l.product_id ? <a href="#" onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{lineName(l)}</a> : lineName(l)}</td>
+                <td>{l.sku || '—'}</td>
+                <td>{l.quantity}</td>
+                <td>{v === undefined ? '—' : <b className={v <= 0 ? 'neg' : ''}>{v}</b>}</td>
+                <td><SupplierStock status={l.products?.supplier_stock_status} checkedAt={l.products?.supplier_stock_checked_at} /></td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <div className="order-detail-actions">
+        <button type="button" className="btn-add" onClick={ui.open}>פתח הזמנה</button>
+        <button type="button" className="cmp-tool" onClick={ui.close}>סגור</button>
+      </div>
+    </div>
+  )
+}
+
 function OneLine({ main, count, tip, bad }) {
   return (
     <div className="order-cell" title={tip}>
@@ -265,6 +296,7 @@ export const MODULES = {
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
     isOrder: true,
+    expandRender: (row, nav, extra, ui) => row.lines.length > 1 ? <OrderDetail row={row} nav={nav} extra={extra} ui={ui} /> : null,
     // כפתור "סנכרן הזמנות מהאתר" — אותה Edge Function, target=orders
     syncFunction: 'sync-wc-products',
     syncBody: { target: 'orders' },
@@ -288,9 +320,14 @@ export const MODULES = {
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
       { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
       {
+        // הזמנה עם מוצר אחד: שם המוצר. עם כמה מוצרים: "3 מוצרים", ולחיצה עליהם פותחת פירוט (עם מלאי) מתחת לשורה
         key: 'product',
         label: 'מוצר',
-        render: row => <OneLine main={lineLabel(row.lines[0])} count={row.lines.length} tip={row.lines.map(lineLabel).join('\n')} />,
+        render: (row, nav, extra, ui) => row.lines.length === 1
+          ? <OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} />
+          : <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
+              {row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
+            </button>,
       },
       {
         // מספר המוצרים (שורות פריט) בהזמנה; בסוגריים סך היחידות אם יש כמות גדולה מ-1
@@ -302,32 +339,26 @@ export const MODULES = {
         },
       },
       {
-        // מלאי קיים = נקלט - נמכר (לפי מק"ט), כמו בעמוד המלאי
+        // מלאי קיים = נקלט - נמכר (לפי מק"ט), כמו בעמוד המלאי. בהזמנה עם כמה מוצרים: רק סיכום (הפירוט בלחיצה על "מוצרים")
         key: 'stock_left',
         label: 'מלאי קיים',
         render: (row, nav, extra) => {
-          const val = l => (extra ? (l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)) : undefined)
-          const vals = row.lines.map(val)
-          const first = vals[0]
-          return (
-            <OneLine count={row.lines.length} bad={vals.some(v => v !== undefined && v <= 0)}
-              main={first === undefined ? '—' : <span className={first <= 0 ? 'neg' : ''}>{first}</span>}
-              tip={row.lines.map((l, k) => `${lineName(l)}: ${vals[k] === undefined ? '—' : vals[k]}`).join('\n')} />
-          )
+          const vals = row.lines.map(l => stockOf(extra, l))
+          if (row.lines.length === 1) return vals[0] === undefined ? '—' : <span className={vals[0] <= 0 ? 'neg' : ''}>{vals[0]}</span>
+          const short = vals.filter(v => v !== undefined && v <= 0).length
+          return short ? <span className="neg" title="מוצרים בהזמנה שאין להם מלאי">חסר ב-{short}</span> : <span className="pos">✓ במלאי</span>
         },
       },
       {
-        // מצב המלאי אצל הספק (בדיקה מול אתר הספק). שורה אחת; ריחוף מציג את כל המוצרים
+        // מצב המלאי אצל הספק. בהזמנה עם כמה מוצרים: סיכום בלבד (הפירוט בלחיצה על "מוצרים")
         key: 'supplier_stock',
         label: 'מלאי אצל הספק',
         noSort: true,
         render: row => {
           const st = l => l.products?.supplier_stock_status
-          return (
-            <OneLine count={row.lines.length} bad={row.lines.some(l => st(l) === 'out_of_stock')}
-              main={<SupplierStock status={st(row.lines[0])} checkedAt={row.lines[0].products?.supplier_stock_checked_at} />}
-              tip={row.lines.map(l => `${lineName(l)}: ${SUPPLIER_STOCK_LABEL[st(l)] || 'לא נבדק'}`).join('\n')} />
-          )
+          if (row.lines.length === 1) return <SupplierStock status={st(row.lines[0])} checkedAt={row.lines[0].products?.supplier_stock_checked_at} />
+          const out = row.lines.filter(l => st(l) === 'out_of_stock').length
+          return out ? <span className="sup-stock sup-out_of_stock">אזל ב-{out}</span> : '—'
         },
       },
       { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },

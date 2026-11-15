@@ -21,6 +21,8 @@ export default function GenericModule({ config, focusId = null }) {
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
   const [selected, setSelected] = useState(() => new Set()) // מזהי שורות מסומנות לפעולה בכמות
+  const [expanded, setExpanded] = useState(() => new Set()) // שורות פתוחות לפירוט (config.expandRender), למשל הזמנה עם כמה מוצרים
+  const toggleExpand = id => setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   // מיון בלחיצה על כותרת: ראשונה מהגדול לקטן, שנייה מהקטן לגדול, שלישית מבטלת
   const [sort, setSort] = useState({ key: null, dir: 'desc' })
   const toggleSort = key => setSort(s => s.key !== key ? { key, dir: 'desc' } : s.dir === 'desc' ? { key, dir: 'asc' } : { key: null, dir: 'desc' })
@@ -338,9 +340,10 @@ export default function GenericModule({ config, focusId = null }) {
                   </tr>
                 )}
                 {g.rows.map(row => (
-                  <tr key={row.id} onClick={() => setEditing(row)}>
+                  <Fragment key={row.id}>
+                  <tr onClick={() => setEditing(row)}>
                     {bulk && <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} /></td>}
-                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav, extra) : (row[c.key] ?? '—')}</td>)}
+                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav, extra, { expanded: expanded.has(row.id), toggle: () => toggleExpand(row.id) }) : (row[c.key] ?? '—')}</td>)}
                     {config.statusField && (
                       <td onClick={e => e.stopPropagation()}>
                         <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>
@@ -349,6 +352,12 @@ export default function GenericModule({ config, focusId = null }) {
                       </td>
                     )}
                   </tr>
+                  {config.expandRender && expanded.has(row.id) && (
+                    <tr className="expand-row">
+                      <td colSpan={colCount}>{config.expandRender(row, nav, extra, { open: () => setEditing(row), close: () => toggleExpand(row.id) })}</td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </Fragment>
             ))}
