@@ -476,19 +476,21 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
   const [scanning, setScanning] = useState(null) // offer_id שנסרק כרגע
 
   // סריקת מחיר אמיתית להתאמה אחת (אותה Edge Function של הסריקה היומית)
-  async function scanOne(o) {
+  // release=true: מחיר ידני חוזר לעדכון אוטומטי. אם הסריקה נכשלת המחיר הידני נשאר
+  async function scanOne(o, release = false) {
     setScanning(o.offer_id); setNotice(x => ({ ...x, [o.offer_id]: null }))
-    const { data, error } = await invokeScan({ offer_id: o.offer_id })
+    const { data, error } = await invokeScan({ offer_id: o.offer_id, ...(release ? { release_manual: true } : {}) })
     setScanning(null)
+    if (data?.skipped === 'manual_price') { setNotice(x => ({ ...x, [o.offer_id]: { ok: false, text: 'המחיר הוזן ידנית ולכן לא נסרק' } })); return }
     const res = data?.results?.[0]
     if (error || !res) { setNotice(x => ({ ...x, [o.offer_id]: { ok: false, text: error || 'ההתאמה לא נמצאה ברשימת הסריקה' } })); return }
     if (res.result === 'success' && res.price != null) {
       onPatch(o.offer_id, { price: Number(res.price), checked_at: new Date().toISOString(), collection_method: 'direct_product_page', last_scan: 'success' })
-      setNotice(x => ({ ...x, [o.offer_id]: { ok: true, text: `נסרק: ${ils(res.price)}` } }))
+      setNotice(x => ({ ...x, [o.offer_id]: { ok: true, text: release ? `חזר לעדכון אוטומטי: ${ils(res.price)}` : `נסרק: ${ils(res.price)}` } }))
       loadChecks()
     } else {
       onPatch(o.offer_id, { last_scan: res.result })
-      setNotice(x => ({ ...x, [o.offer_id]: { ok: false, text: `הסריקה לא הצליחה: ${RESULT_LABEL[res.result] || res.result}. המחיר האחרון נשמר.` } }))
+      setNotice(x => ({ ...x, [o.offer_id]: { ok: false, text: `הסריקה לא הצליחה: ${RESULT_LABEL[res.result] || res.result}. ${release ? 'המחיר הידני נשאר והעדכון האוטומטי לא חודש.' : 'המחיר האחרון נשמר.'}` } }))
     }
   }
   const setOfferMode = (id, m) => setMode(x => ({ ...x, [id]: m }))
@@ -595,7 +597,9 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
                         <button className="cmp-tool" onClick={() => { setNotice(x => ({ ...x, [o.offer_id]: null })); setOfferMode(o.offer_id, 'edit') }}>✎ עריכה</button>
                         {o.review_status !== 'rejected' && <button className="cmp-tool" onClick={() => { setNotice(x => ({ ...x, [o.offer_id]: null })); setOfferMode(o.offer_id, 'price') }}>₪ עדכן מחיר</button>}
                         {o.review_status === 'approved' && o.price_scan_enabled !== false && (
-                          <button className="cmp-tool" disabled={scanning === o.offer_id} onClick={() => scanOne(o)}>{scanning === o.offer_id ? 'סורק…' : '⟳ סרוק מחיר'}</button>
+                          o.collection_method === 'manual'
+                            ? <button className="cmp-tool" disabled={scanning === o.offer_id} title="סורק את המחיר באתר המתחרה. אם הסריקה מצליחה, המחיר יתעדכן שוב אוטומטית" onClick={() => scanOne(o, true)}>{scanning === o.offer_id ? 'סורק…' : '↺ חזרה לעדכון אוטומטי'}</button>
+                            : <button className="cmp-tool" disabled={scanning === o.offer_id} onClick={() => scanOne(o)}>{scanning === o.offer_id ? 'סורק…' : '⟳ סרוק מחיר'}</button>
                         )}
                       </div>
                     </>

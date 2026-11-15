@@ -314,6 +314,8 @@ Deno.serve(async(req:Request)=>{
    if(typeof body.offer_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.offer_id))return respond({error:"Invalid offer id"},400);
    const {data,error}=await admin.from("v_competitor_price_targets").select("*").eq("offer_id",body.offer_id);
    if(error)return respond({error:error.message},500);
+   // מחיר שהוזן ידנית נשמר. רק כפתור "חזרה לעדכון אוטומטי" (release_manual) סורק אותו, ואם הסריקה נכשלת המחיר הידני נשאר
+   if(!body.release_manual&&(await manualPriceOffers(data||[])).has(body.offer_id))return respond({scanned:0,results:[],skipped:"manual_price",next_after:null});
    const removed=await removedProducts(data||[]);
    const results=[];for(const row of data||[])results.push(await runOne(row,removed.has(row.product_id)));
    return respond({scanned:results.length,results,next_after:null});
@@ -340,7 +342,14 @@ Deno.serve(async(req:Request)=>{
   const {data,error}=await query;
   if(error)return respond({error:error.message},500);
   const removed=await removedProducts(data||[]);
-  const results=[];for(const row of data||[])results.push(await runOne(row,removed.has(row.product_id)));
+  const skipped=await skippedProducts(data||[]);
+  const manual=await manualPriceOffers(data||[]);
+  const results=[];
+  for(const row of data||[]){
+   if(removed.has(row.product_id)){await runOne(row,true);continue;}
+   if(skipped.has(row.product_id)||manual.has(String(row.offer_id)))continue;
+   results.push(await runOne(row,false));
+  }
   return respond({scanned:results.length,results,next_after:data?.length===limit?data[data.length-1].offer_id:null});
  }catch(e){
   return respond({error:String(e instanceof Error?e.message:e).slice(0,300)},500);
