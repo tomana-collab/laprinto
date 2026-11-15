@@ -1032,7 +1032,7 @@ function PriceForm({ offer, onCancel, onSaved }) {
     }).select('id, price, checked_at, collection_method').single()
     setBusy(false)
     if (error || !data) return setErr(error?.message || 'המחיר לא נשמר במסד')
-    onSaved({ price: Number(data.price), checked_at: data.checked_at, collection_method: 'manual' }, { ok: true, text: `המחיר עודכן ידנית ל-${ils(data.price)}` })
+    onSaved({ price: Number(data.price), checked_at: data.checked_at, collection_method: 'manual' }, { ok: true, text: `המחיר עודכן ידנית ל-${ils(data.price)}. הסריקה האוטומטית לא תשנה אותו` })
   }
   return (
     <div className="cmp-addform cmp-inline-form" onClick={e => e.stopPropagation()}>

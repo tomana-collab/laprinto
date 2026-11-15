@@ -174,6 +174,10 @@ const actions: Record<string, (b: any) => Promise<unknown>> = {
     const { data: offer } = await admin.from('competitor_offers').select('id, product_url, review_status, product_id').eq('id', b.offer_id).maybeSingle()
     if (!offer) throw new ApiError(404, 'offer not found')
     if (offer.review_status === 'rejected') throw new ApiError(409, 'offer was rejected; prices are not recorded for rejected offers')
+    // מחיר שהוזן ידנית לא נדרס ע"י הסוכן
+    const { data: last } = await admin.from('competitor_price_checks').select('collection_method').eq('offer_id', offer.id)
+      .order('checked_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle()
+    if (last?.collection_method === 'manual') throw new ApiError(409, 'price for this offer was set manually by the owner; it is not updated automatically')
     const availability = ['in_stock', 'out_of_stock', 'unknown'].includes(b.availability) ? b.availability : 'unknown'
     const shipping = Number(b.shipping_price)
     const { error } = await admin.from('competitor_price_checks').insert({

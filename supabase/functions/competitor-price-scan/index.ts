@@ -202,6 +202,17 @@ async function removedProducts(rows:any[]):Promise<Set<string>>{
  return new Set((data||[]).map((p:any)=>p.id));
 }
 
+// התאמות שהמחיר האחרון שלהן הוזן ידנית — הסריקה לא דורסת מחיר ידני
+async function manualPriceOffers(rows:any[]):Promise<Set<string>>{
+ const ids=[...new Set(rows.map(r=>String(r.offer_id)))];
+ if(!ids.length)return new Set();
+ const {data,error}=await admin.from("competitor_price_checks").select("offer_id, collection_method, checked_at, id").in("offer_id",ids).order("checked_at",{ascending:false}).order("id",{ascending:false});
+ if(error)throw new Error("manual_price_lookup: "+error.message); // בספק — לא סורקים, כדי לא לדרוס
+ const latest=new Map<string,string>();
+ for(const c of data||[])if(!latest.has(c.offer_id))latest.set(c.offer_id,c.collection_method);
+ return new Set([...latest].filter(([,m])=>m==="manual").map(([id])=>id));
+}
+
 // מוצרים שאזלו מהמלאי באתר או לא מפורסמים (טיוטה) — מדלגים עליהם בלי לסרוק ובלי לרשום כישלון
 async function skippedProducts(rows:any[]):Promise<Set<string>>{
  const ids=[...new Set(rows.map(r=>r.product_id))];
@@ -239,11 +250,13 @@ async function continueRun(){
   if(error)throw new Error(error.message);
   const removed=await removedProducts(rows||[]);
   const skipped=await skippedProducts(rows||[]);
+  const manual=await manualPriceOffers(rows||[]);
   let ok=0,bad=0;const errs:any[]=Array.isArray(run.errors)?[...run.errors]:[];
   for(const row of rows||[]){
    // מוצר שהוסר מהאתר נרשם בהיסטוריה אבל לא נספר כשגיאת סריקה
    if(removed.has(row.product_id)){await runOne(row,true);continue;}
    if(skipped.has(row.product_id))continue;
+   if(manual.has(String(row.offer_id)))continue;
    const r:any=await runOne(row,removed.has(row.product_id));
    if(r.result==="success")ok++;else{bad++;if(errs.length<50)errs.push({offer_id:r.offer_id,result:r.result,detail:r.detail||null});}
   }
