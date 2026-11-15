@@ -473,3 +473,9 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .notif-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
 .notif-head b{ font-size:15px; }
 .notif-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--coral); margin-inline-end:8px; }
+
+/* הזמנות: תא עם שורה אחת בלבד (המוצר הראשון + "+N"), כדי שהטבלה לא תתארך */
+.order-cell{ display:flex; align-items:center; gap:6px; white-space:nowrap; max-width:300px; cursor:pointer; }
+.order-cell-main{ overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.order-more{ flex:none; background:var(--line); color:var(--ink-soft); border-radius:999px; font-size:11.5px; font-weight:700; padding:1px 7px; }
+.order-more.neg{ background:var(--coral); color:#fff; }

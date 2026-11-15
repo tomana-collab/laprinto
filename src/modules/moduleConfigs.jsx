@@ -3,11 +3,24 @@
 
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrder } from '../lib/pricing'
-import { SupplierStock } from '../components/SupplierStock'
+import { SupplierStock, SUPPLIER_STOCK_LABEL } from '../components/SupplierStock'
 
 const SHOWN_ORDER_STATUSES = ['processing', 'completed']
 const SHOWN_ORDER_LABELS = Object.fromEntries(SHOWN_ORDER_STATUSES.map(k => [k, ORDER_STATUS_LABELS[k]]))
 const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / אריזה', 'יצא למשלוח', 'הגיע ללקוח']
+
+// הזמנה עם כמה מוצרים: בטבלה מוצגת שורה אחת בלבד (המוצר הראשון + "+N"), כדי שהשורות לא יתארכו.
+// ריחוף מציג את כל המוצרים, ולחיצה על השורה פותחת את ההזמנה המלאה (שם כל הפריטים מופיעים בטבלה).
+const lineName = l => l.products?.name || l.product_name || '—'
+const lineLabel = l => (Number(l.quantity) > 1 ? `${lineName(l)} ×${l.quantity}` : lineName(l))
+function OneLine({ main, count, tip, bad }) {
+  return (
+    <div className="order-cell" title={tip}>
+      <span className="order-cell-main">{main}</span>
+      {count > 1 && <span className={`order-more ${bad ? 'neg' : ''}`}>+{count - 1}</span>}
+    </div>
+  )
+}
 
 export const MODULES = {
   tasks: {
@@ -275,20 +288,9 @@ export const MODULES = {
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
       { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
       {
-        // לחיצה על שם מוצר פותחת אותו לעריכה בתוך ה-CRM. כמה פריטים = כל אחד בשורה משלו
         key: 'product',
         label: 'מוצר',
-        render: (row, nav) => row.lines.map(l => {
-          const name = l.products?.name || l.product_name || '—'
-          const label = Number(l.quantity) > 1 ? `${name} ×${l.quantity}` : name
-          return (
-            <div key={l.id}>
-              {l.product_id
-                ? <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); nav.openRecord('products', l.product_id) }}>{label}</a>
-                : label}
-            </div>
-          )
-        }),
+        render: row => <OneLine main={lineLabel(row.lines[0])} count={row.lines.length} tip={row.lines.map(lineLabel).join('\n')} />,
       },
       {
         // מספר המוצרים (שורות פריט) בהזמנה; בסוגריים סך היחידות אם יש כמות גדולה מ-1
@@ -303,17 +305,30 @@ export const MODULES = {
         // מלאי קיים = נקלט - נמכר (לפי מק"ט), כמו בעמוד המלאי
         key: 'stock_left',
         label: 'מלאי קיים',
-        render: (row, nav, extra) => row.lines.map(l => {
-          const v = extra ? (l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)) : undefined
-          return <div key={l.id}>{v === undefined ? '—' : <span className={v <= 0 ? 'neg' : ''}>{v}</span>}</div>
-        }),
+        render: (row, nav, extra) => {
+          const val = l => (extra ? (l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)) : undefined)
+          const vals = row.lines.map(val)
+          const first = vals[0]
+          return (
+            <OneLine count={row.lines.length} bad={vals.some(v => v !== undefined && v <= 0)}
+              main={first === undefined ? '—' : <span className={first <= 0 ? 'neg' : ''}>{first}</span>}
+              tip={row.lines.map((l, k) => `${lineName(l)}: ${vals[k] === undefined ? '—' : vals[k]}`).join('\n')} />
+          )
+        },
       },
       {
-        // מצב המלאי אצל הספק לכל מוצר בהזמנה (בדיקה יומית מול אתר הספק)
+        // מצב המלאי אצל הספק (בדיקה מול אתר הספק). שורה אחת; ריחוף מציג את כל המוצרים
         key: 'supplier_stock',
         label: 'מלאי אצל הספק',
         noSort: true,
-        render: row => row.lines.map(l => <div key={l.id}><SupplierStock status={l.products?.supplier_stock_status} checkedAt={l.products?.supplier_stock_checked_at} /></div>),
+        render: row => {
+          const st = l => l.products?.supplier_stock_status
+          return (
+            <OneLine count={row.lines.length} bad={row.lines.some(l => st(l) === 'out_of_stock')}
+              main={<SupplierStock status={st(row.lines[0])} checkedAt={row.lines[0].products?.supplier_stock_checked_at} />}
+              tip={row.lines.map(l => `${lineName(l)}: ${SUPPLIER_STOCK_LABEL[st(l)] || 'לא נבדק'}`).join('\n')} />
+          )
+        },
       },
       { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },
       { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
