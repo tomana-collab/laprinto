@@ -25,6 +25,31 @@ function jsonLdObjects(node:unknown):Record<string,unknown>[]{
  }
  return [];
 }
+// מק"ט זהה, או אותו מספר עם קידומת אחרת של החנות (UK80406 / AJ-80406 / 80406)
+function skuMatches(a:string,b:string):boolean{
+ const n=(x:string)=>x.toUpperCase().replace(/[^A-Z0-9]/g,"");
+ if(n(a)===n(b))return true;
+ const d=(x:string)=>x.replace(/\D/g,"");
+ return d(a).length>=4&&d(a)===d(b);
+}
+// priceSpecification יכול להיות אובייקט או מערך (מחיר מבצע + מחיר מחוק). לוקחים את המחיר שאינו מחוק/מחירון
+function specPrice(spec:unknown):unknown{
+ const list=(Array.isArray(spec)?spec:[spec]).filter(x=>x&&typeof x==="object") as Record<string,unknown>[];
+ const cur=list.find(x=>!/strikethrough|listprice|msrp/i.test(String(x.priceType||"")));
+ return (cur||list[0])?.price;
+}
+// חנויות WooCommerce בלי נתונים מובנים: המחיר מתוך תיבת המחיר של המוצר הראשי בלבד (לא מוצרים קשורים)
+function wooSummaryPrice(html:string):number|null{
+ const anchor=html.search(/class="[^"]*(?:summary entry-summary|elementor-widget-woocommerce-product-price)[^"]*"/);
+ if(anchor<0)return null;
+ const box=html.slice(anchor,anchor+6000).match(/<p class="price">([\s\S]*?)<\/p>/);
+ if(!box)return null;
+ const inner=box[1].replace(/<del[\s\S]*?<\/del>/gi,"");
+ if(!/&#8362;|₪/.test(inner))return null;
+ const amounts=[...inner.matchAll(/woocommerce-Price-amount[^>]*>\s*<bdi>([\s\S]*?)<\/bdi>/gi)].map(m=>normalizePrice(m[1].replace(/<[^>]+>|&#8362;|&nbsp;/g," ")));
+ if(amounts.length!==1)return null; // טווח מחירים (וריאציות) — לא מנחשים
+ return amounts[0];
+}
 function priceFromHtml(html:string, expectedSku:string|null):{price:number;sku_verified:boolean;method:string}|null{
  const found:{price:number;sku_verified:boolean;method:string}[]=[];
  const ld=/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
@@ -36,14 +61,14 @@ function priceFromHtml(html:string, expectedSku:string|null):{price:number;sku_v
     const typ=String(obj["@type"]||"").toLowerCase();
     if(!typ.includes("product"))continue;
     const sku=String(obj.sku||obj.mpn||"").trim().toUpperCase();
-    if(expectedSku&&sku&&sku!==expectedSku.toUpperCase())continue;
+    if(expectedSku&&sku&&!skuMatches(sku,expectedSku))continue;
     const offers=Array.isArray(obj.offers)?obj.offers:[obj.offers];
     for(const offer of offers)if(offer&&typeof offer==="object"){
       const offerObj=offer as Record<string,unknown>;
       const currency=String(offerObj.priceCurrency||"ILS").toUpperCase();
       if(currency!=="ILS"&&currency!=="NIS")continue;
-      const p=normalizePrice(offerObj.price??(offerObj.priceSpecification as Record<string,unknown>|undefined)?.price??offerObj.lowPrice);
-      if(p!==null)found.push({price:p,sku_verified:!!expectedSku&&sku===expectedSku.toUpperCase(),method:"json_ld_product"});
+      const p=normalizePrice(offerObj.price??specPrice(offerObj.priceSpecification)??offerObj.lowPrice);
+      if(p!==null)found.push({price:p,sku_verified:!!expectedSku&&!!sku&&skuMatches(sku,expectedSku),method:"json_ld_product"});
     }
    }
   }catch{}
@@ -57,6 +82,9 @@ function priceFromHtml(html:string, expectedSku:string|null):{price:number;sku_v
    const amount=normalizePrice(attr("content"));
    if(amount!==null)return {price:amount,sku_verified:false,method:"product_price_meta"};
  }
+
+ const woo=wooSummaryPrice(html);
+ if(woo!==null)return {price:woo,sku_verified:false,method:"woocommerce_price_html"};
  return null;
 }
 function validateLink(productUrl:string,domain:string):URL|null{
@@ -122,6 +150,8 @@ async function runOne(row:any,productRemoved=false){
    response=await fetchWithRetry(target.href,target.hostname);
   }
   http_status=response.status;
+  // הפניה מעמוד המוצר לעמוד קטגוריה = המוצר הוסר אצל המתחרה
+  if(target.href!==safe.href&&/\/(product-category|category)\//i.test(decodeURIComponent(target.pathname))){status="not_available";detail="Competitor redirected product page to a category (product removed)";await response.body?.cancel();await saveResult();return {offer_id:offerId,result:status,http_status};}
   if([301,302,303,307,308,401,403,429].includes(response.status)){status="blocked";detail="Redirect or access denied (not bypassed)";await response.body?.cancel();await saveResult();return {offer_id:offerId,result:status,http_status};}
   if(response.status===404||response.status===410){status="not_available";detail="HTTP "+response.status;await response.body?.cancel();await saveResult();return {offer_id:offerId,result:status,http_status};}
   if(!response.ok){status="http_error";detail="HTTP "+response.status;await response.body?.cancel();await saveResult();return {offer_id:offerId,result:status,http_status};}
@@ -141,7 +171,7 @@ async function runOne(row:any,productRemoved=false){
   const html=new TextDecoder().decode(buf);
   if(/(?:<h1[^>]*>\s*(?:404|not found)|product not found|page not found)/i.test(html.slice(0,12000))){status="not_available";detail="Page appears unavailable";await saveResult();return {offer_id:offerId,result:status};}
   const extracted=priceFromHtml(html,row.competitor_sku);
-  if(!extracted){status="no_price";detail="No reliable ILS JSON-LD or product-price meta";await saveResult();return {offer_id:offerId,result:status};}
+  if(!extracted){status="no_price";detail="No reliable ILS JSON-LD, product-price meta or WooCommerce price box";await saveResult();return {offer_id:offerId,result:status};}
   price=extracted.price;
   // רק מחיר תקין נשמר כבדיקת מחיר; בכשל המחיר התקין האחרון נשאר כמות שהוא
   const {error}=await admin.from("competitor_price_checks").insert({offer_id:offerId,price,availability:"unknown",collection_method:"direct_product_page",source_url:safe.href,source_crawl_hint:"automated approved-offer scan",note:"Price from "+extracted.method+"; no shipping included; "+(extracted.sku_verified?"SKU corroborated":"SKU not exposed; user-approved match")});
