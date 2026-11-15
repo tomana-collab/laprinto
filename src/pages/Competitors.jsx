@@ -1189,6 +1189,9 @@ function JobStatusBox({ pendingMatches, onSynced }) {
   const sync = jobs.wc_sync, scan = jobs.price_scan
   const when = r => r ? <span dir="ltr">{formatDateTime(r.finished_at || r.started_at)}</span> : 'עדיין לא רץ'
   const bad = [sync, scan].some(r => r && r.status === 'failed')
+  // סנכרון מוצלח בשעה האחרונה → הכפתור מראה שכבר סונכרן (עדיין אפשר ללחוץ שוב)
+  const syncAgeMs = sync?.status === 'success' && sync.finished_at ? Date.now() - new Date(sync.finished_at).getTime() : null
+  const recentSyncMin = syncAgeMs !== null && syncAgeMs >= 0 && syncAgeMs < 60 * 60 * 1000 ? Math.floor(syncAgeMs / 60000) : null
   return (
     <div className={`cmp-scan ${bad ? 'is-warn' : ''}`}>
       <div className="cmp-scan-head">
@@ -1196,7 +1199,10 @@ function JobStatusBox({ pendingMatches, onSynced }) {
           <b>סנכרון וסריקה אוטומטיים</b>
           <div className="cmp-sub">סנכרון מוצרים כל יום ב-06:00 · סריקת מחירים ב-08:00 · בדיקת תקינות ב-09:00</div>
         </div>
-        <button className="btn-add" onClick={syncNow} disabled={busy}>{busy ? 'מסנכרן…' : '⟳ סנכרן מוצרים עכשיו'}</button>
+        <button className={recentSyncMin !== null ? 'btn-outline' : 'btn-add'} style={{ borderRadius: 999, padding: '9px 16px', fontWeight: 700 }}
+          onClick={syncNow} disabled={busy} title={recentSyncMin !== null ? 'המוצרים סונכרנו לאחרונה. אפשר ללחוץ כדי לסנכרן שוב' : undefined}>
+          {busy ? 'מסנכרן…' : recentSyncMin !== null ? `✓ סונכרן ${recentSyncMin < 1 ? 'עכשיו' : `לפני ${recentSyncMin} דק׳`}` : '⟳ סנכרן מוצרים עכשיו'}
+        </button>
       </div>
       <div className="cmp-scan-stats">
         <span>סנכרון אחרון: <b>{when(sync)}</b>{sync && <> ({JOB_STATUS[sync.status] || sync.status})</>}</span>

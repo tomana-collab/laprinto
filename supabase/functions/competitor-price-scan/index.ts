@@ -211,7 +211,9 @@ async function continueRun(){
   const skipped=await skippedProducts(rows||[]);
   let ok=0,bad=0;const errs:any[]=Array.isArray(run.errors)?[...run.errors]:[];
   for(const row of rows||[]){
-   if(skipped.has(row.product_id)&&!removed.has(row.product_id))continue;
+   // מוצר שהוסר מהאתר נרשם בהיסטוריה אבל לא נספר כשגיאת סריקה
+   if(removed.has(row.product_id)){await runOne(row,true);continue;}
+   if(skipped.has(row.product_id))continue;
    const r:any=await runOne(row,removed.has(row.product_id));
    if(r.result==="success")ok++;else{bad++;if(errs.length<50)errs.push({offer_id:r.offer_id,result:r.result,detail:r.detail||null});}
   }
