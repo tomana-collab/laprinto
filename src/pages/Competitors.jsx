@@ -97,6 +97,17 @@ export default function Competitors() {
 }
 
 // סינון לפי מצב המוצר במעקב המתחרים
+// מלאי שלי: available = פנוי אחרי הזמנות פתוחות; physical = מה שיש פיזית במחסן (פנוי + שמור)
+function stockFields(x) {
+  const available = Number(x?.stock) || 0
+  const reserved = Number(x?.reserved) || 0
+  return { available, reserved, physical: available + reserved }
+}
+function StockBadge({ row }) {
+  if (row.available > 0) return <span className="sup-stock sup-in_stock" title={`${row.physical} יחידות במחסן${row.reserved ? `, מהן ${row.reserved} שמורות להזמנות פתוחות` : ''}`}>במלאי · {row.available}</span>
+  if (row.physical > 0) return <span className="sup-stock" title={`${row.physical} יחידות במחסן, כולן שמורות להזמנות פתוחות`}>שמור להזמנות · {row.physical}</span>
+  return <span className="sup-stock sup-out_of_stock" title={row.available < 0 ? `חוסר של ${-row.available} יחידות: הוזמן ועוד לא נקלט` : 'אין יחידות במחסן'}>{row.available < 0 ? `חסר ${-row.available}` : 'אין במלאי'}</span>
+}
 const STATE_LABELS = {
   none: 'ללא מתחרים',
   research: 'ממתינים למחקר',
@@ -104,6 +115,8 @@ const STATE_LABELS = {
   approved: 'התאמה מאושרת',
   rejected: 'התאמה שנדחתה',
   scan_failed: 'סריקת מחיר נכשלה',
+  in_stock: 'יש לי במלאי',
+  no_stock: 'אין לי במלאי',
 }
 const STATE_TESTS = {
   none: r => r.offers.length === 0,
@@ -112,6 +125,8 @@ const STATE_TESTS = {
   approved: r => r.offers.some(o => o.review_status === 'approved'),
   rejected: r => r.rejected.length > 0,
   scan_failed: r => r.offers.some(o => o.review_status === 'approved' && o.last_scan && o.last_scan !== 'success'),
+  in_stock: r => r.physical > 0,
+  no_stock: r => !(r.physical > 0),
 }
 
 function ComparisonView({ onChanged }) {
@@ -130,14 +145,19 @@ function ComparisonView({ onChanged }) {
 
   async function load() {
     setError('')
-    const [m, s, p, pr, sa] = await Promise.all([
+    const [m, s, p, pr, sa, st, mg] = await Promise.all([
       supabase.from('v_competitor_matrix').select('*'),
       supabase.from('competitor_stores').select('id, name, domain, enabled, priority').order('priority'),
       supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url, image_url, status, stock_status, wc_removed_at'),
       // מוצרים שממתינים למחקר מתחרים, והניסיון האחרון של סריקת מחיר לכל התאמה (לסינון "סריקה נכשלה")
       supabase.from('v_products_pending_research').select('id'),
       supabase.from('competitor_scan_attempts').select('offer_id, result, attempted_at').order('attempted_at', { ascending: false }).limit(1000),
+      // המלאי שלי לכל מוצר: stock = פנוי אחרי הזמנות פתוחות, reserved = שמור להזמנות פתוחות. מוצר שאוחד למוצר אחר מציג את המלאי של המוצר שאליו אוחד
+      supabase.from('product_stock').select('product_id, stock, reserved'),
+      supabase.from('product_merges').select('from_product_id, into_product_id'),
     ])
+    const stockOf = new Map((st.data || []).map(x => [x.product_id, x]))
+    const mergedInto = new Map((mg.data || []).map(x => [x.from_product_id, x.into_product_id]))
     const pendingResearch = new Set((pr.data || []).map(x => x.id))
     const lastScan = new Map()
     for (const a of sa.data || []) if (!lastScan.has(a.offer_id)) lastScan.set(a.offer_id, a.result)
@@ -162,6 +182,7 @@ function ComparisonView({ onChanged }) {
           extra_expenses: num(pr.extra_expenses), price: num(pr.price ?? r.my_price),
           profit: num(pr.profit ?? r.calculated_profit), margin: num(pr.margin_percent ?? r.calculated_margin_percent),
           offers: [], rejected: [], research: pendingResearch.has(r.product_id),
+          ...stockFields(stockOf.get(mergedInto.get(r.product_id) || r.product_id)),
         }
         byProduct.set(r.product_id, row)
       }
@@ -248,6 +269,7 @@ function ComparisonView({ onChanged }) {
       gap_desc: (a, b) => (b.lowestGap?.pct ?? -Infinity) - (a.lowestGap?.pct ?? -Infinity),
       margin_asc: (a, b) => (hasCost(a) ? a.margin : Infinity) - (hasCost(b) ? b.margin : Infinity),
       margin_desc: (a, b) => (hasCost(b) ? b.margin : -Infinity) - (hasCost(a) ? a.margin : -Infinity),
+      stock_desc: (a, b) => b.physical - a.physical || (a.name || '').localeCompare(b.name || '', 'he'),
     }[f.sort]
     return [...list].sort(by)
   }, [rows, f])
@@ -313,6 +335,7 @@ function ComparisonView({ onChanged }) {
           <option value="price_asc">מיון: מחיר שלי (נמוך לגבוה)</option>
           <option value="margin_asc">מיון: רווחיות (נמוכה קודם)</option>
           <option value="margin_desc">מיון: רווחיות (גבוהה קודם)</option>
+          <option value="stock_desc">מיון: מלאי שלי (הכי הרבה קודם)</option>
         </select>
         <div className="cmp-chips">
           <Chip on={f.withOffers} onClick={() => set('withOffers', !f.withOffers)}>רק עם השוואה</Chip>
@@ -331,6 +354,7 @@ function ComparisonView({ onChanged }) {
             <tr>
               <th className="cmp-sticky">מוצר</th>
               <th>קטגוריה</th>
+              <th>מלאי שלי</th>
               <th className="n">עלות ספק</th>
               <th className="n">עלות כולל מע״מ</th>
               <th className="n">המחיר שלי</th>
@@ -346,7 +370,7 @@ function ComparisonView({ onChanged }) {
           </thead>
           <tbody>
             {shown.length === 0 && (
-              <tr><td className="empty-col" colSpan={8 + shownStores.length}>
+              <tr><td className="empty-col" colSpan={9 + shownStores.length}>
                 {rows.length ? 'אין מוצרים שתואמים לסינון' : 'עדיין אין מוצרים במסד'}
               </td></tr>
             )}
@@ -362,6 +386,7 @@ function ComparisonView({ onChanged }) {
                   </div>
                 </td>
                 <td><div className="cmp-cat">{r.category || '—'}</div>{r.subcategory && <div className="cmp-sub">{r.subcategory}</div>}</td>
+                <td><StockBadge row={r} /></td>
                 <td className="n">{hasCost(r) ? ils(r.cost) : <span className="cmp-missing">עלות חסרה</span>}</td>
                 <td className="n">{hasCost(r) ? ils(r.cost_with_vat) : '—'}</td>
                 <td className="n"><b>{r.price > 0 ? ils(r.price) : '—'}</b></td>
@@ -526,6 +551,7 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
             <div>
             <h2>{row.name}</h2>
             <div className="cmp-sub"><span className="cmp-sku">{row.sku || 'ללא מק״ט'}</span> · {[row.category, row.subcategory].filter(Boolean).join(' / ') || 'ללא קטגוריה'}</div>
+            <div style={{ marginTop: 6 }}><StockBadge row={row} /></div>
             </div>
           </div>
           <button className="cmp-close" onClick={onClose} aria-label="סגירה">✕</button>
@@ -537,6 +563,7 @@ function ProductDrawer({ row, stores, onClose, onPatch, onAdd, onAddStore }) {
         </div>
 
         <div className="cmp-facts">
+          <Fact label="מלאי שלי" value={row.available > 0 ? `במלאי · ${row.available} יח׳` : row.physical > 0 ? `כולו שמור להזמנות · ${row.physical} יח׳` : row.available < 0 ? `חסר ${-row.available} יח׳` : 'אין במלאי'} strong={row.available > 0} warn={row.physical <= 0} />
           <Fact label="המחיר שלי" value={row.price > 0 ? ils(row.price) : '—'} strong />
           <Fact label="עלות ספק" value={hasCost(row) ? ils(row.cost) : 'עלות חסרה'} warn={!hasCost(row)} />
           <Fact label="עלות כולל מע״מ" value={hasCost(row) ? ils(row.cost_with_vat) : '—'} />
