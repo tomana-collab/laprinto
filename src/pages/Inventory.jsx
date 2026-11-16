@@ -4,6 +4,7 @@ import { useNav } from '../contexts/NavContext'
 import { useSort, sortRows, SortTh } from '../lib/sort'
 import { SupplierStock } from '../components/SupplierStock'
 import { useLiveReload } from '../lib/useLive'
+import { buildLots, shelfCost } from '../lib/stockValue'
 import LiveStatus from '../components/LiveStatus'
 import CollapsibleSummary from '../components/CollapsibleSummary'
 
@@ -36,10 +37,11 @@ export default function Inventory() {
 
   async function load() {
     setError('')
-    const [p, s, ri] = await Promise.all([
+    const [p, s, ri, mg] = await Promise.all([
       supabase.from('products').select('id, name, sku, category, cost_after_discount, price, opening_stock, stock_min, wc_product_id, wc_parent_id, supplier_stock_status, supplier_stock_checked_at, suppliers(name)').order('name'),
       supabase.from('product_stock').select('*'),
-      supabase.from('stock_receipt_items').select('product_id, quantity, unit_cost, discount_percent, stock_receipts(status)'),
+      supabase.from('stock_receipt_items').select('product_id, quantity, unit_cost, discount_percent, stock_receipts(status, doc_date, created_at)'),
+      supabase.from('product_merges').select('from_product_id'), // מוצרים שאוחדו למוצר אחר: לא מוצגים, הכמויות שלהם נספרות במוצר שאליו אוחדו
     ])
     const err = [p, s, ri].find(x => x.error)
     if (err) { setError(err.error.message); setRows([]); return }
@@ -54,10 +56,15 @@ export default function Inventory() {
       cur.qty += q; cur.sum += q * net
       rc.set(i.product_id, cur)
     }
+    const lots = buildLots(ri.data) // תעודות קליטה לכל מוצר, לשווי הסחורה שבמלאי לפי מה ששולם בפועל
     const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצרים ראשיים שפוצלו לוריאציות
-    setRows(p.data.filter(pr => !parents.has(pr.wc_product_id)).map(pr => {
+    const merged = new Set((mg.data || []).map(x => x.from_product_id))
+    setRows(p.data.filter(pr => !parents.has(pr.wc_product_id) && !merged.has(pr.id)).map(pr => {
       const x = st.get(pr.id) || {}
-      return { ...pr, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, reserved: Number(x.reserved) || 0, physical: (Number(x.stock) || 0) + (Number(x.reserved) || 0), incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, open_orders: Number(x.open_orders) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
+      const physical = (Number(x.stock) || 0) + (Number(x.reserved) || 0)
+      const fallback = Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0)
+      const shelf_cost = shelfCost(lots.get(pr.id), physical, fallback) // עלות היחידות שעל המדף לפי התעודות (הנקלטות האחרונות)
+      return { ...pr, shelf_cost, shelf_unit_cost: physical > 0 ? shelf_cost / physical : fallback, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, reserved: Number(x.reserved) || 0, physical: (Number(x.stock) || 0) + (Number(x.reserved) || 0), incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, open_orders: Number(x.open_orders) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
     }))
   }
   useEffect(() => { load() }, [])
@@ -119,10 +126,10 @@ export default function Inventory() {
   const onShelf = rows.filter(r => r.physical > 0)
   const physicalUnits = onShelf.reduce((a, r) => a + r.physical, 0)
   const reservedUnits = rows.reduce((a, r) => a + Math.min(r.reserved, Math.max(0, r.physical)), 0)
-  const stockCost = onShelf.reduce((a, r) => a + r.physical * r.unit_cost, 0)
+  const stockCost = onShelf.reduce((a, r) => a + r.shelf_cost, 0)
   const stockSale = onShelf.reduce((a, r) => a + r.physical * r.unit_price, 0)
   const unsoldUnits = unsold.reduce((a, r) => a + r.stock, 0)
-  const unsoldCost = unsold.reduce((a, r) => a + r.stock * r.unit_cost, 0)
+  const unsoldCost = unsold.reduce((a, r) => a + r.shelf_cost, 0) // מוצר שלא נמכר: כל הנקלט עדיין על המדף
   const unsoldSale = unsold.reduce((a, r) => a + r.stock * r.unit_price, 0)
 
   return (
@@ -199,12 +206,14 @@ export default function Inventory() {
               <SortTh k="incoming" sort={sort} onSort={onSort}>בהמתנה לאספקה</SortTh>
               <th title="יחידות שמורות להזמנות פתוחות (עוד בלי סטטוס טיפול). הן כבר יורדות מהמלאי הנוכחי">שמור להזמנות פתוחות</th>
               <SortTh k="stock" sort={sort} onSort={onSort}>מלאי נוכחי</SortTh>
+              <th title="לפי מה ששולם בתעודות הקליטה, לפני מע״מ ואחרי הנחת ספק">עלות ליחידה</th>
+              <th title="עלות כל היחידות שעל המדף (כולל השמורות להזמנות)">שווי בעלות</th>
               <SortTh k="status" sort={sort} onSort={onSort}>מצב</SortTh>
               {countMode && <th>ספירה בפועל</th>}
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={12}>אין מוצרים</td></tr>}
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={14}>אין מוצרים</td></tr>}
             {sortRows(shown, {
               name: r => r.name, sku: r => r.sku || '', supplier: r => r.suppliers?.name || '',
               received: r => r.received, sold_total: r => r.sold_total,
@@ -223,6 +232,8 @@ export default function Inventory() {
                   <td>{r.incoming ? num(r.incoming) : '—'}</td>
                   <td>{r.reserved ? num(r.reserved) : '—'}</td>
                   <td><b className={s.cls}>{num(r.stock)}</b></td>
+                  <td>{r.physical > 0 && r.shelf_unit_cost ? `₪${num(Math.round(r.shelf_unit_cost * 100) / 100)}` : '—'}</td>
+                  <td>{r.physical > 0 ? `₪${num(Math.round(r.shelf_cost))}` : '—'}</td>
                   <td><span className={s.cls}>{s.text}</span></td>
                   {countMode && <td><input type="number" min="0" style={{ width: 90 }} placeholder={String(r.physical)} value={counts[r.id] ?? ''} onChange={e => setCounts(c => ({ ...c, [r.id]: e.target.value }))} /></td>}
                 </tr>

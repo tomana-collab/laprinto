@@ -18,7 +18,8 @@ const lineLabel = l => (Number(l.quantity) > 1 ? `${lineName(l)} ×${l.quantity}
 // כך וריאציה והמוצר הראשי שלה, שחולקים מק"ט, לא מתערבבים.
 const stockOf = (extra, l) => {
   if (!extra) return undefined
-  if (l.product_id && extra.byId.has(l.product_id) && (!l.sku || extra.skuById.get(l.product_id) === l.sku)) return extra.byId.get(l.product_id)
+  const pid = extra.merged?.get(l.product_id) || l.product_id
+  if (pid && extra.byId.has(pid) && (!l.sku || extra.skuById.get(pid) === l.sku)) return extra.byId.get(pid)
   return l.sku && extra.bySku.has(l.sku) ? extra.bySku.get(l.sku) : extra.byId.get(l.product_id)
 }
 
@@ -296,16 +297,18 @@ export const MODULES = {
     modalWide: true,
     // מלאי קיים לכל מוצר, כדי להציג אותו ליד כל שורת הזמנה (מקושר לפי מק"ט כמו ב-view של המלאי, ואם אין — לפי המוצר)
     extraLoad: async supabase => {
-      const [{ data: prods }, { data: stock }] = await Promise.all([
+      const [{ data: prods }, { data: stock }, { data: merges }] = await Promise.all([
         supabase.from('products').select('id, sku, wc_product_id, wc_parent_id'),
         supabase.from('product_stock').select('product_id, stock'),
+        supabase.from('product_merges').select('from_product_id, into_product_id'),
       ])
+      const merged = new Map((merges || []).map(m => [m.from_product_id, m.into_product_id])) // מוצר שאוחד למוצר אחר: המלאי מוצג של המוצר שאליו אוחד
       const byId = new Map((stock || []).map(r => [r.product_id, Number(r.stock) || 0]))
       const skuById = new Map((prods || []).map(p => [p.id, p.sku]))
       const parents = new Set((prods || []).map(p => p.wc_parent_id).filter(Boolean)) // מוצר ראשי של וריאציות לא משמש לחיפוש לפי מק"ט
       const bySku = new Map()
-      for (const p of prods || []) if (p.sku && !parents.has(p.wc_product_id) && !bySku.has(p.sku)) bySku.set(p.sku, byId.get(p.id) ?? 0)
-      return { byId, bySku, skuById }
+      for (const p of prods || []) if (p.sku && !parents.has(p.wc_product_id) && !merged.has(p.id) && !bySku.has(p.sku)) bySku.set(p.sku, byId.get(p.id) ?? 0)
+      return { byId, bySku, skuById, merged }
     },
     fields: [
       // מוצר/מחיר/כמות מסונכרנים מהאתר — מוצגים לעריכה רק בהזמנה ידנית

@@ -649,11 +649,13 @@ function AddFreeProduct({ order, onChanged }) {
     Promise.all([
       supabase.from('products').select('id, name, sku, wc_product_id, wc_parent_id').eq('status', 'פעיל').is('wc_removed_at', null).order('name'),
       supabase.from('product_stock').select('product_id, stock'),
-    ]).then(([p, st]) => {
+      supabase.from('product_merges').select('from_product_id'),
+    ]).then(([p, st, mg]) => {
       if (p.error) { setErr(p.error.message); setProducts([]); return }
       const stock = new Map((st.data || []).map(x => [x.product_id, Number(x.stock) || 0]))
       const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצר ראשי שפוצל לוריאציות לא נבחר, רק הוריאציות
-      setProducts(p.data.filter(x => !parents.has(x.wc_product_id)).map(x => ({ id: x.id, name: x.name, sku: x.sku || '', stock: stock.get(x.id) ?? 0 })))
+      const merged = new Set((mg.data || []).map(x => x.from_product_id)) // מוצר שאוחד למוצר אחר לא נבחר
+      setProducts(p.data.filter(x => !parents.has(x.wc_product_id) && !merged.has(x.id)).map(x => ({ id: x.id, name: x.name, sku: x.sku || '', stock: stock.get(x.id) ?? 0 })))
     })
   }, [open])
 
