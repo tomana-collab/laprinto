@@ -186,8 +186,6 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
   }
 
   const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * netCost(i), 0)
-  const grossTotal = items.reduce((a, i) => a + (Number(i.quantity) || 0) * grossCost(i), 0)
-  const unitsTotal = items.reduce((a, i) => a + (Number(i.quantity) || 0), 0)
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
@@ -213,7 +211,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
 
         <datalist id="receipt-products">{products.map(p => <option key={p.id} value={label(p)} />)}</datalist>
         <table className="data-table">
-          <thead><tr><th style={{ width: '55%' }}>מוצר (מק״ט / שם)</th><th>כמות</th><th>מחיר מקורי (לפני מע״מ)</th><th>הנחה %</th><th>מחיר שהתקבל</th><th>סה״כ שורה</th><th>שורה כולל מע״מ</th><th /></tr></thead>
+          <thead><tr><th style={{ width: '55%' }}>מוצר (מק״ט / שם)</th><th>כמות</th><th>מחיר מקורי (לפני מע״מ)</th><th>הנחה %</th><th>מחיר שהתקבל</th><th>סה״כ שורה</th><th>שורה כולל מע״מ</th><th>אחוז הנחה שהתקבל</th><th /></tr></thead>
           <tbody>
             {items.map((it, idx) => (
               <tr key={idx} style={{ cursor: 'default' }}>
@@ -231,23 +229,12 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
                   onChange={e => setItem(idx, { recv: e.target.value, discount_percent: discountFrom(it.unit_cost, e.target.value) })} /></td>
                 <td>{money((Number(it.quantity) || 0) * netCost(it))}</td>
                 <td><b>{money(withVat((Number(it.quantity) || 0) * netCost(it)))}</b></td>
+                <td className="pos"><b>{grossCost(it) > 0 ? pct(grossCost(it), netCost(it)) : '—'}</b></td>
                 <td><button type="button" className="btn-ghost" style={{ border: 'none', borderRadius: 8, padding: '4px 10px' }}
                   onClick={() => setItems(l => l.length > 1 ? l.filter((_, i) => i !== idx) : l)}>✕</button></td>
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr style={{ cursor: 'default', fontWeight: 700 }}>
-              <td>סה״כ · אחוז הנחה כולל (משוקלל)</td>
-              <td>{unitsTotal}</td>
-              <td>{money(grossTotal)}</td>
-              <td className="pos">{pct(grossTotal, total)}</td>
-              <td>{money(total)}</td>
-              <td>{money(total)}</td>
-              <td>{money(withVat(total))}</td>
-              <td />
-            </tr>
-          </tfoot>
         </table>
         <button type="button" className="btn-add" style={{ marginTop: 10 }}
           onClick={() => setItems(l => [...l, { text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])}>+ שורה</button>
