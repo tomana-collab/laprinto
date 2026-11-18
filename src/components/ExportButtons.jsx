@@ -18,8 +18,11 @@ export default function ExportButtons({ name, title, getData, label, sets }) {
   const stamp = new Date().toISOString().slice(0, 10)
   function run(set, kind) {
     setOpen(false)
-    const { headers, rows } = set.getData()
-    if (!rows.length) { alert('אין שורות לייצוא'); return }
+    const data = set.getData()
+    if (!data.rows.length) { alert('אין שורות לייצוא'); return }
+    // מספור רץ (1, 2, 3...) בעמודה הראשונה — בצד ימין בקובץ מימין לשמאל
+    const headers = ['#', ...data.headers]
+    const rows = data.rows.map((r, i) => [i + 1, ...r])
     if (kind === 'excel') { exportCsv(`${set.name}-${stamp}.csv`, headers, rows); return }
     const res = exportPdf({ title: set.title, headers, rows })
     if (res === 'blocked') alert('הדפדפן חסם את החלון. אפשר חלונות קופצים לאתר ונסה שוב.')
