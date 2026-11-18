@@ -520,3 +520,7 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .export-pop .export-title{ width:100%; font-size:12px; color:var(--ink-soft); }
 .export-pop button{ flex:1; background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; font-weight:600; cursor:pointer; }
 .export-pop button:hover{ background:var(--hover-bg); }
+
+/* כפתורי הכותרת (סנכרן / חדש / ייצוא ...) עדינים */
+.module-head .btn-add{ background:transparent; color:var(--ink); border:1px solid var(--line); padding:6px 13px; font-size:13px; font-weight:600; }
+.module-head .btn-add:hover{ background:var(--hover-bg); }
