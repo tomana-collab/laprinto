@@ -186,6 +186,8 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
   }
 
   const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * netCost(i), 0)
+  const grossTotal = items.reduce((a, i) => a + (Number(i.quantity) || 0) * grossCost(i), 0)
+  const unitsTotal = items.reduce((a, i) => a + (Number(i.quantity) || 0), 0)
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
@@ -234,6 +236,18 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr style={{ cursor: 'default', fontWeight: 700 }}>
+              <td>סה״כ · אחוז הנחה כולל (משוקלל)</td>
+              <td>{unitsTotal}</td>
+              <td>{money(grossTotal)}</td>
+              <td className="pos">{pct(grossTotal, total)}</td>
+              <td>{money(total)}</td>
+              <td>{money(total)}</td>
+              <td>{money(withVat(total))}</td>
+              <td />
+            </tr>
+          </tfoot>
         </table>
         <button type="button" className="btn-add" style={{ marginTop: 10 }}
           onClick={() => setItems(l => [...l, { text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])}>+ שורה</button>
