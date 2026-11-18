@@ -113,8 +113,8 @@ export default function Receipts() {
         placeholder="🔍 חיפוש לפי מק״ט, שם מוצר, מס׳ תעודה או ספק"
         style={{ width: '100%', maxWidth: 420, margin: '0 0 12px', padding: '8px 12px' }} />
       <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
-        <button type="button" className={view === 'receipts' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setView('receipts')}>לפי תעודה</button>
-        <button type="button" className={view === 'lines' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setView('lines')}>לפי מוצר (כל שורה)</button>
+        <button type="button" className={`btn-soft${view === 'receipts' ? ' sel' : ''}`} onClick={() => setView('receipts')}>לפי תעודה</button>
+        <button type="button" className={`btn-soft${view === 'lines' ? ' sel' : ''}`} onClick={() => setView('lines')}>לפי מוצר (כל שורה)</button>
         <span style={{ marginInlineStart: 'auto' }}><ExportButtons name="kliyat-teudot" title="קליטת תעודות" getData={() => {
           const r2 = n => Math.round(n * 100) / 100
           const rows = sorted.flatMap(r => r.stock_receipt_items

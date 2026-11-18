@@ -237,21 +237,23 @@ export default function GenericModule({ config, focusId = null }) {
       <div className="module-head">
         <h2>{config.icon} {config.label}</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {config.isOrder && <ExportButtons name="horaot" title="הזמנות" getData={() => ({
+          {config.isOrder && <ExportButtons sets={[
+            { name: 'horaot', title: 'הזמנות', label: 'כל ההזמנות המוצגות', getData: () => ({
             headers: ['מס׳ הזמנה', 'תאריך', 'לקוח', 'טלפון', 'מוצר', 'מק״ט', 'כמות', 'מחיר ליחידה', 'סה״כ שורה', 'סטטוס הזמנה', 'סטטוס טיפול', 'לא לספק', 'כתובת משלוח', 'הערות'],
             rows: filtered.flatMap(o => (o.lines || [o]).map(l => [
               o.order_number || '', formatDate(o.order_date), o.customer_name || '', o.customer_phone || '',
               l.products?.name || l.product_name || '', l.sku || '', Number(l.quantity) || 0, Number(l.price) || 0, Number(l.total_amount) || 0,
               ORDER_STATUS_LABELS[o.wc_status] || o.wc_status || 'ידנית', o.handling_status || '', l.not_supplied ? 'לא לספק' : '', o.shipping_address || '', l.notes || o.notes || '',
             ])),
-          })} />}
-          {config.isOrder && <ExportButtons name="harita" title="עבודת חריטה" label="חריטה" getData={() => ({
+          }) },
+            { name: 'harita', title: 'עבודת חריטה', label: '✒️ עבודת חריטה (רק שורות עם חריטה)', getData: () => ({
             headers: ['מס׳ הזמנה', 'תאריך', 'לקוח', 'מוצר', 'מק״ט', 'כמות', 'חריטה אישית', 'סטטוס טיפול', 'הערות'],
             rows: filtered.flatMap(o => (o.lines || [o]).filter(l => l.has_engraving && !l.not_supplied).map(l => [
               o.order_number || '', formatDate(o.order_date), o.customer_name || '', l.products?.name || l.product_name || '', l.sku || '',
               Number(l.quantity) || 0, engravingText(l.engraving), o.handling_status || '', l.notes || o.notes || '',
             ])),
-          })} />}
+          }) },
+          ]} />}
           {config.syncFunction && (
             <button className="btn-add" onClick={handleSync} disabled={syncing}>
               {syncing ? 'מסנכרן...' : (config.syncButtonLabel || '↻ סנכרן מהאתר')}
