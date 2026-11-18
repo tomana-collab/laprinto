@@ -146,7 +146,8 @@ export default function Receipts() {
                 <tr key={r.id + '-hit'} onClick={() => setEditing(r)} style={{ background: 'var(--bg-soft, #f7f7fb)' }}>
                   <td colSpan={9}>
                     {r.stock_receipt_items.filter(itemHit).map(i => (
-                      <div key={i.id}>↳ <b>{i.products?.sku || '—'}</b> {i.products?.name} — הוזמן/נקלט: <b>{Number(i.quantity)}</b></div>
+                      <div key={i.id}>↳ <b>{i.products?.sku || '—'}</b> {i.products?.name} — הוזמן/נקלט: <b>{Number(i.quantity)}</b>
+                        {grossCost(i) > 0 && <> · מחיר מקורי {money(grossCost(i))} ← שהתקבל {money(netCost(i))} · <b className="pos">הנחה {pct(grossCost(i), netCost(i))}</b></>}</div>
                     ))}
                   </td>
                 </tr>

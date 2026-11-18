@@ -785,9 +785,7 @@ function ProductBreakdown({ form }) {
   )
   return (
     <div className="summary-card" style={{ display: 'block', margin: '12px 0' }}>
-      {row('מחיר מקורי', `₪${Number(form.cost) || 0}`)}
-      {row('הנחה שהתקבלה', `₪${Math.round(((Number(form.cost) || 0) - c.costAfterDiscount) * 100) / 100} (${Number(form.supplier_discount_percent) || 0}%)`)}
-      {row('מחיר שהתקבל (אחרי הנחת ספק)', `₪${c.costAfterDiscount}`)}
+      {row('עלות אחרי הנחת ספק', `₪${c.costAfterDiscount}`)}
       {row('עלות כולל מע"מ 18%', `₪${c.costWithVat}`)}
       {row('עמלת סליקה (0.75% + מע"מ)', `₪${c.clearingFee}`)}
       {c.extra > 0 && row('הוצאות נלוות', `₪${c.extra}`)}

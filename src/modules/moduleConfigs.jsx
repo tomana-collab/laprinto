@@ -130,7 +130,7 @@ export const MODULES = {
       { key: 'sku', label: 'מק"ט — מסונכרן מהאתר', type: 'text' },
       { key: 'supplier_id', label: 'ספק', type: 'relation', relation: { table: 'suppliers', labelField: 'name' } },
       { key: 'supplier_url', label: 'קישור למוצר באתר הספק', type: 'text', link: 'צפייה במוצר אצל הספק' },
-      { key: 'cost', label: 'מחיר מקורי מהספק (₪, לפני מע"מ)', type: 'number' },
+      { key: 'cost', label: 'עלות ליחידה מהספק (₪, לפני מע"מ)', type: 'number' },
       { key: 'supplier_discount_percent', label: 'הנחת ספק (%)', type: 'number', default: 0 },
       { key: 'extra_expenses', label: 'הוצאות נלוות ליחידה (₪)', type: 'number' },
       { key: 'price', label: 'מחיר מכירה באתר (₪) — מסונכרן מהאתר', type: 'number' },
@@ -195,9 +195,7 @@ export const MODULES = {
           ? <a href={row.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>פתח</a>
           : '—',
       },
-      { key: 'cost', label: 'מחיר מקורי', render: row => `₪${row.cost}` },
-      { key: 'supplier_discount_percent', label: 'הנחה שהתקבלה', render: row => Number(row.supplier_discount_percent) > 0 ? `${Number(row.supplier_discount_percent)}%` : '—' },
-      { key: 'cost_after_discount', label: 'מחיר שהתקבל', render: row => `₪${row.cost_after_discount}` },
+      { key: 'cost_after_discount', label: 'עלות (מחיר סופי אחרי הנחה)', render: row => `₪${row.cost_after_discount}` },
       { key: 'price', label: 'מחיר באתר', render: row => (
         row.sale_price != null && row.regular_price != null && row.sale_price < row.regular_price
           ? <span>₪{row.price} <s style={{ opacity: 0.55 }}>₪{row.regular_price}</s></span>
