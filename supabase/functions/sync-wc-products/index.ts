@@ -390,9 +390,23 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
   const delivered = new Set((deliveredRows || []).map((r: any) => Number(r.wc_line_item_id)))
   for (const r of rows) if (delivered.has(Number(r.wc_line_item_id))) r.wc_status = 'completed'
 
+  // שדות שנערכו ידנית ב-CRM (manual_fields) לא נדרסים: שורות עם עריכה ידנית מתעדכנות בנפרד, בלי אותם שדות
+  const { data: lockedRows } = await admin.from('orders').select('wc_line_item_id, manual_fields')
+    .not('wc_line_item_id', 'is', null).neq('manual_fields', '{}')
+  const locked = new Map<number, string[]>((lockedRows || []).map((r: any) => [Number(r.wc_line_item_id), r.manual_fields]))
+  const bulk = rows.filter(r => !locked.has(Number(r.wc_line_item_id)))
   const errors: string[] = []
-  for (let i = 0; i < rows.length; i += 200) {
-    const { error } = await admin.from('orders').upsert(rows.slice(i, i + 200), { onConflict: 'wc_line_item_id' })
+  for (let i = 0; i < bulk.length; i += 200) {
+    const { error } = await admin.from('orders').upsert(bulk.slice(i, i + 200), { onConflict: 'wc_line_item_id' })
+    if (error) errors.push(error.message)
+  }
+  for (const r of rows) {
+    const fields = locked.get(Number(r.wc_line_item_id))
+    if (!fields) continue
+    const patch: Record<string, unknown> = { ...r }
+    for (const f of fields) delete patch[f]
+    delete patch.wc_line_item_id
+    const { error } = await admin.from('orders').update(patch).eq('wc_line_item_id', r.wc_line_item_id)
     if (error) errors.push(error.message)
   }
 
