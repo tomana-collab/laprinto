@@ -275,11 +275,11 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
   return { total: items.length, inserted, updated, errors }
 }
 
-async function fetchAllWcOrders() {
+async function fetchAllWcOrders(status = 'any') {
   const auth = 'Basic ' + btoa(`${WC_KEY}:${WC_SECRET}`)
   const all: any[] = []
   for (let page = 1; page <= 50; page++) {
-    const url = `${WC_SITE_URL}/wp-json/wc/v3/orders?per_page=100&page=${page}&status=any&orderby=date&order=desc`
+    const url = `${WC_SITE_URL}/wp-json/wc/v3/orders?per_page=100&page=${page}&status=${status}&orderby=date&order=desc`
     const res = await fetch(url, { headers: { Authorization: auth } })
     if (!res.ok) throw new Error(`WooCommerce (הזמנות) החזיר ${res.status}: ${(await res.text()).slice(0, 200)}`)
     all.push(...(await res.json()))
@@ -312,7 +312,9 @@ function addressText(a: any): string {
 }
 
 async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats> {
-  const wcOrders = await fetchAllWcOrders()
+  // status=any של WooCommerce לא כולל הזמנות שבפח, ולכן הזמנה שנשלחה לפח אחרי שנקלטה נשארה "בטיפול" ב-CRM.
+  // מביאים את הפח בנפרד, והסטטוס 'trash' מעדכן את השורות ומסתיר אותן (כמו כל סטטוס שאינו בטיפול/הושלם).
+  const wcOrders = [...(await fetchAllWcOrders()), ...(await fetchAllWcOrders('trash'))]
 
   const { data: products, error: pErr } = await admin.from('products').select('id, wc_product_id').not('wc_product_id', 'is', null)
   if (pErr) throw new Error(pErr.message)
