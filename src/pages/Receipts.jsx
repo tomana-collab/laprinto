@@ -25,6 +25,7 @@ export default function Receipts() {
   const [error, setError] = useState('')
   const [sort, onSort] = useSort()
   const [q, setQ] = useState('')
+  const [view, setView] = useState('receipts') // receipts | lines
   const [editing, setEditing] = useState(null) // {} חדשה | תעודה קיימת (צפייה/מחיקה)
 
   async function load() {
@@ -110,8 +111,39 @@ export default function Receipts() {
       <input type="search" value={q} onChange={e => setQ(e.target.value)}
         placeholder="🔍 חיפוש לפי מק״ט, שם מוצר, מס׳ תעודה או ספק"
         style={{ width: '100%', maxWidth: 420, margin: '0 0 12px', padding: '8px 12px' }} />
+      <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
+        <button type="button" className={view === 'receipts' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setView('receipts')}>לפי תעודה</button>
+        <button type="button" className={view === 'lines' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setView('lines')}>לפי מוצר (כל שורה)</button>
+      </div>
 
-      <div className="table-wrap">
+      {view === 'lines' && (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead><tr><th>תאריך</th><th>תעודה</th><th>ספק</th><th>מק״ט</th><th>מוצר</th><th>כמות</th><th>מחיר מקורי</th><th>מחיר שהתקבל</th><th>אחוז הנחה שהתקבל</th><th>סה״כ שורה</th></tr></thead>
+            <tbody>
+              {sorted.flatMap(r => r.stock_receipt_items
+                .filter(i => !needle || itemHit(i) || !r.stock_receipt_items.some(itemHit))
+                .map(i => (
+                  <tr key={i.id} onClick={() => setEditing(r)}>
+                    <td>{formatDate(r.doc_date)}</td>
+                    <td>{r.doc_number || '—'}</td>
+                    <td>{r.suppliers?.name || '—'}</td>
+                    <td>{i.products?.sku || '—'}</td>
+                    <td>{i.products?.name || '—'}</td>
+                    <td>{Number(i.quantity)}</td>
+                    <td>{grossCost(i) > 0 ? money(grossCost(i)) : '—'}</td>
+                    <td>{money(netCost(i))}</td>
+                    <td className="pos"><b>{grossCost(i) > 0 ? pct(grossCost(i), netCost(i)) : '—'}</b></td>
+                    <td>{money(i.quantity * netCost(i))}</td>
+                  </tr>
+                )))}
+              {sorted.length === 0 && <tr><td className="empty-col" colSpan={10}>{needle ? 'לא נמצאו תעודות מתאימות' : 'אין תעודות עדיין'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {view === 'receipts' && <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
@@ -151,7 +183,7 @@ export default function Receipts() {
             ])}
           </tbody>
         </table>
-      </div>
+      </div>}
 
       {editing && (
         <ReceiptModal
@@ -186,6 +218,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
   }
 
   const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * netCost(i), 0)
+  const grossTotal = items.reduce((a, i) => a + (Number(i.quantity) || 0) * grossCost(i), 0)
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
@@ -240,6 +273,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
           onClick={() => setItems(l => [...l, { text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])}>+ שורה</button>
 
         <div className="summary-row" style={{ marginTop: 14 }}>
+          <div className="summary-card"><span>אחוז הנחה ממוצע על התעודה (משוקלל)</span><b className="pos">{pct(grossTotal, total)}</b></div>
           <div className="summary-card"><span>סה״כ לפני מע״מ</span><b>{money(total)}</b></div>
           <div className="summary-card"><span>מע״מ {Math.round(VAT_RATE * 100)}%</span><b>{money(withVat(total) - total)}</b></div>
           <div className="summary-card"><span>סה״כ כולל מע״מ (להשוואה לחשבונית)</span><b>{money(withVat(total))}</b></div>
