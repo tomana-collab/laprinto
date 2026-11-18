@@ -1,3 +1,4 @@
+import { engravingText } from '../lib/orders'
 // כל מודול מוגדר כאן: שם טבלה ב-Supabase, השדות שלו, ועמודות הטבלה בתצוגה.
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
@@ -43,7 +44,7 @@ function OrderDetail({ row, nav, extra, ui }) {
                 <td>
                   {l.product_id ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{lineName(l)}</a> : <span className={l.not_supplied ? 'ns-name' : ''}>{lineName(l)}</span>}
                   {l.not_supplied && <span style={{ marginInlineStart: 8 }}><NotSupplied n={1} /></span>}
-                  {l.has_engraving && <div style={{ fontSize: 12.5 }}>✒️ <b>חריטה אישית:</b> {l.engraving}</div>}
+                  {l.has_engraving && <div style={{ fontSize: 12.5 }}>✒️ <b>חריטה אישית:</b> {engravingText(l.engraving)}</div>}
                 </td>
                 <td>{l.sku || '—'}</td>
                 <td>{l.quantity}</td>
@@ -397,7 +398,7 @@ export const MODULES = {
           return out ? <span className="sup-stock sup-out_of_stock">אזל ב-{out}</span> : '—'
         },
       },
-      { key: 'engraving', label: 'חריטה אישית', sortValue: row => row.has_engraving ? 1 : 0, render: row => row.has_engraving ? <span title={row.engraving}>✒️ יש</span> : '—' },
+      { key: 'engraving', label: 'חריטה אישית', sortValue: row => row.has_engraving ? 1 : 0, render: row => row.has_engraving ? <span title={engravingText(row.engraving)}>✒️ יש</span> : '—' },
       { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
       { key: 'notes', label: 'הערות', render: row => row.notes
         ? <span title={row.notes} style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{row.notes}</span>

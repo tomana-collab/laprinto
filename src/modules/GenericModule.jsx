@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { calcProduct, calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import ExportButtons from '../components/ExportButtons'
-import { groupOrders } from '../lib/orders'
+import { groupOrders, engravingText } from '../lib/orders'
 import { isCountedOrder, ORDER_STATUS_LABELS, FINANCE_START, formatDate } from '../lib/format'
 import { useNav } from '../contexts/NavContext'
 import { useLiveReload } from '../lib/useLive'
@@ -255,7 +255,7 @@ export default function GenericModule({ config, focusId = null }) {
             headers: ['מס׳ הזמנה', 'תאריך', 'לקוח', 'מוצר', 'מק״ט', 'כמות', 'חריטה אישית', 'סטטוס טיפול', 'הערות'],
             rows: filtered.flatMap(o => (o.lines || [o]).filter(l => l.has_engraving && !l.not_supplied).map(l => [
               o.order_number || '', formatDate(o.order_date), o.customer_name || '', l.products?.name || l.product_name || '', l.sku || '',
-              Number(l.quantity) || 0, l.engraving || '', o.handling_status || '', l.notes || o.notes || '',
+              Number(l.quantity) || 0, engravingText(l.engraving), o.handling_status || '', l.notes || o.notes || '',
             ])),
           })} />}
           {config.syncFunction && (
@@ -631,7 +631,7 @@ function OrderLines({ order, onChanged }) {
               <tr key={l.id} style={{ cursor: 'default' }}>
                 <td>{l.product_id
                   ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
-                  : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}{l.has_engraving && <div style={{ fontSize: 12.5 }}>✒️ <b>חריטה אישית:</b> {l.engraving}</div>}</td>
+                  : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}{l.has_engraving && <div style={{ fontSize: 12.5 }}>✒️ <b>חריטה אישית:</b> {engravingText(l.engraving)}</div>}</td>
                 <td>{l.sku && href ? <a href={href} target="_blank" rel="noreferrer">{l.sku}</a> : (l.sku || '—')}</td>
                 <td>{l.quantity}</td>
                 <td>₪{l.price}</td>
@@ -791,7 +791,7 @@ function OrderDetails({ order }) {
         {item('אמצעי תשלום', order.payment_method)}
         {item('סה"כ ההזמנה (כולל משלוח)', order.order_total != null ? `₪${order.order_total}` : null)}
         {order.coupons && item('קופון', order.coupons)}
-        <div className="field full" style={{ margin: 0 }}>{item('חריטה אישית', order.engraving)}{order.personalization && order.personalization !== order.engraving && item('פרטים נוספים', order.personalization)}</div>
+        <div className="field full" style={{ margin: 0 }}>{item('חריטה אישית', engravingText(order.engraving))}{order.personalization && order.personalization !== order.engraving && item('פרטים נוספים', order.personalization)}</div>
         <div className="field full" style={{ margin: 0 }}>{item('הערת הלקוח', order.customer_note)}</div>
       </div>
     </div>

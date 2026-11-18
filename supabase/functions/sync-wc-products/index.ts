@@ -307,7 +307,7 @@ function lineItemMeta(li: any): { engraving: string; other: string } {
     const key = stripTags(String(m.display_key ?? m.key))
     const raw = m.display_value ?? m.value
     const val = stripTags(typeof raw === 'string' ? raw : JSON.stringify(raw))
-    if (isEngravingKey(key)) { if (!isNoValue(val)) eng.push(`${key}: ${val}`) }
+    if (isEngravingKey(key)) { if (!isNoValue(val)) eng.push(val) }
     else other.push(`${key}: ${val}`)
   }
   return { engraving: eng.join('\n'), other: other.join('\n') }

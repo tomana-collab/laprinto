@@ -1,3 +1,6 @@
+// טקסט החריטה בלי שם השדה: הזמנות ישנות נשמרו כ"התאמה אישית: טקסט", חדשות כטקסט בלבד
+export const engravingText = t => String(t || '').split('\n').map(l => l.replace(/^[^\n:]*(חריטה|התאמה אישית)[^\n:]*:\s*/, '')).join('\n').trim()
+
 // שורות בטבלת orders הן שורות פריט. הזמנה מהאתר עם כמה פריטים (אותו wc_order_id)
 // מאוחדת כאן להזמנה אחת עם lines. הזמנה ידנית (בלי wc_order_id) נשארת שורה בודדת.
 export function groupOrders(rows) {
@@ -22,7 +25,7 @@ export function groupOrders(rows) {
     g.has_engraving = g.lines.some(l => l.has_engraving && !l.not_supplied)
     g.engraving = g.lines
       .filter(l => l.has_engraving)
-      .map(l => `${nameOf(l)}:\n${l.engraving}`)
+      .map(l => `${nameOf(l)}:\n${engravingText(l.engraving)}`)
       .join('\n\n')
     g.personalization = g.lines
       .filter(l => l.personalization)
