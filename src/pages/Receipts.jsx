@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { exportCsv } from '../lib/exportCsv'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDate } from '../lib/format'
@@ -114,6 +115,18 @@ export default function Receipts() {
       <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
         <button type="button" className={view === 'receipts' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setView('receipts')}>לפי תעודה</button>
         <button type="button" className={view === 'lines' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setView('lines')}>לפי מוצר (כל שורה)</button>
+        <button type="button" className="btn btn-ghost" style={{ marginInlineStart: 'auto' }} onClick={() => {
+          const r2 = n => Math.round(n * 100) / 100
+          const rows = sorted.flatMap(r => r.stock_receipt_items
+            .filter(i => !needle || itemHit(i) || !r.stock_receipt_items.some(itemHit))
+            .map(i => {
+              const g = grossCost(i), n = netCost(i), line = i.quantity * n
+              return [r.doc_date || '', r.doc_number || '', r.suppliers?.name || '', r.status || 'סופק', i.products?.sku || '', i.products?.name || '',
+                Number(i.quantity), r2(g), g > 0 ? r4((1 - n / g) * 100) : '', r2(n), r2(line), r2(withVat(line))]
+            }))
+          exportCsv(`kliyat-teudot-${new Date().toISOString().slice(0, 10)}.csv`,
+            ['תאריך', 'מס׳ תעודה', 'ספק', 'סטטוס', 'מק״ט', 'מוצר', 'כמות', 'מחיר מקורי', 'אחוז הנחה', 'מחיר שהתקבל', 'סה״כ שורה לפני מע״מ', 'סה״כ שורה כולל מע״מ'], rows)
+        }}>⬇ ייצוא לאקסל</button>
       </div>
 
       {view === 'lines' && (
