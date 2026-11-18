@@ -4,6 +4,7 @@ import { useNav } from '../contexts/NavContext'
 import { useSort, sortRows, SortTh } from '../lib/sort'
 import { SupplierStock } from '../components/SupplierStock'
 import { useLiveReload } from '../lib/useLive'
+import ExportButtons from '../components/ExportButtons'
 import { buildLots, shelfCost } from '../lib/stockValue'
 import LiveStatus from '../components/LiveStatus'
 import CollapsibleSummary from '../components/CollapsibleSummary'
@@ -177,6 +178,19 @@ export default function Inventory() {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
+        <ExportButtons name="melai" title="מלאי" getData={() => {
+          const list = sortRows(shown, {
+            name: r => r.name, sku: r => r.sku || '', supplier: r => r.suppliers?.name || '',
+            received: r => r.received, sold_total: r => r.sold_total,
+            sold: r => r.sold, incoming: r => r.incoming, stock: r => r.stock, status: r => status(r).text,
+          }, sort)
+          const r2 = n => Math.round(n * 100) / 100
+          return {
+            headers: ['מוצר', 'מק״ט', 'קטגוריה', 'ספק', 'נקלט', 'נמכר (סה״כ הזמנות)', 'ירד מהמלאי', 'בהמתנה לאספקה', 'שמור להזמנות פתוחות', 'מלאי נוכחי', 'עלות ליחידה', 'שווי בעלות', 'מצב'],
+            rows: list.map(r => [r.name, r.sku || '', r.category || '', r.suppliers?.name || '', r.received, r.sold_total, r.sold, r.incoming || 0, r.reserved || 0, r.stock,
+              r.physical > 0 && r.shelf_unit_cost ? r2(r.shelf_unit_cost) : '', r.physical > 0 ? r2(r.shelf_cost) : '', status(r).text]),
+          }
+        }} />
         <select value={category} onChange={e => setCategory(e.target.value)}>
           <option value="">כל הקטגוריות</option>
           {[...new Set(rows.map(r => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(c => <option key={c} value={c}>{c}</option>)}
