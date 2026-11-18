@@ -599,6 +599,14 @@ function OrderPanel({ order, onChanged }) {
 function OrderLines({ order, onChanged }) {
   const nav = useNav()
   const lines = order.lines || [order]
+  const [engEdit, setEngEdit] = useState(null) // { id, text }
+  async function saveEngraving(l, text) {
+    const t = String(text || '').trim()
+    const { error } = await supabase.from('orders').update({ engraving: t, has_engraving: t !== '' }).eq('id', l.id)
+    if (error) { window.alert('העדכון נכשל: ' + error.message); return }
+    setEngEdit(null); onChanged?.()
+  }
+  const engSource = l => lines.find(x => x.id !== l.id && x.has_engraving)
   // "לא לספק": השורה נשארת בהזמנה (באדום), הכסף לא משתנה, והיא לא יורדת מהמלאי ולא נספרת כחוסר
   async function toggleSupplied(l) {
     const { error } = await supabase.from('orders').update({ not_supplied: !l.not_supplied }).eq('id', l.id)
@@ -627,7 +635,21 @@ function OrderLines({ order, onChanged }) {
               <tr key={l.id} style={{ cursor: 'default' }}>
                 <td>{l.product_id
                   ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
-                  : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}{l.has_engraving && <div style={{ fontSize: 12.5 }}>✒️ <b>חריטה אישית:</b> {engravingText(l.engraving)}</div>}</td>
+                  : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}<div style={{ fontSize: 12.5, marginTop: 2 }}>
+                  {engEdit?.id === l.id ? (
+                    <div>
+                      <textarea rows={2} style={{ width: '100%' }} autoFocus placeholder="מה לחרוט על המוצר" value={engEdit.text} onChange={e => setEngEdit({ id: l.id, text: e.target.value })} />
+                      <button type="button" className="cmp-tool" onClick={() => saveEngraving(l, engEdit.text)}>שמירה</button>{' '}
+                      <button type="button" className="cmp-tool" onClick={() => setEngEdit(null)}>ביטול</button>
+                    </div>
+                  ) : (
+                    <>
+                      {l.has_engraving && <span>✒️ <b>חריטה אישית:</b> {engravingText(l.engraving)} </span>}
+                      <button type="button" className="link-btn" onClick={() => setEngEdit({ id: l.id, text: engravingText(l.engraving) })}>{l.has_engraving ? 'ערוך חריטה' : '✒️ הוסף חריטה'}</button>
+                      {!l.has_engraving && engSource(l) && <> · <button type="button" className="link-btn" title="מעתיק את החריטה מהמוצר האחר בהזמנה" onClick={() => saveEngraving(l, engravingText(engSource(l).engraving))}>העתק חריטה מ-{engSource(l).products?.name || engSource(l).product_name}</button></>}
+                    </>
+                  )}
+                </div></td>
                 <td>{l.sku && href ? <a href={href} target="_blank" rel="noreferrer">{l.sku}</a> : (l.sku || '—')}</td>
                 <td>{l.quantity}</td>
                 <td>₪{l.price}</td>
@@ -661,6 +683,10 @@ function AddFreeProduct({ order, onChanged }) {
   const [qty, setQty] = useState(1)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [copyEng, setCopyEng] = useState(true)
+  // שורת חריטה להעתקה למוצר החדש: מוצר שסומן "לא לספק" קודם (בדרך כלל זה המוצר שהוחלף), אחרת הראשונה עם חריטה
+  const engLines = (order.lines || [order]).filter(l => l.has_engraving)
+  const engSrc = engLines.find(l => l.not_supplied) || engLines[0]
 
   useEffect(() => {
     if (!open || products) return
@@ -696,6 +722,7 @@ function AddFreeProduct({ order, onChanged }) {
       customer_name: t.customer_name, customer_phone: t.customer_phone, customer_email: t.customer_email,
       shipping_address: t.shipping_address, shipping_method: t.shipping_method, payment_method: t.payment_method,
       customer_note: t.customer_note, coupons: t.coupons, shipping_total: t.shipping_total, order_total: t.order_total,
+      ...(engSrc && copyEng ? { engraving: engSrc.engraving, has_engraving: true } : {}),
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
@@ -723,6 +750,12 @@ function AddFreeProduct({ order, onChanged }) {
           ))}
           {needle && products && matches.length === 0 && <div className="cmp-sub">לא נמצא מוצר</div>}
         </>
+      )}
+      {engSrc && (
+        <label className="cmp-check" title="החריטה לא עוברת לבד כשמחליפים מוצר">
+          <input type="checkbox" checked={copyEng} onChange={e => setCopyEng(e.target.checked)} />
+          ✒️ להעתיק את החריטה מ"{engSrc.products?.name || engSrc.product_name}" למוצר החדש
+        </label>
       )}
       <div className="free-row">
         <label>כמות <input type="number" min="1" style={{ width: 80 }} value={qty} onChange={e => setQty(e.target.value)} /></label>
