@@ -89,8 +89,6 @@ export default function Receipts() {
 
   const total = r => r.stock_receipt_items.reduce((a, i) => a + i.quantity * netCost(i), 0)
   const units = r => r.stock_receipt_items.reduce((a, i) => a + Number(i.quantity), 0)
-  const gross = r => r.stock_receipt_items.reduce((a, i) => a + i.quantity * grossCost(i), 0)
-  const discPct = r => gross(r) > 0 ? (1 - total(r) / gross(r)) * 100 : 0
   const needle = q.trim().toLowerCase()
   const itemHit = i => needle && `${i.products?.sku || ''} ${i.products?.name || ''}`.toLowerCase().includes(needle)
   const shown = !needle ? receipts : receipts.filter(r =>
@@ -99,7 +97,7 @@ export default function Receipts() {
   const sorted = sortRows(shown, {
     date: r => r.doc_date || '', doc: r => r.doc_number || '', supplier: r => r.suppliers?.name || '',
     status: r => r.status || 'סופק', items: r => r.stock_receipt_items.length, units,
-    total, totalVat: r => withVat(total(r)), disc: discPct,
+    total, totalVat: r => withVat(total(r)),
   }, sort)
 
   return (
@@ -123,13 +121,12 @@ export default function Receipts() {
               <SortTh k="status" sort={sort} onSort={onSort}>סטטוס</SortTh>
               <SortTh k="items" sort={sort} onSort={onSort}>פריטים</SortTh>
               <SortTh k="units" sort={sort} onSort={onSort}>יחידות</SortTh>
-              <SortTh k="disc" sort={sort} onSort={onSort}>הנחה שהתקבלה</SortTh>
               <SortTh k="total" sort={sort} onSort={onSort}>סה״כ (לפני מע״מ)</SortTh>
               <SortTh k="totalVat" sort={sort} onSort={onSort}>סה״כ כולל מע״מ</SortTh>
             </tr>
           </thead>
           <tbody>
-            {sorted.length === 0 && <tr><td className="empty-col" colSpan={9}>{needle ? 'לא נמצאו תעודות מתאימות' : 'אין תעודות עדיין'}</td></tr>}
+            {sorted.length === 0 && <tr><td className="empty-col" colSpan={8}>{needle ? 'לא נמצאו תעודות מתאימות' : 'אין תעודות עדיין'}</td></tr>}
             {sorted.map(r => [
               <tr key={r.id} onClick={() => setEditing(r)}>
                 <td>{formatDate(r.doc_date)}</td>
@@ -138,13 +135,12 @@ export default function Receipts() {
                 <td><span className={r.status === 'בהמתנה לאספקה' ? 'neg' : 'pos'}>{r.status || 'סופק'}</span></td>
                 <td>{r.stock_receipt_items.length}</td>
                 <td>{r.stock_receipt_items.reduce((a, i) => a + Number(i.quantity), 0)}</td>
-                <td>{gross(r) > 0 ? <span title={`לפני הנחה: ${money(gross(r))}`}>{pct(gross(r), total(r))} ({money(gross(r) - total(r))})</span> : '—'}</td>
                 <td>{money(total(r))}</td>
                 <td><b>{money(withVat(total(r)))}</b></td>
               </tr>,
               needle && r.stock_receipt_items.some(itemHit) && (
                 <tr key={r.id + '-hit'} onClick={() => setEditing(r)} style={{ background: 'var(--bg-soft, #f7f7fb)' }}>
-                  <td colSpan={9}>
+                  <td colSpan={8}>
                     {r.stock_receipt_items.filter(itemHit).map(i => (
                       <div key={i.id}>↳ <b>{i.products?.sku || '—'}</b> {i.products?.name} — הוזמן/נקלט: <b>{Number(i.quantity)}</b>
                         {grossCost(i) > 0 && <> · מחיר מקורי {money(grossCost(i))} ← שהתקבל {money(netCost(i))} · <b className="pos">הנחה {pct(grossCost(i), netCost(i))}</b></>}</div>
@@ -190,7 +186,6 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
   }
 
   const total = items.reduce((a, i) => a + (Number(i.quantity) || 0) * netCost(i), 0)
-  const grossTotal = items.reduce((a, i) => a + (Number(i.quantity) || 0) * grossCost(i), 0)
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
@@ -244,8 +239,6 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
           onClick={() => setItems(l => [...l, { text: '', product_id: '', quantity: 1, unit_cost: '', discount_percent: '' }])}>+ שורה</button>
 
         <div className="summary-row" style={{ marginTop: 14 }}>
-          <div className="summary-card"><span>מחיר מקורי (לפני הנחה)</span><b>{money(grossTotal)}</b></div>
-          <div className="summary-card"><span>הנחה שהתקבלה</span><b className="pos">{money(grossTotal - total)} ({pct(grossTotal, total)})</b></div>
           <div className="summary-card"><span>סה״כ לפני מע״מ</span><b>{money(total)}</b></div>
           <div className="summary-card"><span>מע״מ {Math.round(VAT_RATE * 100)}%</span><b>{money(withVat(total) - total)}</b></div>
           <div className="summary-card"><span>סה״כ כולל מע״מ (להשוואה לחשבונית)</span><b>{money(withVat(total))}</b></div>
