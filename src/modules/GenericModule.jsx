@@ -114,7 +114,7 @@ export default function GenericModule({ config, focusId = null }) {
     load()
   }
 
-  async function handleSync(engravingOnly) {
+  async function handleSync() {
     setSyncing(true)
     setSyncMsg('')
     setError('')
@@ -131,7 +131,6 @@ export default function GenericModule({ config, focusId = null }) {
     }
     const r = data?.[config.syncBody?.target || 'products'] || {}
     setSyncMsg(`סונכרנו ${r.total ?? 0} ${config.syncNoun || 'רשומות'} מהאתר: ${r.inserted ?? 0} חדשות, ${r.updated ?? 0} עודכנו${r.errors?.length ? `, ${r.errors.length} שגיאות (${r.errors[0]})` : ''}`)
-    if (engravingOnly === true) setFilter('engraving', 'only')
     load()
   }
 
@@ -246,11 +245,6 @@ export default function GenericModule({ config, focusId = null }) {
               ORDER_STATUS_LABELS[o.wc_status] || o.wc_status || 'ידנית', o.handling_status || '', l.not_supplied ? 'לא לספק' : '', o.shipping_address || '', l.notes || o.notes || '',
             ])),
           })} />}
-          {config.isOrder && (
-            <button className="btn-add" onClick={() => handleSync(true)} disabled={syncing} title="מסנכרן הזמנות מהאתר ומציג רק הזמנות עם חריטה אישית">
-              {syncing ? 'מסנכרן...' : '✒️ סנכרון הזמנות חריטה'}
-            </button>
-          )}
           {config.isOrder && <ExportButtons name="harita" title="עבודת חריטה" label="חריטה" getData={() => ({
             headers: ['מס׳ הזמנה', 'תאריך', 'לקוח', 'מוצר', 'מק״ט', 'כמות', 'חריטה אישית', 'סטטוס טיפול', 'הערות'],
             rows: filtered.flatMap(o => (o.lines || [o]).filter(l => l.has_engraving && !l.not_supplied).map(l => [
@@ -259,7 +253,7 @@ export default function GenericModule({ config, focusId = null }) {
             ])),
           })} />}
           {config.syncFunction && (
-            <button className="btn-add" onClick={() => handleSync()} disabled={syncing}>
+            <button className="btn-add" onClick={handleSync} disabled={syncing}>
               {syncing ? 'מסנכרן...' : (config.syncButtonLabel || '↻ סנכרן מהאתר')}
             </button>
           )}
