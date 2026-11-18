@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import ExportButtons from '../components/ExportButtons'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { formatDate } from '../lib/format'
+import { formatDate, formatDateDots } from '../lib/format'
 import { VAT_RATE } from '../lib/pricing'
 import { useSort, sortRows, SortTh } from '../lib/sort'
 
@@ -121,7 +121,7 @@ export default function Receipts() {
             .filter(i => !needle || itemHit(i) || !r.stock_receipt_items.some(itemHit))
             .map(i => {
               const g = grossCost(i), n = netCost(i), line = i.quantity * n
-              return [formatDate(r.doc_date), r.doc_number || '', r.suppliers?.name || '', r.status || 'סופק', i.products?.sku || '', i.products?.name || '',
+              return [formatDateDots(r.doc_date), r.doc_number || '', r.suppliers?.name || '', r.status || 'סופק', i.products?.sku || '', i.products?.name || '',
                 Number(i.quantity), r2(g), g > 0 ? r4((1 - n / g) * 100) : '', r2(n), r2(line), r2(withVat(line))]
             }))
           return { headers: ['תאריך', 'מס׳ תעודה', 'ספק', 'סטטוס', 'מק״ט', 'מוצר', 'כמות', 'מחיר מקורי', 'אחוז הנחה', 'מחיר שהתקבל', 'סה״כ שורה לפני מע״מ', 'סה״כ שורה כולל מע״מ'], rows }

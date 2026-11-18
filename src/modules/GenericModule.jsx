@@ -4,8 +4,8 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { calcProduct, calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import ExportButtons from '../components/ExportButtons'
-import { groupOrders, engravingText } from '../lib/orders'
-import { isCountedOrder, ORDER_STATUS_LABELS, FINANCE_START, formatDate } from '../lib/format'
+import { groupOrders, engravingText, variationText } from '../lib/orders'
+import { isCountedOrder, ORDER_STATUS_LABELS, FINANCE_START, formatDate, formatDateDots } from '../lib/format'
 import { useNav } from '../contexts/NavContext'
 import { useLiveReload } from '../lib/useLive'
 import { wpOrderEditUrl, wpProductEditUrl } from '../lib/site'
@@ -239,18 +239,18 @@ export default function GenericModule({ config, focusId = null }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {config.isOrder && <ExportButtons sets={[
             { name: 'horaot', title: 'הזמנות', label: 'כל ההזמנות המוצגות', getData: () => ({
-            headers: ['מס׳ הזמנה', 'תאריך', 'לקוח', 'טלפון', 'מוצר', 'מק״ט', 'כמות', 'מחיר ליחידה', 'סה״כ שורה', 'סטטוס הזמנה', 'סטטוס טיפול', 'לא לספק', 'כתובת משלוח', 'הערות'],
+            headers: ['מס׳ הזמנה', 'תאריך כניסה', 'לקוח', 'טלפון', 'מוצר', 'מק״ט', 'כמות', 'מחיר ליחידה', 'סה״כ שורה', 'סטטוס הזמנה', 'סטטוס טיפול', 'לא לספק', 'כתובת משלוח', 'הערות'],
             rows: filtered.flatMap(o => (o.lines || [o]).map(l => [
-              o.order_number || '', formatDate(o.order_date), o.customer_name || '', o.customer_phone || '',
+              o.order_number || '', formatDateDots(o.order_date), o.customer_name || '', o.customer_phone || '',
               l.products?.name || l.product_name || '', l.sku || '', Number(l.quantity) || 0, Number(l.price) || 0, Number(l.total_amount) || 0,
               ORDER_STATUS_LABELS[o.wc_status] || o.wc_status || 'ידנית', o.handling_status || '', l.not_supplied ? 'לא לספק' : '', o.shipping_address || '', l.notes || o.notes || '',
             ])),
           }) },
             { name: 'harita', title: 'עבודת חריטה', label: '✒️ עבודת חריטה (רק שורות עם חריטה)', getData: () => ({
-            headers: ['מס׳ הזמנה', 'תאריך', 'לקוח', 'מוצר', 'מק״ט', 'כמות', 'חריטה אישית', 'סטטוס טיפול', 'הערות'],
+            headers: ['מס׳ הזמנה', 'תאריך כניסה', 'לקוח', 'מוצר', 'מק״ט', 'כמות', 'בחירת וריאציה', 'חריטה אישית (מה לחרוט)', 'סטטוס טיפול', 'הערות'],
             rows: filtered.flatMap(o => (o.lines || [o]).filter(l => l.has_engraving && !l.not_supplied).map(l => [
-              o.order_number || '', formatDate(o.order_date), o.customer_name || '', l.products?.name || l.product_name || '', l.sku || '',
-              Number(l.quantity) || 0, engravingText(l.engraving), o.handling_status || '', l.notes || o.notes || '',
+              o.order_number || '', formatDateDots(o.order_date), o.customer_name || '', l.products?.name || l.product_name || '', l.sku || '',
+              Number(l.quantity) || 0, variationText(l.personalization), engravingText(l.engraving), o.handling_status || '', l.notes || o.notes || '',
             ])),
           }) },
           ]} />}
@@ -787,7 +787,7 @@ function OrderDetails({ order }) {
         {item('אמצעי תשלום', order.payment_method)}
         {item('סה"כ ההזמנה (כולל משלוח)', order.order_total != null ? `₪${order.order_total}` : null)}
         {order.coupons && item('קופון', order.coupons)}
-        <div className="field full" style={{ margin: 0 }}>{item('חריטה אישית', engravingText(order.engraving))}{order.personalization && order.personalization !== order.engraving && item('פרטים נוספים', order.personalization)}</div>
+        <div className="field full" style={{ margin: 0 }}>{item('חריטה אישית', engravingText(order.engraving))}{variationText(order.personalization) && item('בחירת וריאציה / פרטים נוספים', variationText(order.personalization))}</div>
         <div className="field full" style={{ margin: 0 }}>{item('הערת הלקוח', order.customer_note)}</div>
       </div>
     </div>

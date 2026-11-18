@@ -1,5 +1,20 @@
-// טקסט החריטה בלי שם השדה: הזמנות ישנות נשמרו כ"התאמה אישית: טקסט", חדשות כטקסט בלבד
-export const engravingText = t => String(t || '').split('\n').map(l => l.replace(/^[^\n:]*(חריטה|התאמה אישית)[^\n:]*:\s*/, '')).join('\n').trim()
+// פירוק טקסט פרטי שורה ("שם: ערך" בשורות) לחריטה ולשאר הבחירות (צבע / וריאציה...).
+// הזמנות ישנות נשמרו מעורבות ("צבע: שקוף\nהתאמה אישית: טקסט"), חדשות כבר מופרדות מהסנכרון.
+const ENTRY = /(?:^|\n)([^\n:]{1,60}):[ \t]*([\s\S]*?)(?=\n[^\n:]{1,40}:[ \t]|$)/g
+export function splitMeta(text) {
+  const t = String(text || '')
+  const eng = []
+  const other = []
+  for (const m of t.matchAll(ENTRY)) {
+    if (/חריטה|התאמה אישית/.test(m[1])) eng.push(m[2].trim())
+    else other.push(`${m[1].trim()}: ${m[2].trim()}`)
+  }
+  return { engraving: eng.join('\n'), other: other.join('\n') }
+}
+// מה לחרוט בפועל (בלי שם השדה ובלי בחירת הווריאציה)
+export const engravingText = t => splitMeta(t).engraving || String(t || '').trim()
+// בחירת הווריאציה / שאר הפרטים (צבע וכו') — בלי החריטה
+export const variationText = t => splitMeta(t).other
 
 // שורות בטבלת orders הן שורות פריט. הזמנה מהאתר עם כמה פריטים (אותו wc_order_id)
 // מאוחדת כאן להזמנה אחת עם lines. הזמנה ידנית (בלי wc_order_id) נשארת שורה בודדת.

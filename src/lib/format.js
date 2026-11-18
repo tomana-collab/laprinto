@@ -29,3 +29,12 @@ export const isCountedOrder = row => !row.wc_status || COUNTED_ORDER_STATUSES.in
 
 // הסיכומים הכספיים (דשבורד והזמנות) נספרים מתאריך זה ואילך
 export const FINANCE_START = '2026-10-01'
+
+// תאריך בפורמט dd.mm.yyyy (לייצוא). מקבל גם 'YYYY-MM-DD' וגם timestamptz (לפי שעון ישראל)
+export function formatDateDots(v) {
+  if (!v) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v))
+  if (m) return `${m[3]}.${m[2]}.${m[1]}`
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(new Date(v)).map(x => [x.type, x.value]))
+  return `${p.day}.${p.month}.${p.year}`
+}
