@@ -114,7 +114,7 @@ export default function GenericModule({ config, focusId = null }) {
     load()
   }
 
-  async function handleSync() {
+  async function handleSync(engravingOnly) {
     setSyncing(true)
     setSyncMsg('')
     setError('')
@@ -131,6 +131,7 @@ export default function GenericModule({ config, focusId = null }) {
     }
     const r = data?.[config.syncBody?.target || 'products'] || {}
     setSyncMsg(`סונכרנו ${r.total ?? 0} ${config.syncNoun || 'רשומות'} מהאתר: ${r.inserted ?? 0} חדשות, ${r.updated ?? 0} עודכנו${r.errors?.length ? `, ${r.errors.length} שגיאות (${r.errors[0]})` : ''}`)
+    if (engravingOnly === true) setFilter('engraving', 'only')
     load()
   }
 
@@ -245,8 +246,20 @@ export default function GenericModule({ config, focusId = null }) {
               ORDER_STATUS_LABELS[o.wc_status] || o.wc_status || 'ידנית', o.handling_status || '', l.not_supplied ? 'לא לספק' : '', o.shipping_address || '', l.notes || o.notes || '',
             ])),
           })} />}
+          {config.isOrder && (
+            <button className="btn-add" onClick={() => handleSync(true)} disabled={syncing} title="מסנכרן הזמנות מהאתר ומציג רק הזמנות עם חריטה אישית">
+              {syncing ? 'מסנכרן...' : '✒️ סנכרון הזמנות חריטה'}
+            </button>
+          )}
+          {config.isOrder && <ExportButtons name="harita" title="עבודת חריטה" label="חריטה" getData={() => ({
+            headers: ['מס׳ הזמנה', 'תאריך', 'לקוח', 'מוצר', 'מק״ט', 'כמות', 'חריטה אישית', 'סטטוס טיפול', 'הערות'],
+            rows: filtered.flatMap(o => (o.lines || [o]).filter(l => l.has_engraving && !l.not_supplied).map(l => [
+              o.order_number || '', formatDate(o.order_date), o.customer_name || '', l.products?.name || l.product_name || '', l.sku || '',
+              Number(l.quantity) || 0, l.engraving || '', o.handling_status || '', l.notes || o.notes || '',
+            ])),
+          })} />}
           {config.syncFunction && (
-            <button className="btn-add" onClick={handleSync} disabled={syncing}>
+            <button className="btn-add" onClick={() => handleSync()} disabled={syncing}>
               {syncing ? 'מסנכרן...' : (config.syncButtonLabel || '↻ סנכרן מהאתר')}
             </button>
           )}
@@ -618,7 +631,7 @@ function OrderLines({ order, onChanged }) {
               <tr key={l.id} style={{ cursor: 'default' }}>
                 <td>{l.product_id
                   ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
-                  : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}</td>
+                  : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}{l.has_engraving && <div style={{ fontSize: 12.5 }}>✒️ <b>חריטה אישית:</b> {l.engraving}</div>}</td>
                 <td>{l.sku && href ? <a href={href} target="_blank" rel="noreferrer">{l.sku}</a> : (l.sku || '—')}</td>
                 <td>{l.quantity}</td>
                 <td>₪{l.price}</td>
@@ -778,7 +791,7 @@ function OrderDetails({ order }) {
         {item('אמצעי תשלום', order.payment_method)}
         {item('סה"כ ההזמנה (כולל משלוח)', order.order_total != null ? `₪${order.order_total}` : null)}
         {order.coupons && item('קופון', order.coupons)}
-        <div className="field full" style={{ margin: 0 }}>{item('התאמה אישית', order.personalization)}</div>
+        <div className="field full" style={{ margin: 0 }}>{item('חריטה אישית', order.engraving)}{order.personalization && order.personalization !== order.engraving && item('פרטים נוספים', order.personalization)}</div>
         <div className="field full" style={{ margin: 0 }}>{item('הערת הלקוח', order.customer_note)}</div>
       </div>
     </div>

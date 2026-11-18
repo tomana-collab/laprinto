@@ -19,6 +19,11 @@ export function groupOrders(rows) {
     g.quantity = g.lines.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
     g.total_amount = g.lines.reduce((a, l) => a + (Number(l.total_amount) || 0), 0)
     g.discount_amount = g.lines.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0)
+    g.has_engraving = g.lines.some(l => l.has_engraving && !l.not_supplied)
+    g.engraving = g.lines
+      .filter(l => l.has_engraving)
+      .map(l => `${nameOf(l)}:\n${l.engraving}`)
+      .join('\n\n')
     g.personalization = g.lines
       .filter(l => l.personalization)
       .map(l => `${nameOf(l)}:\n${l.personalization}`)

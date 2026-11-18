@@ -43,6 +43,7 @@ function OrderDetail({ row, nav, extra, ui }) {
                 <td>
                   {l.product_id ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{lineName(l)}</a> : <span className={l.not_supplied ? 'ns-name' : ''}>{lineName(l)}</span>}
                   {l.not_supplied && <span style={{ marginInlineStart: 8 }}><NotSupplied n={1} /></span>}
+                  {l.has_engraving && <div style={{ fontSize: 12.5 }}>✒️ <b>חריטה אישית:</b> {l.engraving}</div>}
                 </td>
                 <td>{l.sku || '—'}</td>
                 <td>{l.quantity}</td>
@@ -64,9 +65,10 @@ function OrderDetail({ row, nav, extra, ui }) {
 
 // שורה שסומנה "לא לספק": שם חתוך באדום + תווית. הכסף וההזמנה לא משתנים
 const NotSupplied = ({ n }) => <span className="sup-stock sup-out_of_stock" title="מוצר שהוחלט לא לספק (לא יורד מהמלאי)">לא לספק{n > 1 ? ` ×${n}` : ''}</span>
-function OneLine({ main, count, tip, bad }) {
+function OneLine({ main, count, tip, bad, pen }) {
   return (
     <div className="order-cell" title={tip}>
+      {pen && <span title="חריטה אישית" style={{ marginInlineEnd: 4 }}>✒️</span>}
       <span className="order-cell-main">{main}</span>
       {count > 1 && <span className={`order-more ${bad ? 'neg' : ''}`}>+{count - 1}</span>}
     </div>
@@ -336,6 +338,10 @@ export const MODULES = {
         { value: 'completed', label: 'הושלמו / ידניות', test: r => !r.wc_status || r.wc_status === 'completed' },
         { value: 'all', label: 'הצג את כל ההזמנות' },
       ] },
+      { key: 'engraving', type: 'preset', options: [
+        { value: 'all', label: 'כל ההזמנות (חריטה ובלי)' },
+        { value: 'only', label: '✒️ רק הזמנות עם חריטה אישית', test: r => r.has_engraving },
+      ] },
       { key: 'order_date', label: 'כל החודשים', type: 'month' },
       { key: 'handling_status', label: 'כל סטטוסי הטיפול', type: 'values' },
       { key: 'wc_status', label: 'סטטוס הזמנה', type: 'values', labels: SHOWN_ORDER_LABELS },
@@ -350,9 +356,9 @@ export const MODULES = {
         label: 'מוצר',
         // בלי סימון "לא לספק" ברשימה: הוא מופיע רק בחלון ההזמנה ובפירוט שנפתח מתחת לשורה
         render: (row, nav, extra, ui) => row.lines.length === 1
-          ? <OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} />
+          ? <OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} pen={row.has_engraving} />
           : <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
-              {row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
+              {row.has_engraving && '✒️ '}{row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
             </button>,
       },
       {
@@ -391,7 +397,7 @@ export const MODULES = {
           return out ? <span className="sup-stock sup-out_of_stock">אזל ב-{out}</span> : '—'
         },
       },
-      { key: 'personalization', label: 'התאמה אישית', render: row => row.personalization ? <span title={row.personalization}>✎ יש</span> : '—' },
+      { key: 'engraving', label: 'חריטה אישית', sortValue: row => row.has_engraving ? 1 : 0, render: row => row.has_engraving ? <span title={row.engraving}>✒️ יש</span> : '—' },
       { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
       { key: 'notes', label: 'הערות', render: row => row.notes
         ? <span title={row.notes} style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{row.notes}</span>

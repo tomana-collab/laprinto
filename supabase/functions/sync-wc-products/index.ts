@@ -294,17 +294,23 @@ async function fetchAllWcOrders(status = 'any') {
 // אמצעי התשלום, הערת הלקוח וההתאמה האישית (מטא של שורת הפריט).
 const stripTags = (v: string) => decode(v.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
 
-// התאמה אישית ושאר שדות שהלקוח מילא נשמרים כ-meta של שורת הפריט (מפתחות שמתחילים ב-_ הם פנימיים)
-function lineItemMetaText(li: any): string {
-  return (li.meta_data || [])
-    .filter((m: any) => !String(m.key).startsWith('_'))
-    .map((m: any) => {
-      const key = stripTags(String(m.display_key ?? m.key))
-      const raw = m.display_value ?? m.value
-      const val = stripTags(typeof raw === 'string' ? raw : JSON.stringify(raw))
-      return `${key}: ${val}`
-    })
-    .join('\n')
+// חריטה אישית ושאר שדות שהלקוח מילא נשמרים כ-meta של שורת הפריט (מפתחות שמתחילים ב-_ הם פנימיים).
+// שדה ששמו מכיל "חריטה" / "התאמה אישית" (השם הישן) נחשב חריטה אישית ונשמר בנפרד; שאר השדות ב-personalization.
+const isEngravingKey = (k: string) => /חריטה|התאמה אישית|engrav|personali[sz]/i.test(k)
+const isNoValue = (v: string) => v.trim() === '' || /^(ללא|לא|אין|no|none)(\s|$)/i.test(v.trim()) || /^[-–—]$/.test(v.trim())
+
+function lineItemMeta(li: any): { engraving: string; other: string } {
+  const eng: string[] = []
+  const other: string[] = []
+  for (const m of (li.meta_data || [])) {
+    if (String(m.key).startsWith('_')) continue
+    const key = stripTags(String(m.display_key ?? m.key))
+    const raw = m.display_value ?? m.value
+    const val = stripTags(typeof raw === 'string' ? raw : JSON.stringify(raw))
+    if (isEngravingKey(key)) { if (!isNoValue(val)) eng.push(`${key}: ${val}`) }
+    else other.push(`${key}: ${val}`)
+  }
+  return { engraving: eng.join('\n'), other: other.join('\n') }
 }
 
 function addressText(a: any): string {
@@ -373,7 +379,7 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
         product_name: decode(String(li.name || '')),
         sku: li.sku || '',
         ...orderInfo(o),
-        personalization: lineItemMetaText(li),
+        ...(() => { const m = lineItemMeta(li); return { personalization: m.other, engraving: m.engraving, has_engraving: m.engraving !== '' } })(),
         product_id: (li.variation_id ? productByWcId.get(li.variation_id) : undefined) ?? productByWcId.get(li.product_id) ?? null,
         quantity: qty,
         // מחיר ליחידה כולל מע"מ, אחרי הנחות/קופונים (li.total הוא אחרי קופון; li.subtotal לפני)
