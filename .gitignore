@@ -26,3 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 supabase/.temp/
+
+# הגדרת חיבור MCP מקומית (Supabase), לא לריפו
+.mcp.json
