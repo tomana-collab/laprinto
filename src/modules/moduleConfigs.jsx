@@ -407,23 +407,17 @@ export const MODULES = {
       },
       // הערות פנימיות: ברשימה רק יש / אין. את ההערה עצמה רואים בתוך ההזמנה
       { key: 'notes', label: 'הערות פנימיות', sortValue: row => row.notes?.trim() ? 1 : 0, render: row => row.notes?.trim() ? '📝 יש' : '—' },
-      // מכירה = הסכום ששולם בפועל, כבר אחרי הנחת קופון
-      { key: 'total_amount', label: 'מכירה', render: row => `₪${calcOrder(row).sale}` },
-      {
-        key: 'cost',
-        label: 'עלות (כולל מע"מ)',
-        render: row => {
-          const { cost, missing } = calcOrder(row)
-          return cost === null ? <span title={`חסרה עלות: ${missing.join(', ')}`}>—</span> : `₪${cost}`
-        },
-      },
       // רווח נטו בסוף: מכירה (אחרי קופון) - עלות - עמלה
       {
         key: 'profit',
         label: 'רווח נטו',
+        // ברשימה רק רווח נטו (בלי עמודות מכירה ועלות, כדי שלא תהיה גלילה לצד). הפירוט במעבר עכבר ובתוך ההזמנה
+        sortValue: row => calcOrder(row).profit ?? -Infinity,
         render: row => {
-          const { profit } = calcOrder(row)
-          return profit === null ? '—' : <span className={profit >= 0 ? 'pos' : 'neg'}>₪{profit}</span>
+          const { profit, sale, cost, missing } = calcOrder(row)
+          return profit === null
+            ? <span title={`חסרה עלות: ${missing.join(', ')}`}>—</span>
+            : <span className={profit >= 0 ? 'pos' : 'neg'} title={`מכירה ₪${sale} · עלות כולל מע"מ ₪${cost}`}>₪{profit}</span>
         },
       },
     ],
