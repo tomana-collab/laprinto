@@ -47,7 +47,8 @@ export function replacedLineIds(lines) {
 // replaced = מזהי שורות שהוחלפו (כשמחשבים שורה בודדת מתוך הזמנה). ברירת מחדל: מחושב מהשורות עצמן
 export function calcOrder(order, replaced) {
   const all = order.lines || [order]
-  const skip = replaced || replacedLineIds(all)
+  // (בודק שזה Set: calcOrder נקרא גם דרך .map, שמעביר אינדקס כפרמטר שני)
+  const skip = replaced instanceof Set ? replaced : replacedLineIds(all)
   const sold = all.filter(l => !skip.has(l.id))
   const lines = all
   const sale = r2(sold.reduce((a, l) => a + (Number(l.total_amount) || 0), 0))
