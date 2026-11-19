@@ -6,7 +6,6 @@ import ReadyButton from '../components/ReadyButton'
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrder } from '../lib/pricing'
 import { supabase } from '../supabaseClient'
-import { SupplierStock, SUPPLIER_STOCK_LABEL } from '../components/SupplierStock'
 
 const SHOWN_ORDER_STATUSES = ['processing', 'completed']
 const SHOWN_ORDER_LABELS = Object.fromEntries(SHOWN_ORDER_STATUSES.map(k => [k, ORDER_STATUS_LABELS[k]]))
@@ -159,7 +158,6 @@ export const MODULES = {
         { value: 'no_price', label: 'ללא מחיר', test: r => !(Number(r.price) > 0) },
         { value: 'no_supplier', label: 'ללא ספק', test: r => !r.supplier_id },
         { value: 'no_cost', label: 'ללא עלות', test: r => !(Number(r.cost) > 0) },
-        { value: 'supplier_out', label: 'אזל אצל הספק', test: r => r.supplier_stock_status === 'out_of_stock' },
       ] },
     ],
     // לחיצה על כותרת עמודה ממיינת לפיה
@@ -184,7 +182,6 @@ export const MODULES = {
       { key: 'sku', label: 'מק"ט', render: row => row.sku || '—' },
       { key: 'subcategory', label: 'תת-קטגוריה', render: row => row.subcategory || '—' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—', sortValue: row => row.suppliers?.name || null },
-      { key: 'supplier_stock_status', label: 'מלאי אצל הספק', render: row => <SupplierStock status={row.supplier_stock_status} checkedAt={row.supplier_stock_checked_at} /> },
       {
         key: 'supplier_url',
         noSort: true,
@@ -286,7 +283,7 @@ export const MODULES = {
     label: 'הזמנות',
     icon: '🧾',
     // מביא גם את המוצר (שם/קישור/עלות) ואת מי שקיבל דרך ה-foreign keys
-    selectQuery: '*, products(name, product_url, wc_product_id, cost_with_vat, extra_expenses, supplier_stock_status, supplier_stock_checked_at), team_members(full_name)',
+    selectQuery: '*, products(name, product_url, wc_product_id, cost_with_vat, extra_expenses), team_members(full_name)',
     orderBy: 'order_date',
     // שורות פריט של אותה הזמנת אתר מאוחדות להזמנה אחת (src/lib/orders.js); חלון העריכה רחב על כל הדף
     groupOrders: true,

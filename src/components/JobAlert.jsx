@@ -18,7 +18,7 @@ export default function JobAlert() {
         const list = []
         const health = latest.health_check
         if (health?.status === 'failed') for (const e of health.errors || []) list.push({ key: health.id + e.error, text: e.error, at: health.started_at })
-        for (const t of ['wc_sync', 'price_scan', 'supplier_stock']) {
+        for (const t of ['wc_sync', 'price_scan']) {
           const r = latest[t]
           // כישלון חדש יותר מבדיקת התקינות האחרונה (או שעוד לא הייתה בדיקה)
           if (r?.status === 'failed' && (!health || r.started_at > health.started_at)) list.push({ key: r.id, text: `${LABEL[t]}: נכשלה`, at: r.started_at })

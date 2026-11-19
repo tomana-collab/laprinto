@@ -77,6 +77,21 @@ export default function Receipts() {
         setError(e2.message); return
       }
     }
+    // תעודה שסופקה מעדכנת את מחיר הקנייה של המוצר (עלות ליחידה לפני מע"מ + הנחת ספק) — רק אם זו התעודה האחרונה של המוצר,
+    // כדי שעריכת תעודה ישנה לא תדרוס מחיר עדכני יותר. העלות במוצר משמשת לחישוב הרווח בהזמנות ובמוצרים
+    if (status === 'סופק') {
+      const newerExists = pid => receipts.some(r => r.id !== editing?.id && (r.status || 'סופק') === 'סופק'
+        && String(r.doc_date || '') > String(doc_date || '') && r.stock_receipt_items.some(i => i.product_id === pid))
+      const updates = clean.filter(i => Number(i.unit_cost) > 0 && !newerExists(i.product_id)).map(i => {
+        const p = products.find(x => x.id === i.product_id)
+        const cost = Number(i.unit_cost), disc = Number(i.discount_percent) || 0
+        if (p && Number(p.cost) === cost && (Number(p.supplier_discount_percent) || 0) === disc) return null
+        return supabase.from('products').update({ cost, supplier_discount_percent: disc }).eq('id', i.product_id)
+      }).filter(Boolean)
+      const res = await Promise.all(updates)
+      const failed = res.find(x => x.error)
+      if (failed) { setError('התעודה נשמרה, אבל עדכון מחיר הקנייה במוצרים נכשל: ' + failed.error.message); setEditing(null); load(); return }
+    }
     setError(''); setEditing(null); load()
   }
 

@@ -29,7 +29,7 @@ export default function Inventory() {
   const { openRecord } = useNav()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState('instock')
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
   const [countMode, setCountMode] = useState(false) // ספירת מלאי מרוכזת
@@ -97,15 +97,12 @@ export default function Inventory() {
     setCountMode(false); setCounts({}); load()
   }
 
-  // כפתורי סינון מהיר. "במלאי" = יש יחידות (מלאי חיובי)
+  // כפתורי סינון מהיר. המלאי מציג רק מה שיש במחסן: נקלט ועוד לא נמכר (מלאי חיובי). בלי מינוסים ובלי מוצרים שלא נקלטו.
+  // מוצרים שחסרים להזמנות — בעמוד "השלמת מוצרים"
   const FILTERS = [
-    { key: 'all', label: 'הכל', test: () => true },
     { key: 'instock', label: 'במלאי', test: r => r.stock > 0 },
     { key: 'unsold', label: 'במלאי, אף פעם לא נמכר', test: r => r.stock > 0 && r.sold_total === 0 },
-    { key: 'sold', label: 'נמכר', test: r => r.sold_total > 0 },
-    { key: 'order', label: 'חסר — להזמין', test: r => status(r).key === 'order' },
-    { key: 'incoming', label: 'בהמתנה לאספקה', test: r => status(r).key === 'incoming' },
-    { key: 'low', label: 'מלאי נמוך (פחות מ-2)', test: r => status(r).key === 'low' },
+    { key: 'low', label: 'מלאי נמוך (פחות מ-2)', test: r => r.stock > 0 && status(r).key === 'low' },
   ]
   // קטגוריה וחיפוש חלים על הכול, כך שגם המספרים על הכפתורים מתעדכנים
   const base = useMemo(() => (rows || []).filter(r => {
@@ -114,11 +111,11 @@ export default function Inventory() {
     return !t || r.name.toLowerCase().includes(t) || (r.sku || '').toLowerCase().includes(t)
   }), [rows, q, category])
   const activeTest = FILTERS.find(f => f.key === filter)?.test || (() => true)
-  const shown = base.filter(activeTest)
+  // בספירת מלאי מוצגים כל המוצרים, כדי שאפשר יהיה להזין כמות גם למוצר שעוד לא נקלט בתעודה
+  const shown = countMode ? base : base.filter(activeTest)
 
   if (rows === null) return <div className="loading">טוען מלאי...</div>
 
-  const toOrder = rows.filter(r => needToOrder(r) > 0)
   const inStock = rows.filter(r => r.stock > 0)
   const unsold = inStock.filter(r => r.sold_total === 0) // יש במלאי ועדיין לא נמכרה אפילו יחידה
   const receivedUnits = rows.reduce((a, r) => a + r.received, 0)
@@ -171,10 +168,6 @@ export default function Inventory() {
         <div className="summary-card"><span>שווי מכירה שלהן באתר (כולל מע״מ)</span><b>₪{num(Math.round(unsoldSale))}</b></div>
       </div>
 
-      <div className="summary-row">
-        <div className="summary-card"><span>מוצרים שחסרים — להזמין מהספק</span><b className={toOrder.length ? 'neg' : ''}>{toOrder.length}</b></div>
-        <div className="summary-card"><span>יחידות להזמנה</span><b>{num(toOrder.reduce((a, r) => a + needToOrder(r), 0))}</b></div>
-      </div>
       </CollapsibleSummary>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
