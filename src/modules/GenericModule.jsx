@@ -610,6 +610,24 @@ function OrderLines({ order, onChanged }) {
   const lines = order.lines || [order]
   const [engEdit, setEngEdit] = useState(null) // { id, text }
   const [replacing, setReplacing] = useState(null) // שורה שמחליפים לה את המוצר
+  // עריכה ידנית של שורת המוצר בהזמנה (בלי עלות: היא נלקחת מהמוצר). שדה שנערך כאן לא נדרס בסנכרון מהאתר (manual_fields ב-DB)
+  const [lineEdit, setLineEdit] = useState(null) // { id, product_name, sku, quantity, price, discount_amount, personalization }
+  const startLineEdit = l => setLineEdit({ id: l.id, product_name: l.product_name || '', sku: l.sku || '', quantity: l.quantity ?? 1, price: l.price ?? 0, discount_amount: l.discount_amount ?? 0, personalization: variationText(l.personalization) })
+  async function saveLine() {
+    const e = lineEdit
+    const qty = Number(e.quantity), price = Number(e.price), disc = Number(e.discount_amount) || 0
+    if (!(qty > 0)) { window.alert('כמות חייבת להיות גדולה מ-0'); return }
+    if (!(price >= 0) || String(e.price).trim() === '') { window.alert('מחיר ליחידה לא תקין'); return }
+    if (disc < 0) { window.alert('הנחה לא יכולה להיות שלילית'); return }
+    const l = lines.find(x => x.id === e.id)
+    const patch = { product_name: e.product_name.trim(), sku: e.sku.trim(), quantity: qty, price, discount_amount: disc }
+    // הווריאציה נשמרת רק אם שונתה (בשורות ישנות היא שמורה יחד עם החריטה)
+    if (e.personalization.trim() !== variationText(l?.personalization)) patch.personalization = e.personalization.trim() || null
+    const { error } = await supabase.from('orders').update(patch).eq('id', e.id)
+    if (error) { window.alert('השמירה נכשלה: ' + error.message); return }
+    setLineEdit(null); onChanged?.()
+  }
+  const le = (k, v) => setLineEdit(x => ({ ...x, [k]: v }))
   async function saveEngraving(l, text) {
     const t = String(text || '').trim()
     const { error } = await supabase.from('orders').update({ engraving: t, has_engraving: t !== '' }).eq('id', l.id)
@@ -642,7 +660,8 @@ function OrderLines({ order, onChanged }) {
             const c = calcOrder({ lines: [l] })
             const href = wpProductEditUrl(l.products?.wc_product_id)
             return (
-              <tr key={l.id} style={{ cursor: 'default' }}>
+              <Fragment key={l.id}>
+              <tr style={{ cursor: 'default' }}>
                 <td>{l.product_id
                   ? <a href="#" className={l.not_supplied ? 'ns-name' : ''} onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{name}</a>
                   : <span className={l.not_supplied ? 'ns-name' : ''}>{name}</span>}{l.not_supplied && <span className="sup-stock sup-out_of_stock" style={{ marginInlineStart: 8 }}>לא לספק</span>}{l.manual_line && <span className="sup-stock" style={{ marginInlineStart: 8 }} title="נוסף ידנית ללא חיוב">ללא חיוב</span>}<div style={{ fontSize: 12.5, marginTop: 2 }}>
@@ -671,9 +690,28 @@ function OrderLines({ order, onChanged }) {
                   {!l.not_supplied && <ReadyButton line={l} onChanged={onChanged} />}
                   <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
                   {order.wc_order_id && !l.not_supplied && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="מחליף את המוצר באחר: הכמות, החריטה והווריאציה עוברים למוצר החדש (אפשר לשנות), והמוצר הזה מסומן 'לא לספק'" onClick={() => setReplacing(l)}>🔁 החלף מוצר</button>}
+                  <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="עריכה ידנית של שם, מק״ט, כמות, מחיר, הנחה ווריאציה. העלות נלקחת מהמוצר. מה שנערך כאן לא נדרס בסנכרון מהאתר" onClick={() => lineEdit?.id === l.id ? setLineEdit(null) : startLineEdit(l)}>✏️ ערוך שורה</button>
                   {l.manual_line && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>🗑 הסר</button>}
                 </td>
               </tr>
+              {lineEdit?.id === l.id && (
+                <tr style={{ cursor: 'default' }}><td colSpan={9}>
+                  <div className="line-edit">
+                    <label>שם המוצר בהזמנה<input value={lineEdit.product_name} onChange={e => le('product_name', e.target.value)} /></label>
+                    <label>מק"ט<input value={lineEdit.sku} onChange={e => le('sku', e.target.value)} /></label>
+                    <label>כמות<input type="number" min="1" value={lineEdit.quantity} onChange={e => le('quantity', e.target.value)} /></label>
+                    <label>מחיר ליחידה (₪, כולל מע"מ, אחרי קופון)<input type="number" min="0" step="0.01" value={lineEdit.price} onChange={e => le('price', e.target.value)} /></label>
+                    <label>הנחת קופון לשורה (₪)<input type="number" min="0" step="0.01" value={lineEdit.discount_amount} onChange={e => le('discount_amount', e.target.value)} /></label>
+                    <label className="wide">וריאציה / פרטים נוספים<textarea rows={2} value={lineEdit.personalization} placeholder="לדוגמה: צבע: שקוף" onChange={e => le('personalization', e.target.value)} /></label>
+                    <div className="wide cmp-sub">מכירה = כמות × מחיר ליחידה = ₪{Math.round((Number(lineEdit.quantity) || 0) * (Number(lineEdit.price) || 0) * 100) / 100}. העלות לא נערכת כאן: היא נלקחת מהמוצר. השדות שנערכו לא יידרסו בסנכרון הבא מהאתר.</div>
+                    <div className="wide">
+                      <button type="button" className="btn-add" onClick={saveLine}>שמירה</button>{' '}
+                      <button type="button" className="cmp-tool" onClick={() => setLineEdit(null)}>ביטול</button>
+                    </div>
+                  </div>
+                </td></tr>
+              )}
+              </Fragment>
             )
           })}
         </tbody>
