@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getShippingCost, setShippingCost } from '../lib/pricing'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { getStoredTheme, setTheme } from '../lib/theme'
@@ -55,6 +56,18 @@ export default function Settings() {
   }
 
   const isAdmin = profile?.role === 'אדמין'
+  // עלות משלוח להזמנה: יורדת מהרווח של כל הזמנה שנשלחת (לא איסוף עצמי)
+  const [shipCost, setShipCostInput] = useState(String(getShippingCost()))
+  const [shipMsg, setShipMsg] = useState(null)
+  async function saveShipCost(e) {
+    e.preventDefault(); setShipMsg(null)
+    const v = Number(shipCost)
+    if (!(v >= 0) || shipCost.trim() === '') { setShipMsg({ type: 'err', text: 'סכום לא תקין' }); return }
+    const { data, error } = await supabase.from('app_settings').update({ value: v, updated_at: new Date().toISOString(), updated_by: user?.email || '' }).eq('key', 'shipping_cost').select('value')
+    if (error || !data?.length) { setShipMsg({ type: 'err', text: error?.message || 'אין הרשאה לעדכן' }); return }
+    setShippingCost(v)
+    setShipMsg({ type: 'ok', text: 'נשמר. הרווח בהזמנות מחושב מעכשיו לפי העלות החדשה' })
+  }
   const [hook, setHook] = useState({ is_set: false, tail: null })
   const [hookUrl, setHookUrl] = useState('')
   const [hookMsg, setHookMsg] = useState(null)
@@ -118,6 +131,23 @@ export default function Settings() {
           <button type="button" className={theme === 'dark' ? 'active' : ''} onClick={() => pickTheme('dark')}>🌙 כהה</button>
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="settings-section">
+          <h3>עלות משלוח</h3>
+          <div className="settings-readonly">
+            כמה עולה לך משלוח של הזמנה אחת (₪). הסכום יורד מהרווח הנטו של כל הזמנה שנשלחת ללקוח, כולל משלוח חינם. באיסוף עצמי לא יורד כלום.
+          </div>
+          <form onSubmit={saveShipCost}>
+            <div className="field">
+              <label>עלות משלוח להזמנה (₪)</label>
+              <input type="number" min="0" step="0.01" value={shipCost} onChange={e => setShipCostInput(e.target.value)} />
+            </div>
+            <button className="btn btn-primary" type="submit">שמירה</button>
+            {shipMsg && <div className={`settings-msg ${shipMsg.type}`}>{shipMsg.text}</div>}
+          </form>
+        </div>
+      )}
 
       {isAdmin && (
         <div className="settings-section">

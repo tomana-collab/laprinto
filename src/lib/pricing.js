@@ -7,6 +7,13 @@ export const CLEARING_RATE = 0.0075 // עמלת סליקה: 0.75% מהמחיר �
 
 const r2 = n => Math.round(n * 100) / 100
 
+// עלות משלוח להזמנה (₪) מההגדרות (טבלת app_settings, מפתח shipping_cost). נטענת פעם אחת אחרי ההתחברות (SettingsLoader)
+let SHIPPING_COST = 0
+export const setShippingCost = n => { SHIPPING_COST = Number(n) || 0 }
+export const getShippingCost = () => SHIPPING_COST
+// הזמנה מהאתר שנשלחת ללקוח (כל שיטת משלוח חוץ מאיסוף עצמי, כולל משלוח חינם) — עולה לי משלוח
+export const orderShips = order => !!order.wc_order_id && !/איסוף/.test(order.shipping_method || '')
+
 export function calcProduct({ cost, supplier_discount_percent, extra_expenses, price }) {
   const c = Number(cost) || 0
   const d = Number(supplier_discount_percent) || 0
@@ -36,8 +43,9 @@ export function lineCost(line) {
 
 // רווחיות להזמנה שלמה (order.lines = כל שורות הפריט; בלי lines — שורה בודדת).
 //   מכירה לפני הנחה  = מכירה בפועל + הנחת קופון
-//   מכירה בפועל      = סכום השורות כפי ששולם (כבר אחרי קופון)
-//   רווח נטו         = מכירה בפועל - עלות (כולל מע"מ והוצאות נלוות) - עמלת סליקה על הסכום ששולם
+//   מכירה בפועל      = סכום השורות כפי ששולם (כבר אחרי קופון), בלי משלוח
+//   סכום ששולם       = מכירה בפועל + דמי המשלוח שהלקוח שילם (= סה"כ ההזמנה באתר)
+//   רווח נטו         = סכום ששולם - עלות (כולל מע"מ והוצאות נלוות) - עמלת סליקה על הסכום ששולם - עלות משלוח (מההגדרות)
 // cost/profit = null אם לפחות מוצר אחד לא מקושר או שלא הוזנה לו עלות (כדי לא להציג רווח מטעה).
 // שורה שהוחלפה במוצר אחר (מסומנת "לא לספק" ויש שורה עם replaces_line_id אליה): המכירה וההנחה עברו לשורה המחליפה
 export function replacedLineIds(lines) {
@@ -53,13 +61,16 @@ export function calcOrder(order, replaced) {
   const lines = all
   const sale = r2(sold.reduce((a, l) => a + (Number(l.total_amount) || 0), 0))
   const discount = r2(sold.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0))
-  const fee = r2(sale * CLEARING_RATE * (1 + VAT_RATE))
+  const shipping = r2(Number(order.shipping_total) || 0)
+  const paid = r2(sale + shipping)
+  const fee = r2(paid * CLEARING_RATE * (1 + VAT_RATE))
+  const shipCost = orderShips(order) ? SHIPPING_COST : 0
   const costs = lines.map(lineCost)
   const missing = lines.filter((_, i) => costs[i] === null).map(l => l.products?.name || l.product_name || '?')
   const cost = missing.length ? null : r2(costs.reduce((a, c) => a + c, 0))
   return {
-    sale, discount, before: r2(sale + discount), fee, cost, missing,
-    profit: cost === null ? null : r2(sale - cost - fee),
+    sale, discount, before: r2(sale + discount), shipping, paid, fee, shipCost, cost, missing,
+    profit: cost === null ? null : r2(paid - cost - fee - shipCost),
   }
 }
 

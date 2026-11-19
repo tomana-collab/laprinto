@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
+import SettingsLoader from './components/SettingsLoader'
 import MfaGate from './pages/MfaGate'
 import Settings from './pages/Settings'
 import Restock from './pages/Restock'
@@ -55,6 +56,7 @@ export default function App() {
 
   return (
     <MfaGate>
+    <SettingsLoader>
     <NavProvider value={{ openRecord }}>
     <div className="layout">
       <Sidebar
@@ -78,6 +80,7 @@ export default function App() {
       </main>
     </div>
     </NavProvider>
+    </SettingsLoader>
     </MfaGate>
   )
 }

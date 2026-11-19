@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { calcProduct, calcOrder, receiptsTotalWithVat, replacedLineIds } from '../lib/pricing'
+import { calcProduct, calcOrder, receiptsTotalWithVat, replacedLineIds, orderShips } from '../lib/pricing'
 import ExportButtons from '../components/ExportButtons'
 import { printPackingSlip } from '../lib/exportPdf'
 import { groupOrders, engravingText, variationText } from '../lib/orders'
@@ -929,24 +929,29 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
 // חישוב הרווח שלב אחר שלב, כולל הנחת הקופון שהלקוח קיבל
 function OrderBreakdown({ order }) {
   const c = calcOrder(order)
-  // בדיקה שהסכומים זהים לאתר: מכירה (סכום המוצרים) + משלוח = סה"כ ההזמנה באתר
+  // בדיקה שהסכומים זהים לאתר: מוצרים + משלוח = סה"כ ההזמנה באתר
   const siteTotal = order.wc_order_id && order.order_total != null ? Number(order.order_total) : null
-  const crmTotal = Math.round((c.sale + (Number(order.shipping_total) || 0)) * 100) / 100
-  const mismatch = siteTotal !== null && Math.abs(siteTotal - crmTotal) > 0.05
+  const mismatch = siteTotal !== null && Math.abs(siteTotal - c.paid) > 0.05
+  const ships = orderShips(order)
   const row = (label, value, cls, bold) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontWeight: bold ? 700 : 400 }}>
       <span>{label}</span><b className={cls}>{value}</b>
     </div>
   )
+  const hr = <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '6px 0' }} />
   return (
-    <div className="summary-card" style={{ display: 'block', margin: '12px 0', maxWidth: 520 }}>
-      {mismatch && <div className="err-inline" style={{ marginBottom: 8 }}>⚠️ הסכומים לא תואמים לאתר: מוצרים ₪{c.sale} + משלוח ₪{Number(order.shipping_total) || 0} = ₪{crmTotal}, ובאתר שולם ₪{siteTotal}. בדוק את המחיר וההנחה בשורות.</div>}
-      {row('מחיר מכירה לפני הנחה', `₪${c.before}`)}
+    <div className="summary-card" style={{ display: 'block', margin: '12px 0', maxWidth: 560 }}>
+      {mismatch && <div className="err-inline" style={{ marginBottom: 8 }}>⚠️ הסכומים לא תואמים לאתר: מוצרים ₪{c.sale} + משלוח ₪{c.shipping} = ₪{c.paid}, ובאתר שולם ₪{siteTotal}. בדוק את המחיר וההנחה בשורות.</div>}
+      {row(`סכום ששולם${c.shipping > 0 ? ` (כולל משלוח ₪${c.shipping})` : ''}`, `₪${c.paid}`, '', true)}
+      {hr}
+      {row('מוצרים (לפני הנחה)', `₪${c.before}`)}
       {c.discount > 0 && row(`הנחת קופון${order.coupons ? ` (${order.coupons})` : ''}`, `−₪${c.discount}`, 'neg')}
-      {row('מכירה בפועל (מה שהלקוח שילם על המוצרים)', `₪${c.sale}`)}
-      {row('עלות כולל מע"מ והוצאות נלוות', c.cost === null ? `חסרה עלות: ${c.missing.join(', ')}` : `−₪${c.cost}`)}
-      {row('עמלת סליקה (0.75% + מע"מ)', `−₪${c.fee}`)}
-      <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '6px 0' }} />
+      {row('תשלום בפועל על המוצרים (אחרי קופון, בלי משלוח)', `₪${c.sale}`)}
+      {hr}
+      {row('עלות המוצרים כולל מע"מ והוצאות נלוות', c.cost === null ? `חסרה עלות: ${c.missing.join(', ')}` : `−₪${c.cost}`, c.cost === null ? '' : 'neg')}
+      {row(`עמלת סליקה (0.75% + מע"מ מ-₪${c.paid})`, `−₪${c.fee}`, 'neg')}
+      {row(ships ? 'עלות משלוח (מההגדרות)' : 'עלות משלוח (איסוף עצמי)', ships ? (c.shipCost ? `−₪${c.shipCost}` : '₪0 (לא הוגדרה בהגדרות)') : '₪0', c.shipCost ? 'neg' : '')}
+      {hr}
       {row('רווח נטו', c.profit === null ? '—' : `₪${c.profit}`, c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
     </div>
   )
