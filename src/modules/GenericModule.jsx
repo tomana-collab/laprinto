@@ -652,7 +652,7 @@ function OrderLines({ order, onChanged }) {
     <div className="table-wrap" style={{ margin: '12px 0' }}>
       <table className="data-table">
         <thead>
-          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מחיר ליחידה</th><th>הנחת קופון</th><th>מכירה</th><th>עלות</th><th>רווח לפני עמלה</th><th></th></tr>
+          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th title="מחיר ליחידה באתר, לפני הנחת קופון, כולל מע״מ">מחיר באתר</th><th>הנחת קופון</th><th title="מה ששולם בפועל: מחיר באתר × כמות פחות הקופון">מחיר מכירה</th><th>עלות</th><th>רווח לפני עמלה</th><th></th></tr>
         </thead>
         <tbody>
           {lines.map(l => {
@@ -684,7 +684,7 @@ function OrderLines({ order, onChanged }) {
                 </div></td>
                 <td>{l.sku && href ? <a href={href} target="_blank" rel="noreferrer">{l.sku}</a> : (l.sku || '—')}</td>
                 <td>{l.quantity}</td>
-                <td>₪{l.price}</td>
+                <td>₪{Math.round(storedBefore(l) / (Number(l.quantity) || 1) * 100) / 100}</td>
                 <td>{Number(l.discount_amount) > 0 ? <span className="neg">−₪{l.discount_amount}</span> : '—'}</td>
                 <td>₪{c.sale}</td>
                 <td>{c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`}</td>
@@ -692,7 +692,7 @@ function OrderLines({ order, onChanged }) {
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {!l.not_supplied && <ReadyButton line={l} onChanged={onChanged} />}
                   <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
-                  {order.wc_order_id && !l.not_supplied && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="מחליף את המוצר באחר: הכמות, החריטה והווריאציה עוברים למוצר החדש (אפשר לשנות), והמוצר הזה מסומן 'לא לספק'" onClick={() => setReplacing(l)}>🔁 החלף מוצר</button>}
+                  {order.wc_order_id && !l.not_supplied && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="מחליף את המוצר באחר: המחיר באתר והעלות מהמוצר החדש, הקופון והחריטה מהמוצר הזה (אפשר לשנות). המוצר הזה מסומן 'הוחלף'" onClick={() => setReplacing(l)}>🔁 החלף מוצר</button>}
                   {!replaced.has(l.id) && (storedBefore(l) > 0 || l.replaces_line_id) && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="עדכון הנחת קופון לשורה, בש״ח או באחוזים. המחיר והעלות נמשכים לבד" onClick={() => setLineEdit(lineEdit?.id === l.id ? null : { id: l.id, mode: 'ils', value: Number(l.discount_amount) || 0,
                     ...(l.replaces_line_id ? { unitBefore: Math.round(storedBefore(l) / (Number(l.quantity) || 1) * 100) / 100 } : {}) })}>{l.replaces_line_id ? '✏️ מחיר והנחה' : '✏️ הנחת קופון'}</button>}
                   {l.manual_line && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>🗑 הסר</button>}
@@ -703,7 +703,7 @@ function OrderLines({ order, onChanged }) {
                 return (
                 <tr style={{ cursor: 'default' }}><td colSpan={9}>
                   <div className="line-edit">
-                    {lineEdit.unitBefore !== undefined && <label>מחיר מכירה ליחידה לפני הנחה (₪)<input type="number" min="0" step="0.01" value={lineEdit.unitBefore} onChange={e => setLineEdit({ ...lineEdit, unitBefore: e.target.value })} /></label>}
+                    {lineEdit.unitBefore !== undefined && <label>מחיר באתר ליחידה (₪)<input type="number" min="0" step="0.01" value={lineEdit.unitBefore} onChange={e => setLineEdit({ ...lineEdit, unitBefore: e.target.value })} /></label>}
                     <label>הנחת קופון
                       <span style={{ display: 'flex', gap: 6 }}>
                         <input type="number" min="0" step="0.01" autoFocus value={lineEdit.value} onChange={e => setLineEdit({ ...lineEdit, value: e.target.value })} />
@@ -713,7 +713,7 @@ function OrderLines({ order, onChanged }) {
                         </select>
                       </span>
                     </label>
-                    <div className="wide cmp-sub">לפני הנחה: ₪{before} · הנחה: ₪{coupon} · מכירה: <b>₪{Math.round((before - coupon) * 100) / 100}</b>. העלות נמשכת מהמוצר.</div>
+                    <div className="wide cmp-sub">מחיר באתר: ₪{before} · הנחת קופון: ₪{coupon} · מחיר מכירה: <b>₪{Math.round((before - coupon) * 100) / 100}</b>. העלות נמשכת מהמוצר.</div>
                     <div className="wide">
                       <button type="button" className="btn-add" onClick={() => saveLine(l)}>שמירה</button>{' '}
                       <button type="button" className="cmp-tool" onClick={() => setLineEdit(null)}>ביטול</button>
@@ -749,11 +749,12 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
   const [picked, setPicked] = useState(null)
   const [qty, setQty] = useState(replace ? Number(replace.quantity) || 1 : 1)
   const [engText, setEngText] = useState(replace?.has_engraving ? engravingText(replace.engraving) : '')
-  const [varText, setVarText] = useState(replace ? variationText(replace.personalization) : '')
-  // בהחלפה: מחיר ליחידה לפני הנחה והנחת הקופון נמשכים מהשורה שהוחלפה (כפי שנקנה באתר), וניתנים לשינוי
+  // הווריאציה לא מועתקת: למוצר החדש יש צבע / וריאציה משלו (אפשר לכתוב ידנית)
+  const [varText, setVarText] = useState('')
+  // בהחלפה: המחיר באתר נמשך מהמוצר החדש (כפי שהוא באתר היום), והנחת הקופון מועתקת מהשורה שהוחלפה. שניהם ניתנים לשינוי
   const r2 = n => Math.round(n * 100) / 100
-  const [unitBefore, setUnitBefore] = useState(() => replace
-    ? r2(((Number(replace.price) || 0) * (Number(replace.quantity) || 0) + (Number(replace.discount_amount) || 0)) / (Number(replace.quantity) || 1)) : 0)
+  const [unitBefore, setUnitBefore] = useState(0)
+  useEffect(() => { if (replace && picked && !picked.custom) setUnitBefore(picked.price ?? 0) }, [picked?.id])
   const [discMode, setDiscMode] = useState('ils')
   const [discVal, setDiscVal] = useState(replace ? Number(replace.discount_amount) || 0 : 0)
   const nQty = Number(qty) || 0
@@ -771,7 +772,7 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
   useEffect(() => {
     if (!open || products) return
     Promise.all([
-      supabase.from('products').select('id, name, sku, wc_product_id, wc_parent_id, cost_with_vat, extra_expenses').eq('status', 'פעיל').is('wc_removed_at', null).order('name'),
+      supabase.from('products').select('id, name, sku, wc_product_id, wc_parent_id, cost_with_vat, extra_expenses, price').eq('status', 'פעיל').is('wc_removed_at', null).order('name'),
       supabase.from('product_stock').select('product_id, stock'),
       supabase.from('product_merges').select('from_product_id'),
     ]).then(([p, st, mg]) => {
@@ -779,7 +780,7 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
       const stock = new Map((st.data || []).map(x => [x.product_id, Number(x.stock) || 0]))
       const parents = new Set(p.data.map(x => x.wc_parent_id).filter(Boolean)) // מוצר ראשי שפוצל לוריאציות לא נבחר, רק הוריאציות
       const merged = new Set((mg.data || []).map(x => x.from_product_id)) // מוצר שאוחד למוצר אחר לא נבחר
-      setProducts(p.data.filter(x => !parents.has(x.wc_product_id) && !merged.has(x.id)).map(x => ({ id: x.id, name: x.name, sku: x.sku || '', stock: stock.get(x.id) ?? 0,
+      setProducts(p.data.filter(x => !parents.has(x.wc_product_id) && !merged.has(x.id)).map(x => ({ id: x.id, name: x.name, sku: x.sku || '', stock: stock.get(x.id) ?? 0, price: Number(x.price) || 0,
         // עלות ליחידה מהפורטל (כולל מע"מ והוצאות נלוות), כמו בחישוב הרווח
         cost: Number(x.cost_with_vat) > 0 ? Number(x.cost_with_vat) + (Number(x.extra_expenses) || 0) : null })))
     })
@@ -866,13 +867,13 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
             <textarea rows={2} value={varText} onChange={e => setVarText(e.target.value)} placeholder="לדוגמה: צבע: שקוף רוזגולד" />
           </label>
           <div className="free-row">
-            <label>מחיר מכירה ליחידה לפני הנחה (₪) <input type="number" min="0" step="0.01" style={{ width: 100 }} value={unitBefore} onChange={e => setUnitBefore(e.target.value)} /></label>
+            <label title="נמשך מהמחיר של המוצר החדש באתר">מחיר באתר ליחידה (₪) <input type="number" min="0" step="0.01" style={{ width: 100 }} value={unitBefore} onChange={e => setUnitBefore(e.target.value)} /></label>
             <label>הנחת קופון <input type="number" min="0" step="0.01" style={{ width: 90 }} value={discVal} onChange={e => setDiscVal(e.target.value)} />
               <select value={discMode} onChange={e => { setDiscMode(e.target.value); setDiscVal(0) }}><option value="ils">₪</option><option value="pct">%</option></select>
             </label>
           </div>
           <div className="cmp-sub">
-            מכירה: <b>₪{lineSale}</b> (לפני הנחה ₪{lineBefore}, הנחה ₪{coupon})
+            מחיר מכירה: <b>₪{lineSale}</b> (מחיר באתר ₪{lineBefore}, הנחת קופון ₪{coupon})
             {' · '}עלות מהפורטל: {picked?.custom ? '₪0 (טקסט חופשי)' : !picked ? 'בחר מוצר' : lineCostNew === null ? 'לא הוזנה עלות למוצר' : `₪${lineCostNew}`}
             {lineCostNew !== null && picked && !picked.custom && <> · רווח לפני עמלה: <b className={lineSale - lineCostNew >= 0 ? 'pos' : 'neg'}>₪{r2(lineSale - lineCostNew)}</b></>}
           </div>
@@ -890,7 +891,7 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
         <button type="button" className="cmp-tool" onClick={cancel}>ביטול</button>
       </div>
       <div className="cmp-sub">
-        {replace ? 'המוצר הקודם מסומן "לא לספק" (לא יורד מהמלאי ואין לו עלות), והחדש נוסף במקומו. הכמות, החריטה, הווריאציה, המחיר וההנחה נמשכים מהמוצר הקודם וניתנים לשינוי. העלות נמשכת מהמוצר החדש בפורטל.' : <>המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא מוחזק במלאי יחד עם ההזמנה (יורד מהמלאי מיד).</>}
+        {replace ? 'המוצר הקודם מסומן "לא לספק" (לא יורד מהמלאי ואין לו עלות), והחדש נוסף במקומו. המחיר באתר והעלות נמשכים מהמוצר החדש. הכמות, הנחת הקופון והחריטה מועתקים מהמוצר הקודם. הכול ניתן לשינוי.' : <>המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא מוחזק במלאי יחד עם ההזמנה (יורד מהמלאי מיד).</>}
       </div>
       {err && <div className="err-inline">{err}</div>}
     </div>
