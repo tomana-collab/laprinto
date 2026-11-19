@@ -136,7 +136,7 @@ export default function Settings() {
         <div className="settings-section">
           <h3>עלות משלוח</h3>
           <div className="settings-readonly">
-            כמה עולה לך משלוח של הזמנה אחת (₪). הסכום יורד מהרווח הנטו של כל הזמנה שנשלחת ללקוח, כולל משלוח חינם. באיסוף עצמי לא יורד כלום.
+            כמה עולה לך משלוח של הזמנה אחת (₪). הסכום יורד מהרווח (כולל מע"מ) של כל הזמנה שנשלחת ללקוח, כולל משלוח חינם. באיסוף עצמי לא יורד כלום.
           </div>
           <form onSubmit={saveShipCost}>
             <div className="field">
