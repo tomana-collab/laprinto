@@ -39,10 +39,19 @@ export function lineCost(line) {
 //   מכירה בפועל      = סכום השורות כפי ששולם (כבר אחרי קופון)
 //   רווח נטו         = מכירה בפועל - עלות (כולל מע"מ והוצאות נלוות) - עמלת סליקה על הסכום ששולם
 // cost/profit = null אם לפחות מוצר אחד לא מקושר או שלא הוזנה לו עלות (כדי לא להציג רווח מטעה).
-export function calcOrder(order) {
-  const lines = order.lines || [order]
-  const sale = r2(lines.reduce((a, l) => a + (Number(l.total_amount) || 0), 0))
-  const discount = r2(lines.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0))
+// שורה שהוחלפה במוצר אחר (מסומנת "לא לספק" ויש שורה עם replaces_line_id אליה): המכירה וההנחה עברו לשורה המחליפה
+export function replacedLineIds(lines) {
+  const ids = new Set((lines || []).map(l => l.replaces_line_id).filter(Boolean))
+  return new Set((lines || []).filter(l => l.not_supplied && ids.has(l.id)).map(l => l.id))
+}
+// replaced = מזהי שורות שהוחלפו (כשמחשבים שורה בודדת מתוך הזמנה). ברירת מחדל: מחושב מהשורות עצמן
+export function calcOrder(order, replaced) {
+  const all = order.lines || [order]
+  const skip = replaced || replacedLineIds(all)
+  const sold = all.filter(l => !skip.has(l.id))
+  const lines = all
+  const sale = r2(sold.reduce((a, l) => a + (Number(l.total_amount) || 0), 0))
+  const discount = r2(sold.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0))
   const fee = r2(sale * CLEARING_RATE * (1 + VAT_RATE))
   const costs = lines.map(lineCost)
   const missing = lines.filter((_, i) => costs[i] === null).map(l => l.products?.name || l.product_name || '?')

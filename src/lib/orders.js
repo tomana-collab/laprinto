@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { replacedLineIds } from './pricing'
 // פירוק טקסט פרטי שורה ("שם: ערך" בשורות) לחריטה ולשאר הבחירות (צבע / וריאציה...).
 // הזמנות ישנות נשמרו מעורבות ("צבע: שקוף\nהתאמה אישית: טקסט"), חדשות כבר מופרדות מהסנכרון.
 const ENTRY = /(?:^|\n)([^\n:]{1,60}):[ \t]*([\s\S]*?)(?=\n[^\n:]{1,40}:[ \t]|$)/g
@@ -37,8 +38,10 @@ export function groupOrders(rows) {
     g.sku = g.lines.map(l => l.sku).filter(Boolean).join(' | ')
     // כמות = רק מוצרים שיסופקו (שורה שסומנה "לא לספק" לא נספרת)
     g.quantity = g.lines.filter(l => !l.not_supplied).reduce((a, l) => a + (Number(l.quantity) || 0), 0)
-    g.total_amount = g.lines.reduce((a, l) => a + (Number(l.total_amount) || 0), 0)
-    g.discount_amount = g.lines.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0)
+    // מכירה והנחה: בלי שורה שהוחלפה (הסכום עבר לשורה המחליפה)
+    const skip = replacedLineIds(g.lines)
+    g.total_amount = g.lines.filter(l => !skip.has(l.id)).reduce((a, l) => a + (Number(l.total_amount) || 0), 0)
+    g.discount_amount = g.lines.filter(l => !skip.has(l.id)).reduce((a, l) => a + (Number(l.discount_amount) || 0), 0)
     g.has_engraving = g.lines.some(l => l.has_engraving && !l.not_supplied)
     g.engraving = g.lines
       .filter(l => l.has_engraving)
