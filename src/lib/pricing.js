@@ -27,6 +27,8 @@ export function calcProduct({ cost, supplier_discount_percent, extra_expenses, p
 // שורה שסומנה "לא לספק" (למשל מוצר שהוחלף) לא יוצאת מהמלאי, ולכן אין לה עלות.
 export function lineCost(line) {
   if (line.not_supplied) return 0
+  // שורה שנוספה ידנית בטקסט חופשי ("אחר"), בלי מוצר מקושר: אין לה עלות
+  if (line.manual_line && !line.product_id) return 0
   const p = line.products
   if (!p || !(Number(p.cost_with_vat) > 0)) return null
   return r2((Number(p.cost_with_vat) + (Number(p.extra_expenses) || 0)) * (Number(line.quantity) || 0))

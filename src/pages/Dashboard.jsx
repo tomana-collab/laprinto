@@ -36,7 +36,7 @@ export default function Dashboard() {
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
         supabase.from('stock_receipts').select('doc_date, created_at, stock_receipt_items(quantity, unit_cost, discount_percent)'),
-        supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, not_supplied, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
+        supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, not_supplied, manual_line, product_id, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),

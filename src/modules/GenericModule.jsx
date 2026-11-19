@@ -767,12 +767,15 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
 
   async function add() {
     if (!picked) return
+    const custom = picked.custom
+    if (custom && !picked.name.trim()) { setErr('כתוב מה להוסיף להזמנה'); return }
     const n = Number(qty)
     if (!(n > 0)) { setErr('כמות חייבת להיות גדולה מ-0'); return }
     setBusy(true); setErr('')
     const t = (order.lines || [order]).find(l => !l.manual_line) || first
     const { error } = await supabase.from('orders').insert({
-      product_id: picked.id, product_name: picked.name, sku: picked.sku, quantity: n, price: 0, discount_amount: 0, manual_line: true,
+      // "אחר": טקסט חופשי, בלי מוצר מקושר. לא נוגע במלאי ואין לו עלות
+      product_id: custom ? null : picked.id, product_name: picked.name.trim(), sku: custom ? '' : picked.sku, quantity: n, price: 0, discount_amount: 0, manual_line: true,
       created_by: user?.email || '',
       // פרטי ההזמנה והסטטוס מועתקים מהשורה הקיימת, כדי שהשורה תתנהג כחלק מההזמנה
       wc_order_id: t.wc_order_id, wc_line_item_id: null, order_number: t.order_number, order_date: t.order_date, wc_status: t.wc_status,
@@ -800,7 +803,12 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
   return (
     <div className="free-add">
       <b>{replace ? `החלפת "${replace.products?.name || replace.product_name}" במוצר אחר` : 'הוספת מוצר ללא חיוב'}</b>
-      {picked ? (
+      {picked?.custom ? (
+        <label className="free-field">אחר: מה להוסיף להזמנה (טקסט חופשי)
+          <input autoFocus value={picked.name} placeholder="לדוגמה: כרטיס ברכה, אריזת מתנה" onChange={e => setPicked({ ...picked, name: e.target.value })} />
+          <button type="button" className="link-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setPicked(null)}>חזרה לבחירה מהרשימה</button>
+        </label>
+      ) : picked ? (
         <div className="free-picked">
           <span>{picked.name}{picked.sku ? ` · ${picked.sku}` : ''} <span className="cmp-sub">(מלאי כעת: {picked.stock})</span></span>
           <button type="button" className="link-btn" onClick={() => setPicked(null)}>החלף</button>
@@ -815,6 +823,9 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
             </button>
           ))}
           {needle && products && matches.length === 0 && <div className="cmp-sub">לא נמצא מוצר</div>}
+          <button type="button" className="free-option" onClick={() => setPicked({ custom: true, name: q.trim() })}>
+            ✍️ אחר: לכתוב בטקסט חופשי <span className="cmp-sub">לא מהרשימה, בלי מלאי ובלי עלות</span>
+          </button>
         </>
       )}
       {replace && (

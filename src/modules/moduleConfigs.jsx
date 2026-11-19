@@ -15,6 +15,8 @@ const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / �
 // הזמנה עם כמה מוצרים: בטבלה מוצגת שורה אחת בלבד (המוצר הראשון + "+N"), כדי שהשורות לא יתארכו.
 // ריחוף מציג את כל המוצרים, ולחיצה על השורה פותחת את ההזמנה המלאה (שם כל הפריטים מופיעים בטבלה).
 const lineName = l => l.products?.name || l.product_name || '—'
+// כמה מוצרים בהזמנה יסופקו בפועל (בלי שורות שסומנו "לא לספק")
+const liveCount = row => row.lines.filter(l => !l.not_supplied).length
 const lineLabel = l => (Number(l.quantity) > 1 ? `${lineName(l)} ×${l.quantity}` : lineName(l))
 // מלאי קיים לשורת הזמנה: קודם המוצר המקושר בשורה (כולל וריאציה) כשהמק"ט שלו זהה למק"ט בשורה, ורק אחרת לפי מק"ט.
 // כך וריאציה והמוצר הראשי שלה, שחולקים מק"ט, לא מתערבבים.
@@ -359,16 +361,19 @@ export const MODULES = {
         render: (row, nav, extra, ui) => row.lines.length === 1
           ? <OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} pen={row.has_engraving} />
           : <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
-              {row.has_engraving && '✒️ '}{row.lines.length} מוצרים {ui?.expanded ? '▴' : '▾'}
+              {row.has_engraving && '✒️ '}{liveCount(row) === 1 ? '1 מוצר' : `${liveCount(row)} מוצרים`} {ui?.expanded ? '▴' : '▾'}
             </button>,
       },
       {
         // מספר המוצרים (שורות פריט) בהזמנה; בסוגריים סך היחידות אם יש כמות גדולה מ-1
         key: 'items_count',
         label: 'כמות מוצרים',
+        // מוצר שסומן "לא לספק" לא נספר
+        sortValue: row => liveCount(row),
         render: row => {
-          const units = row.lines.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
-          return row.lines.length + (units > row.lines.length ? ` (${units} יח')` : '')
+          const live = row.lines.filter(l => !l.not_supplied)
+          const units = live.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
+          return live.length + (units > live.length ? ` (${units} יח')` : '')
         },
       },
       {

@@ -35,7 +35,8 @@ export function groupOrders(rows) {
     // שדות מאוחדים — כדי שחיפוש וסינון כלליים יעבדו על כל ההזמנה
     g.product_name = g.lines.map(nameOf).join(' | ')
     g.sku = g.lines.map(l => l.sku).filter(Boolean).join(' | ')
-    g.quantity = g.lines.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
+    // כמות = רק מוצרים שיסופקו (שורה שסומנה "לא לספק" לא נספרת)
+    g.quantity = g.lines.filter(l => !l.not_supplied).reduce((a, l) => a + (Number(l.quantity) || 0), 0)
     g.total_amount = g.lines.reduce((a, l) => a + (Number(l.total_amount) || 0), 0)
     g.discount_amount = g.lines.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0)
     g.has_engraving = g.lines.some(l => l.has_engraving && !l.not_supplied)
