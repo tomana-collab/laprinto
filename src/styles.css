@@ -498,6 +498,7 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .free-field{ display:flex; flex-direction:column; gap:4px; font-size:13px; }
 .free-field textarea{ width:100%; }
 .free-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.ns-val{ text-decoration:line-through; color:var(--ink-soft); cursor:help; }
 .ns-name{ text-decoration:line-through; color:var(--coral) !important; }
 
 /* חיווי מסך חי */

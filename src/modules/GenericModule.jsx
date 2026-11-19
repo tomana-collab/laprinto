@@ -658,6 +658,11 @@ function OrderLines({ order, onChanged }) {
           {lines.map(l => {
             const name = l.products?.name || l.product_name || '—'
             const c = calcOrder({ lines: [l] }, replaced)
+            // מוצר שהוחלף / לא מסופק: הנתונים המקוריים נשארים לתצוגה (באפור וקו חוצה), אבל לא נספרים במכירה, בעלות ובמלאי
+            const o = l.not_supplied ? calcOrder({ lines: [{ ...l, not_supplied: false }] }, new Set()) : c
+            const oProfit = o.cost === null ? null : Math.round((o.sale - o.cost) * 100) / 100
+            const tip = replaced.has(l.id) ? 'הנתונים לפני ההחלפה. לא נספרים: המכירה עברה למוצר המחליף' : 'לא מסופק: לא נספר בעלות ובמלאי'
+            const old = (counted, orig, text) => counted === orig ? null : <span className="ns-val" title={tip}>{text}</span>
             const href = wpProductEditUrl(l.products?.wc_product_id)
             return (
               <Fragment key={l.id}>
@@ -686,9 +691,11 @@ function OrderLines({ order, onChanged }) {
                 <td>{l.quantity}</td>
                 <td>₪{Math.round(storedBefore(l) / (Number(l.quantity) || 1) * 100) / 100}</td>
                 <td>{Number(l.discount_amount) > 0 ? <span className="neg">−₪{l.discount_amount}</span> : '—'}</td>
-                <td>₪{c.sale}</td>
-                <td>{c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`}</td>
-                <td>{c.cost === null ? '—' : <span className={c.sale - c.cost >= 0 ? 'pos' : 'neg'}>₪{Math.round((c.sale - c.cost) * 100) / 100}</span>}</td>
+                <td>{old(c.sale, o.sale, `₪${o.sale}`) || `₪${c.sale}`}</td>
+                <td>{old(c.cost, o.cost, o.cost === null ? '—' : `₪${o.cost}`) || (c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`)}</td>
+                <td>{l.not_supplied
+                  ? <span className="ns-val" title={tip}>{oProfit === null ? '—' : `₪${oProfit}`}</span>
+                  : c.cost === null ? '—' : <span className={c.sale - c.cost >= 0 ? 'pos' : 'neg'}>₪{Math.round((c.sale - c.cost) * 100) / 100}</span>}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {!l.not_supplied && <ReadyButton line={l} onChanged={onChanged} />}
                   <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
