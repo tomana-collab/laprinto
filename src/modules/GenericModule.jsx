@@ -675,6 +675,7 @@ function OrderLines({ order, onChanged }) {
                     </div>
                   ) : (
                     <>
+                      {variationText(l.personalization) && <div style={{ whiteSpace: 'pre-wrap' }}>{variationText(l.personalization)}</div>}
                       {l.has_engraving && <span>✒️ <b>חריטה אישית:</b> {engravingText(l.engraving)} </span>}
                       <button type="button" className="link-btn" onClick={() => setEngEdit({ id: l.id, text: engravingText(l.engraving) })}>{l.has_engraving ? 'ערוך חריטה' : '✒️ הוסף חריטה'}</button>
                       {!l.has_engraving && engSource(l) && <> · <button type="button" className="link-btn" title="מעתיק את החריטה מהמוצר האחר בהזמנה" onClick={() => saveEngraving(l, engravingText(engSource(l).engraving))}>העתק חריטה מ-{engSource(l).products?.name || engSource(l).product_name}</button></>}
@@ -946,7 +947,8 @@ function OrderDetails({ order }) {
         {item('אמצעי תשלום', order.payment_method)}
         {item('סה"כ ההזמנה (כולל משלוח)', order.order_total != null ? `₪${order.order_total}` : null)}
         {order.coupons && item('קופון', order.coupons)}
-        <div className="field full" style={{ margin: 0 }}>{item('חריטה אישית', engravingText(order.engraving))}{variationText(order.personalization) && item('בחירת וריאציה / פרטים נוספים', variationText(order.personalization))}</div>
+        {/* החריטה והווריאציה מוצגות לכל מוצר בטבלת המוצרים שמתחת, כמו באתר. כאן רק יש / אין */}
+        {item('חריטה אישית', order.has_engraving ? '✒️ יש (פירוט לכל מוצר בטבלה למטה)' : 'אין')}
         <div className="field full" style={{ margin: 0 }}>{item('הערת הלקוח', order.customer_note)}</div>
       </div>
     </div>
