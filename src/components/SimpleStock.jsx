@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useLiveReload } from '../lib/useLive'
 import { useNav } from '../contexts/NavContext'
+import { inCategory } from '../lib/category'
 
 // חלון "במלאי" — חישוב פשוט לפי מק"ט, בלי תלות בשום נוסחה אחרת:
 //   נקלט  = סכום הכמויות בתעודות קליטה שסופקו, לפי המק"ט של המוצר בתעודה
@@ -12,9 +13,9 @@ const norm = s => String(s || '').trim().toUpperCase()
 
 export async function loadSimpleStock() {
   const [ri, or, op] = await Promise.all([
-    supabase.from('stock_receipt_items').select('quantity, product_id, products(name, sku), stock_receipts(status)'),
+    supabase.from('stock_receipt_items').select('quantity, product_id, products(name, sku, category, subcategory), stock_receipts(status)'),
     supabase.from('orders').select('sku, product_id, quantity, wc_status, not_supplied'),
-    supabase.from('products').select('id, name, sku, opening_stock').neq('opening_stock', 0),
+    supabase.from('products').select('id, name, sku, category, subcategory, opening_stock').neq('opening_stock', 0),
   ])
   if (ri.error) throw ri.error
   if (or.error) throw or.error
@@ -24,14 +25,14 @@ export async function loadSimpleStock() {
     if ((i.stock_receipts?.status || 'סופק') !== 'סופק') continue
     const k = norm(i.products?.sku)
     if (!k) continue
-    const e = map.get(k) || { sku: i.products.sku, name: i.products.name, product_id: i.product_id, received: 0, sold: 0, adjust: 0 }
+    const e = map.get(k) || { sku: i.products.sku, name: i.products.name, category: i.products.category, subcategory: i.products.subcategory, product_id: i.product_id, received: 0, sold: 0, adjust: 0 }
     e.received += Number(i.quantity) || 0
     map.set(k, e)
   }
   // תיקון מספירת מלאי — גם למוצר שאף פעם לא נקלט בתעודה (למשל סחורה שהייתה לפני התעודות)
   for (const p of op.data || []) {
     const k = norm(p.sku) || 'ID:' + p.id
-    const e = map.get(k) || { sku: p.sku || '', name: p.name, product_id: p.id, received: 0, sold: 0, adjust: 0 }
+    const e = map.get(k) || { sku: p.sku || '', name: p.name, category: p.category, subcategory: p.subcategory, product_id: p.id, received: 0, sold: 0, adjust: 0 }
     e.adjust += Number(p.opening_stock) || 0
     map.set(k, e)
   }
@@ -45,7 +46,7 @@ export async function loadSimpleStock() {
   return [...map.values()].map(e => ({ ...e, stock: e.received - e.sold + e.adjust }))
 }
 
-export default function SimpleStock({ q = '', onCount }) {
+export default function SimpleStock({ q = '', category = '', onCount }) {
   const { openRecord } = useNav()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
@@ -59,9 +60,10 @@ export default function SimpleStock({ q = '', onCount }) {
     const t = q.trim().toLowerCase()
     return (rows || [])
       .filter(r => r.stock > 0)
+      .filter(r => inCategory(r, category))
       .filter(r => !t || r.name.toLowerCase().includes(t) || r.sku.toLowerCase().includes(t))
       .sort((a, b) => a.name.localeCompare(b.name, 'he'))
-  }, [rows, q])
+  }, [rows, q, category])
   useEffect(() => { onCount?.(shown.length, shown.reduce((a, r) => a + r.stock, 0)) }, [shown])
 
   const hasAdjust = (rows || []).some(r => r.adjust)
