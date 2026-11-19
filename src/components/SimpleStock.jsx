@@ -76,17 +76,17 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
       </div>
       <div className="table-wrap">
         <table className="data-table">
-          <thead><tr><th>מוצר</th><th>מק״ט</th><th>נקלט בתעודות</th><th>נמכר</th>{hasAdjust && <th title="ההפרש שנשמר בספירת מלאי">תיקון ספירה</th>}<th>במלאי</th></tr></thead>
+          <thead><tr><th>מוצר</th><th>במלאי</th><th>נמכר</th><th>נקלט בתעודות</th>{hasAdjust && <th title="ההפרש שנשמר בספירת מלאי">תיקון ספירה</th>}<th>מק״ט</th></tr></thead>
           <tbody>
             {shown.length === 0 && <tr><td className="empty-col" colSpan={hasAdjust ? 6 : 5}>אין מוצרים במלאי</td></tr>}
             {shown.map(r => (
               <tr key={r.sku} style={{ cursor: 'default' }}>
                 <td><a href="#" onClick={e => { e.preventDefault(); openRecord('products', r.product_id) }}>{r.name}</a></td>
-                <td>{r.sku}</td>
-                <td>{r.received}</td>
-                <td>{r.sold}</td>
-                {hasAdjust && <td>{r.adjust ? (r.adjust > 0 ? `+${r.adjust}` : r.adjust) : '—'}</td>}
                 <td><b>{r.stock}</b></td>
+                <td>{r.sold}</td>
+                <td>{r.received}</td>
+                {hasAdjust && <td>{r.adjust ? (r.adjust > 0 ? `+${r.adjust}` : r.adjust) : '—'}</td>}
+                <td>{r.sku}</td>
               </tr>
             ))}
           </tbody>

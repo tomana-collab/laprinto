@@ -218,14 +218,14 @@ export default function Inventory() {
           <thead>
             <tr>
               <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
+              <SortTh k="stock" sort={sort} onSort={onSort}>מלאי נוכחי</SortTh>
+              <SortTh k="sold_total" sort={sort} onSort={onSort}>נמכר (סה״כ הזמנות)</SortTh>
+              <SortTh k="received" sort={sort} onSort={onSort}>נקלט</SortTh>
               <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
               <SortTh k="supplier" sort={sort} onSort={onSort}>ספק</SortTh>
-              <SortTh k="received" sort={sort} onSort={onSort}>נקלט</SortTh>
-              <SortTh k="sold_total" sort={sort} onSort={onSort}>נמכר (סה״כ הזמנות)</SortTh>
               <SortTh k="sold" sort={sort} onSort={onSort}>ירד מהמלאי</SortTh>
               <SortTh k="incoming" sort={sort} onSort={onSort}>בהמתנה לאספקה</SortTh>
               <th title="יחידות שמורות להזמנות פתוחות (עוד בלי סטטוס טיפול). הן כבר יורדות מהמלאי הנוכחי">שמור להזמנות פתוחות</th>
-              <SortTh k="stock" sort={sort} onSort={onSort}>מלאי נוכחי</SortTh>
               <th title="לפי מה ששולם בתעודות הקליטה, לפני מע״מ ואחרי הנחת ספק">עלות ליחידה</th>
               <th title="עלות כל היחידות שעל המדף (כולל השמורות להזמנות)">שווי בעלות</th>
               <SortTh k="status" sort={sort} onSort={onSort}>מצב</SortTh>
@@ -243,14 +243,14 @@ export default function Inventory() {
               return (
                 <tr key={r.id} onClick={countMode ? undefined : () => setCounting(r)} style={countMode ? { cursor: 'default' } : undefined}>
                   <td><a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); openRecord('products', r.id) }}>{r.name}</a></td>
+                  <td><b className={s.cls}>{num(r.stock)}</b></td>
+                  <td><b>{num(r.sold_total)}</b></td>
+                  <td>{num(r.received)}</td>
                   <td>{r.sku || '—'}</td>
                   <td>{r.suppliers?.name || '—'}</td>
-                  <td>{num(r.received)}</td>
-                  <td><b>{num(r.sold_total)}</b></td>
                   <td>{num(r.sold)}</td>
                   <td>{r.incoming ? num(r.incoming) : '—'}</td>
                   <td>{r.reserved ? num(r.reserved) : '—'}</td>
-                  <td><b className={s.cls}>{num(r.stock)}</b></td>
                   <td>{r.physical > 0 && r.shelf_unit_cost ? `₪${num(Math.round(r.shelf_unit_cost * 100) / 100)}` : '—'}</td>
                   <td>{r.physical > 0 ? `₪${num(Math.round(r.shelf_cost))}` : '—'}</td>
                   <td><span className={s.cls}>{s.text}</span></td>
