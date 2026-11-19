@@ -99,7 +99,7 @@ export default function Inventory() {
   const FILTERS = [
     { key: 'all', label: 'הכל', test: () => true },
     { key: 'instock', label: 'במלאי', test: r => r.stock > 0 },
-    { key: 'unsold', label: 'במלאי ללא מכירה', test: r => r.stock > 0 && r.sold_total === 0 },
+    { key: 'unsold', label: 'במלאי, אף פעם לא נמכר', test: r => r.stock > 0 && r.sold_total === 0 },
     { key: 'sold', label: 'נמכר', test: r => r.sold_total > 0 },
     { key: 'order', label: 'חסר — להזמין', test: r => status(r).key === 'order' },
     { key: 'incoming', label: 'בהמתנה לאספקה', test: r => status(r).key === 'incoming' },
