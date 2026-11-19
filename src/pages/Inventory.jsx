@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
 import { useSort, sortRows, SortTh } from '../lib/sort'
-import { SupplierStock } from '../components/SupplierStock'
 import { useLiveReload } from '../lib/useLive'
 import ExportButtons from '../components/ExportButtons'
 import { buildLots, shelfCost } from '../lib/stockValue'
@@ -42,7 +41,7 @@ export default function Inventory() {
   async function load() {
     setError('')
     const [p, s, ri, mg] = await Promise.all([
-      supabase.from('products').select('id, name, sku, category, cost_after_discount, price, opening_stock, stock_min, wc_product_id, wc_parent_id, supplier_stock_status, supplier_stock_checked_at, suppliers(name)').order('name'),
+      supabase.from('products').select('id, name, sku, category, cost_after_discount, price, opening_stock, stock_min, wc_product_id, wc_parent_id, suppliers(name)').order('name'),
       supabase.from('product_stock').select('*'),
       supabase.from('stock_receipt_items').select('product_id, quantity, unit_cost, discount_percent, stock_receipts(status, doc_date, created_at)'),
       supabase.from('product_merges').select('from_product_id'), // מוצרים שאוחדו למוצר אחר: לא מוצגים, הכמויות שלהם נספרות במוצר שאליו אוחדו
@@ -215,7 +214,6 @@ export default function Inventory() {
               <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
               <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
               <SortTh k="supplier" sort={sort} onSort={onSort}>ספק</SortTh>
-              <th>מלאי אצל הספק</th>
               <SortTh k="received" sort={sort} onSort={onSort}>נקלט</SortTh>
               <SortTh k="sold_total" sort={sort} onSort={onSort}>נמכר (סה״כ הזמנות)</SortTh>
               <SortTh k="sold" sort={sort} onSort={onSort}>ירד מהמלאי</SortTh>
@@ -229,7 +227,7 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={14}>אין מוצרים</td></tr>}
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={13}>אין מוצרים</td></tr>}
             {sortRows(shown, {
               name: r => r.name, sku: r => r.sku || '', supplier: r => r.suppliers?.name || '',
               received: r => r.received, sold_total: r => r.sold_total,
@@ -241,7 +239,6 @@ export default function Inventory() {
                   <td><a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); openRecord('products', r.id) }}>{r.name}</a></td>
                   <td>{r.sku || '—'}</td>
                   <td>{r.suppliers?.name || '—'}</td>
-                  <td><SupplierStock status={r.supplier_stock_status} checkedAt={r.supplier_stock_checked_at} /></td>
                   <td>{num(r.received)}</td>
                   <td><b>{num(r.sold_total)}</b></td>
                   <td>{num(r.sold)}</td>
