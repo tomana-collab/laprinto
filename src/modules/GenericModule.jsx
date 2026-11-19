@@ -692,7 +692,7 @@ function OrderLines({ order, onChanged }) {
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {!l.not_supplied && <ReadyButton line={l} onChanged={onChanged} />}
                   <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
-                  {order.wc_order_id && !l.not_supplied && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="מחליף את המוצר באחר: המחיר באתר והעלות מהמוצר החדש, הקופון והחריטה מהמוצר הזה (אפשר לשנות). המוצר הזה מסומן 'הוחלף'" onClick={() => setReplacing(l)}>🔁 החלף מוצר</button>}
+                  {order.wc_order_id && !l.not_supplied && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="מחליף את המוצר באחר: המחיר ששולם, הקופון והחריטה עוברים מהמוצר הזה, והעלות מהמוצר החדש. המוצר הזה מסומן 'הוחלף'" onClick={() => setReplacing(l)}>🔁 החלף מוצר</button>}
                   {!replaced.has(l.id) && (storedBefore(l) > 0 || l.replaces_line_id) && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="עדכון הנחת קופון לשורה, בש״ח או באחוזים. המחיר והעלות נמשכים לבד" onClick={() => setLineEdit(lineEdit?.id === l.id ? null : { id: l.id, mode: 'ils', value: Number(l.discount_amount) || 0,
                     ...(l.replaces_line_id ? { unitBefore: Math.round(storedBefore(l) / (Number(l.quantity) || 1) * 100) / 100 } : {}) })}>{l.replaces_line_id ? '✏️ מחיר והנחה' : '✏️ הנחת קופון'}</button>}
                   {l.manual_line && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>🗑 הסר</button>}
@@ -751,10 +751,11 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
   const [engText, setEngText] = useState(replace?.has_engraving ? engravingText(replace.engraving) : '')
   // הווריאציה לא מועתקת: למוצר החדש יש צבע / וריאציה משלו (אפשר לכתוב ידנית)
   const [varText, setVarText] = useState('')
-  // בהחלפה: המחיר באתר נמשך מהמוצר החדש (כפי שהוא באתר היום), והנחת הקופון מועתקת מהשורה שהוחלפה. שניהם ניתנים לשינוי
+  // בהחלפה: הכסף (מחיר לפני קופון והנחת הקופון) מועתק ממה שהלקוח שילם בפועל באתר על המוצר שהוחלף,
+  // כדי שסכומי ההזמנה יישארו זהים לאתר. העלות נמשכת מהמוצר החדש
   const r2 = n => Math.round(n * 100) / 100
-  const [unitBefore, setUnitBefore] = useState(0)
-  useEffect(() => { if (replace && picked && !picked.custom) setUnitBefore(picked.price ?? 0) }, [picked?.id])
+  const [unitBefore, setUnitBefore] = useState(() => replace
+    ? r2(((Number(replace.price) || 0) * (Number(replace.quantity) || 0) + (Number(replace.discount_amount) || 0)) / (Number(replace.quantity) || 1)) : 0)
   const [discMode, setDiscMode] = useState('ils')
   const [discVal, setDiscVal] = useState(replace ? Number(replace.discount_amount) || 0 : 0)
   const nQty = Number(qty) || 0
@@ -867,13 +868,13 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
             <textarea rows={2} value={varText} onChange={e => setVarText(e.target.value)} placeholder="לדוגמה: צבע: שקוף רוזגולד" />
           </label>
           <div className="free-row">
-            <label title="נמשך מהמחיר של המוצר החדש באתר">מחיר באתר ליחידה (₪) <input type="number" min="0" step="0.01" style={{ width: 100 }} value={unitBefore} onChange={e => setUnitBefore(e.target.value)} /></label>
+            <label title="כפי ששולם באתר על המוצר שהוחלף, לפני קופון">מחיר באתר ליחידה, כפי ששולם (₪) <input type="number" min="0" step="0.01" style={{ width: 100 }} value={unitBefore} onChange={e => setUnitBefore(e.target.value)} /></label>
             <label>הנחת קופון <input type="number" min="0" step="0.01" style={{ width: 90 }} value={discVal} onChange={e => setDiscVal(e.target.value)} />
               <select value={discMode} onChange={e => { setDiscMode(e.target.value); setDiscVal(0) }}><option value="ils">₪</option><option value="pct">%</option></select>
             </label>
           </div>
           <div className="cmp-sub">
-            מחיר מכירה: <b>₪{lineSale}</b> (מחיר באתר ₪{lineBefore}, הנחת קופון ₪{coupon})
+            מחיר מכירה: <b>₪{lineSale}</b> (מחיר באתר ₪{lineBefore}, הנחת קופון ₪{coupon}){picked && !picked.custom && Number(picked.price) !== Number(unitBefore) && <> · המחיר של המוצר החדש באתר היום: ₪{picked.price} (לידיעה בלבד)</>}
             {' · '}עלות מהפורטל: {picked?.custom ? '₪0 (טקסט חופשי)' : !picked ? 'בחר מוצר' : lineCostNew === null ? 'לא הוזנה עלות למוצר' : `₪${lineCostNew}`}
             {lineCostNew !== null && picked && !picked.custom && <> · רווח לפני עמלה: <b className={lineSale - lineCostNew >= 0 ? 'pos' : 'neg'}>₪{r2(lineSale - lineCostNew)}</b></>}
           </div>
@@ -891,7 +892,7 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
         <button type="button" className="cmp-tool" onClick={cancel}>ביטול</button>
       </div>
       <div className="cmp-sub">
-        {replace ? 'המוצר הקודם מסומן "לא לספק" (לא יורד מהמלאי ואין לו עלות), והחדש נוסף במקומו. המחיר באתר והעלות נמשכים מהמוצר החדש. הכמות, הנחת הקופון והחריטה מועתקים מהמוצר הקודם. הכול ניתן לשינוי.' : <>המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא מוחזק במלאי יחד עם ההזמנה (יורד מהמלאי מיד).</>}
+        {replace ? 'המוצר הקודם מסומן "לא לספק" (לא יורד מהמלאי ואין לו עלות), והחדש נוסף במקומו. המחיר והקופון מועתקים ממה שהלקוח שילם בפועל על המוצר הקודם, כדי שהסכומים יישארו כמו באתר. העלות נמשכת מהמוצר החדש. הכמות והחריטה מועתקים מהמוצר הקודם.' : <>המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא מוחזק במלאי יחד עם ההזמנה (יורד מהמלאי מיד).</>}
       </div>
       {err && <div className="err-inline">{err}</div>}
     </div>
@@ -901,6 +902,10 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
 // חישוב הרווח שלב אחר שלב, כולל הנחת הקופון שהלקוח קיבל
 function OrderBreakdown({ order }) {
   const c = calcOrder(order)
+  // בדיקה שהסכומים זהים לאתר: מכירה (סכום המוצרים) + משלוח = סה"כ ההזמנה באתר
+  const siteTotal = order.wc_order_id && order.order_total != null ? Number(order.order_total) : null
+  const crmTotal = Math.round((c.sale + (Number(order.shipping_total) || 0)) * 100) / 100
+  const mismatch = siteTotal !== null && Math.abs(siteTotal - crmTotal) > 0.05
   const row = (label, value, cls, bold) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontWeight: bold ? 700 : 400 }}>
       <span>{label}</span><b className={cls}>{value}</b>
@@ -908,6 +913,7 @@ function OrderBreakdown({ order }) {
   )
   return (
     <div className="summary-card" style={{ display: 'block', margin: '12px 0', maxWidth: 520 }}>
+      {mismatch && <div className="err-inline" style={{ marginBottom: 8 }}>⚠️ הסכומים לא תואמים לאתר: מוצרים ₪{c.sale} + משלוח ₪{Number(order.shipping_total) || 0} = ₪{crmTotal}, ובאתר שולם ₪{siteTotal}. בדוק את המחיר וההנחה בשורות.</div>}
       {row('מחיר מכירה לפני הנחה', `₪${c.before}`)}
       {c.discount > 0 && row(`הנחת קופון${order.coupons ? ` (${order.coupons})` : ''}`, `−₪${c.discount}`, 'neg')}
       {row('מכירה בפועל (מה שהלקוח שילם על המוצרים)', `₪${c.sale}`)}
