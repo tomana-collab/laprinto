@@ -298,7 +298,7 @@ export const MODULES = {
     ],
     // ב-CRM מוצגות רק הזמנות בטיפול / שהושלמו (והזמנות ידניות). ממתינות לתשלום, מבוטלות וכו' לא נמשכות ולא מוצגות
     rowFilter: r => !r.wc_status || SHOWN_ORDER_STATUSES.includes(r.wc_status),
-    bulkSyncNote: 'שים לב: הזמנות מהאתר מסונכרנות מחדש — סטטוס ישתנה חזרה לפי האתר, והזמנה שנמחקה תחזור בסנכרון הבא.',
+    bulkSyncNote: 'שים לב: סטטוס שעודכן כאן נשאר גם אחרי הסנכרון מהאתר, אבל הזמנה שנמחקה תחזור בסנכרון הבא.',
     modalWide: true,
     // מלאי קיים לכל מוצר, כדי להציג אותו ליד כל שורת הזמנה (מקושר לפי מק"ט כמו ב-view של המלאי, ואם אין — לפי המוצר)
     extraLoad: async supabase => {
@@ -321,7 +321,7 @@ export const MODULES = {
       { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true, manualOnly: true },
       { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true, manualOnly: true },
       { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES] },
-      { key: 'notes', label: 'הערות על ההזמנה (מה קורה איתה)', type: 'textarea' },
+      { key: 'notes', label: 'הערות פנימיות', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
     isOrder: true,
@@ -405,9 +405,8 @@ export const MODULES = {
           return <span className={`ready-count ${ready ? '' : 'neg'}`} title="מוצרים שסומנו מוכנים מתוך כל המוצרים בהזמנה">{ready}/{total}</span>
         },
       },
-      { key: 'notes', label: 'הערות', render: row => row.notes
-        ? <span title={row.notes} style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{row.notes}</span>
-        : '—' },
+      // הערות פנימיות: ברשימה רק יש / אין. את ההערה עצמה רואים בתוך ההזמנה
+      { key: 'notes', label: 'הערות פנימיות', sortValue: row => row.notes?.trim() ? 1 : 0, render: row => row.notes?.trim() ? '📝 יש' : '—' },
       // מכירה = הסכום ששולם בפועל, כבר אחרי הנחת קופון
       { key: 'total_amount', label: 'מכירה', render: row => `₪${calcOrder(row).sale}` },
       {
