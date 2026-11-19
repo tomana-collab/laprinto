@@ -40,7 +40,8 @@ function OrderDetail({ row, nav, extra, ui }) {
       <table className="data-table">
         <thead><tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מלאי קיים</th><th></th></tr></thead>
         <tbody>
-          {row.lines.map(l => {
+          {/* מוצרים שהוחלפו / לא לספק בסוף הרשימה */}
+          {[...row.lines].sort((x, y) => (x.not_supplied ? 1 : 0) - (y.not_supplied ? 1 : 0)).map(l => {
             const v = stockOf(extra, l)
             return (
               <tr key={l.id} style={{ cursor: 'default' }}>

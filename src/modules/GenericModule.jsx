@@ -647,15 +647,11 @@ function OrderLines({ order, onChanged }) {
     if (error) { window.alert('ההסרה נכשלה: ' + error.message); return }
     onChanged?.()
   }
-  return (
-    <>
-    <div className="table-wrap" style={{ margin: '12px 0' }}>
-      <table className="data-table">
-        <thead>
-          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th title="מחיר ליחידה באתר, לפני הנחת קופון, כולל מע״מ">מחיר באתר</th><th>הנחת קופון</th><th title="מה ששולם בפועל: מחיר באתר × כמות פחות הקופון">מחיר מכירה</th><th>עלות</th><th>רווח לפני עמלה</th><th></th></tr>
-        </thead>
-        <tbody>
-          {lines.map(l => {
+  // מוצר שהוחלף או סומן "לא לספק" עובר לטבלה נפרדת מתחת (תיעוד בלבד)
+  const active = lines.filter(l => !l.not_supplied)
+  const inactive = lines.filter(l => l.not_supplied)
+  // שורת מוצר אחת בטבלה (משמשת גם לטבלת המוצרים שהוחלפו / לא סופקו)
+  const renderLine = l => {
             const name = l.products?.name || l.product_name || '—'
             const c = calcOrder({ lines: [l] }, replaced)
             // מוצר שהוחלף / לא מסופק: הנתונים המקוריים נשארים לתצוגה (באפור וקו חוצה), אבל לא נספרים במכירה, בעלות ובמלאי
@@ -731,10 +727,34 @@ function OrderLines({ order, onChanged }) {
               })()}
               </Fragment>
             )
-          })}
+  }
+  return (
+    <>
+    <div className="table-wrap" style={{ margin: '12px 0' }}>
+      <table className="data-table">
+        <thead>
+          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th title="מחיר ליחידה באתר, לפני הנחת קופון, כולל מע״מ">מחיר באתר</th><th>הנחת קופון</th><th title="מה ששולם בפועל: מחיר באתר × כמות פחות הקופון">מחיר מכירה</th><th>עלות</th><th>רווח לפני עמלה</th><th></th></tr>
+        </thead>
+        <tbody>
+          {active.map(renderLine)}
+          {active.length === 0 && <tr><td className="empty-col" colSpan={9}>אין מוצרים לספק בהזמנה</td></tr>}
         </tbody>
       </table>
     </div>
+    {inactive.length > 0 && (
+      <>
+        <b style={{ display: 'block', marginTop: 4 }}>מוצרים שהוזמנו והוחלפו</b>
+        <div className="cmp-sub">לתיעוד בלבד: לא נספרים במלאי ובעלות. מוצר שהוחלף לא נספר גם בכסף ובהכנסות (המכירה עברה למוצר המחליף)</div>
+        <div className="table-wrap ns-table" style={{ margin: '6px 0 12px' }}>
+          <table className="data-table">
+        <thead>
+          <tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th title="מחיר ליחידה באתר, לפני הנחת קופון, כולל מע״מ">מחיר באתר</th><th>הנחת קופון</th><th title="מה ששולם בפועל: מחיר באתר × כמות פחות הקופון">מחיר מכירה</th><th>עלות</th><th>רווח לפני עמלה</th><th></th></tr>
+        </thead>
+            <tbody>{inactive.map(renderLine)}</tbody>
+          </table>
+        </div>
+      </>
+    )}
     {order.wc_order_id && (replacing
       ? <AddFreeProduct key={replacing.id} order={order} replace={replacing} onDone={() => setReplacing(null)} onChanged={onChanged} />
       : <AddFreeProduct order={order} onChanged={onChanged} />)}
