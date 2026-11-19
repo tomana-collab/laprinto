@@ -15,11 +15,14 @@ const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigit
 // physical = מה שיש פיזית במחסן לפני ההזמנות הפתוחות (stock + reserved). אם ההזמנות הפתוחות גדולות ממנו — חסר, ואז צריך להשלים מהספק.
 const shortage = r => Math.max(0, r.open_orders - Math.max(0, r.physical))   // הוזמן ואין במלאי
 const needToOrder = r => Math.max(0, shortage(r) - r.incoming)                // חסר שעדיין לא הוזמן מהספק
+const LOW_STOCK = 2 // מלאי נמוך = פחות מ-2 יחידות
 function status(r) {
   if (shortage(r) > 0 && needToOrder(r) === 0) return { key: 'incoming', text: `חסר ${num(shortage(r))} להזמנות פתוחות — הוזמן, בהמתנה לאספקה`, cls: 'pos' }
   if (shortage(r) > 0) return { key: 'order', text: `חסר ${num(needToOrder(r))} — להזמין מהספק`, cls: 'neg' }
-  if (r.stock <= 0) return { key: 'out', text: 'אזל', cls: 'neg' }
-  if (r.stock_min > 0 && r.stock <= r.stock_min) return { key: 'low', text: 'מלאי נמוך', cls: 'neg' }
+  // מוצר שאף פעם לא נקלט למלאי לא "אזל" — פשוט לא נקלט
+  if (r.stock <= 0) return r.opening > 0 || r.received > 0 ? { key: 'out', text: 'אזל', cls: 'neg' } : { key: 'none', text: 'לא נקלט', cls: '' }
+  // מלאי נמוך: פחות מ-2 יחידות (LOW_STOCK), או עד המינימום שהוגדר למוצר אם הוגדר
+  if (r.stock < LOW_STOCK || (r.stock_min > 0 && r.stock <= r.stock_min)) return { key: 'low', text: 'מלאי נמוך', cls: 'neg' }
   return { key: 'ok', text: 'במלאי', cls: 'pos' }
 }
 
@@ -103,8 +106,7 @@ export default function Inventory() {
     { key: 'sold', label: 'נמכר', test: r => r.sold_total > 0 },
     { key: 'order', label: 'חסר — להזמין', test: r => status(r).key === 'order' },
     { key: 'incoming', label: 'בהמתנה לאספקה', test: r => status(r).key === 'incoming' },
-    { key: 'out', label: 'אזל', test: r => status(r).key === 'out' },
-    { key: 'low', label: 'מלאי נמוך', test: r => status(r).key === 'low' },
+    { key: 'low', label: 'מלאי נמוך (פחות מ-2)', test: r => status(r).key === 'low' },
   ]
   // קטגוריה וחיפוש חלים על הכול, כך שגם המספרים על הכפתורים מתעדכנים
   const base = useMemo(() => (rows || []).filter(r => {
