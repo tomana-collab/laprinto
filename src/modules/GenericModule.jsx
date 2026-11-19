@@ -451,7 +451,7 @@ function OrdersSummary({ rows: allRows }) {
   const expenses = receipts ? receiptsTotalWithVat(receipts, FINANCE_START) : null
   const totalRevenue = rows.reduce((a, r) => a + (r.total_amount || 0), 0)
   const totalQuantity = rows.reduce((a, r) => a + (r.quantity || 0), 0)
-  // רווח נטו רק על שורות עם עלות ידועה (מקושרות למוצר שהוזנה לו עלות)
+  // רווח כולל מע"מ רק על שורות עם עלות ידועה (מקושרות למוצר שהוזנה לו עלות)
   const lines = rows.map(calcOrder)
   const known = lines.filter(l => l.profit !== null)
   const totalProfit = known.reduce((a, l) => a + l.profit, 0)
@@ -467,7 +467,7 @@ function OrdersSummary({ rows: allRows }) {
       <div className="summary-card"><span>הכנסות פחות הוצאות</span><b className={balance === null || balance >= 0 ? 'pos' : 'neg'}>{balance === null ? '...' : `₪${balance.toFixed(0)}`}</b></div>
       {totalDiscount > 0 && <div className="summary-card"><span>הנחות קופונים</span><b className="neg">−₪{totalDiscount.toFixed(0)}</b></div>}
       <div className="summary-card">
-        <span>רווח נטו ממכירות{unknownCount > 0 ? ` (${unknownCount} הזמנות בלי עלות)` : ''}</span>
+        <span>רווח כולל מע"מ ממכירות{unknownCount > 0 ? ` (${unknownCount} הזמנות בלי עלות)` : ''}</span>
         <b className={totalProfit >= 0 ? 'pos' : 'neg'}>₪{totalProfit.toFixed(0)}</b>
       </div>
     </div>
@@ -952,7 +952,7 @@ function OrderBreakdown({ order }) {
       {row(`עמלת סליקה (0.75% + מע"מ מ-₪${c.paid})`, `−₪${c.fee}`, 'neg')}
       {row(ships ? 'עלות משלוח (מההגדרות)' : 'עלות משלוח (איסוף עצמי)', ships ? (c.shipCost ? `−₪${c.shipCost}` : '₪0 (לא הוגדרה בהגדרות)') : '₪0', c.shipCost ? 'neg' : '')}
       {hr}
-      {row('רווח נטו', c.profit === null ? '—' : `₪${c.profit}`, c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
+      {row('רווח כולל מע"מ', c.profit === null ? '—' : `₪${c.profit}`, c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
     </div>
   )
 }

@@ -141,7 +141,7 @@ export default function Dashboard() {
           <div className="table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>תאריך</th><th>הזמנה</th><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מכירה</th><th>רווח נטו</th></tr>
+                <tr><th>תאריך</th><th>הזמנה</th><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מכירה</th><th>רווח כולל מע"מ</th></tr>
               </thead>
               <tbody>
                 {recentSales.map((o, i) => {
