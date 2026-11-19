@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { useLiveReload } from '../lib/useLive'
 import { useNav } from '../contexts/NavContext'
 import { inCategory } from '../lib/category'
+import { useSort, sortRows, SortTh } from '../lib/sort'
 
 // חלון "במלאי" — חישוב פשוט לפי מק"ט, בלי תלות בשום נוסחה אחרת:
 //   נקלט  = סכום הכמויות בתעודות קליטה שסופקו, לפי המק"ט של המוצר בתעודה
@@ -50,6 +51,8 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
   const { openRecord } = useNav()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
+  // מיון בלחיצה על כותרת: לחיצה ראשונה מהגדול לקטן, שנייה מהקטן לגדול, שלישית חוזרת לסדר לפי שם
+  const [sort, onSort] = useSort({ key: 'stock', dir: 'desc' })
   async function load() {
     try { setRows(await loadSimpleStock()); setError('') } catch (e) { setError(e.message); setRows([]) }
   }
@@ -64,6 +67,7 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
       .filter(r => !t || r.name.toLowerCase().includes(t) || r.sku.toLowerCase().includes(t))
       .sort((a, b) => a.name.localeCompare(b.name, 'he'))
   }, [rows, q, category])
+  const sorted = sortRows(shown, { name: r => r.name, stock: r => r.stock, sold: r => r.sold, received: r => r.received, adjust: r => r.adjust, sku: r => r.sku }, sort)
   useEffect(() => { onCount?.(shown.length, shown.reduce((a, r) => a + r.stock, 0)) }, [shown])
 
   const hasAdjust = (rows || []).some(r => r.adjust)
@@ -76,10 +80,17 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
       </div>
       <div className="table-wrap">
         <table className="data-table">
-          <thead><tr><th>מוצר</th><th>במלאי</th><th>נמכר</th><th>נקלט בתעודות</th>{hasAdjust && <th title="ההפרש שנשמר בספירת מלאי">תיקון ספירה</th>}<th>מק״ט</th></tr></thead>
+          <thead><tr>
+            <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
+            <SortTh k="stock" sort={sort} onSort={onSort}>במלאי</SortTh>
+            <SortTh k="sold" sort={sort} onSort={onSort}>נמכר</SortTh>
+            <SortTh k="received" sort={sort} onSort={onSort}>נקלט בתעודות</SortTh>
+            {hasAdjust && <SortTh k="adjust" sort={sort} onSort={onSort} title="ההפרש שנשמר בספירת מלאי">תיקון ספירה</SortTh>}
+            <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
+          </tr></thead>
           <tbody>
             {shown.length === 0 && <tr><td className="empty-col" colSpan={hasAdjust ? 6 : 5}>אין מוצרים במלאי</td></tr>}
-            {shown.map(r => (
+            {sorted.map(r => (
               <tr key={r.sku} style={{ cursor: 'default' }}>
                 <td><a href="#" onClick={e => { e.preventDefault(); openRecord('products', r.product_id) }}>{r.name}</a></td>
                 <td><b>{r.stock}</b></td>
