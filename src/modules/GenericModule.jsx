@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { calcProduct, calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import ExportButtons from '../components/ExportButtons'
+import { printPackingSlip } from '../lib/exportPdf'
 import { groupOrders, engravingText, variationText } from '../lib/orders'
 import { isCountedOrder, ORDER_STATUS_LABELS, FINANCE_START, formatDate, formatDateDots } from '../lib/format'
 import { useNav } from '../contexts/NavContext'
@@ -586,8 +587,15 @@ function SetPasswordAction({ email }) {
 }
 
 function OrderPanel({ order, onChanged }) {
+  // דף ליקוט למחסן (PDF): פרטי לקוח, כתובת, טלפון ומה יש בהזמנה, בלי מחירים
+  function printSlip() {
+    if (printPackingSlip(order, { engravingText, variationText }) === 'blocked') window.alert('הדפדפן חסם את חלון ההדפסה. אפשר חלונות קופצים לאתר ונסה שוב.')
+  }
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+        <button type="button" className="cmp-tool" onClick={printSlip} title="מדפיס דף למחסן: פרטי לקוח, כתובת, טלפון ומה יש בהזמנה, בלי מחירים">🖨 הדפסה למחסן (PDF)</button>
+      </div>
       {order.wc_order_id && <OrderDetails order={order} />}
       <OrderLines order={order} onChanged={onChanged} />
       <OrderBreakdown order={order} />
