@@ -1,3 +1,4 @@
+import { supabase } from '../supabaseClient'
 // פירוק טקסט פרטי שורה ("שם: ערך" בשורות) לחריטה ולשאר הבחירות (צבע / וריאציה...).
 // הזמנות ישנות נשמרו מעורבות ("צבע: שקוף\nהתאמה אישית: טקסט"), חדשות כבר מופרדות מהסנכרון.
 const ENTRY = /(?:^|\n)([^\n:]{1,60}):[ \t]*([\s\S]*?)(?=\n[^\n:]{1,40}:[ \t]|$)/g
@@ -48,4 +49,20 @@ export function groupOrders(rows) {
       .join('\n\n')
   }
   return out
+}
+
+// "מוכן" לכל מוצר בהזמנה (נחרט / נארז): מתי ומי סימן. לסדר בלבד, לא משנה סטטוס, מלאי או כסף.
+// מחזיר הודעת שגיאה או null
+export async function setLineReady(line, ready) {
+  const { data } = await supabase.auth.getSession()
+  const patch = ready
+    ? { ready_at: new Date().toISOString(), ready_by: data?.session?.user?.email || '' }
+    : { ready_at: null, ready_by: '' }
+  const { error } = await supabase.from('orders').update(patch).eq('id', line.id)
+  return error ? error.message : null
+}
+// כמה מוצרים בהזמנה מוכנים מתוך כמה (בלי מוצרים שסומנו "לא לספק")
+export function readyCount(order) {
+  const live = (order.lines || [order]).filter(l => !l.not_supplied)
+  return { ready: live.filter(l => l.ready_at).length, total: live.length }
 }

@@ -6,6 +6,7 @@ import { calcProduct, calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import ExportButtons from '../components/ExportButtons'
 import { printPackingSlip } from '../lib/exportPdf'
 import { groupOrders, engravingText, variationText } from '../lib/orders'
+import ReadyButton from '../components/ReadyButton'
 import { isCountedOrder, ORDER_STATUS_LABELS, FINANCE_START, formatDate, formatDateDots } from '../lib/format'
 import { useNav } from '../contexts/NavContext'
 import { useLiveReload } from '../lib/useLive'
@@ -666,7 +667,8 @@ function OrderLines({ order, onChanged }) {
                 <td>{c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`}</td>
                 <td>{c.cost === null ? '—' : <span className={c.sale - c.cost >= 0 ? 'pos' : 'neg'}>₪{Math.round((c.sale - c.cost) * 100) / 100}</span>}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button type="button" className="cmp-tool" title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
+                  {!l.not_supplied && <ReadyButton line={l} onChanged={onChanged} />}
+                  <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
                   {l.manual_line && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>🗑 הסר</button>}
                 </td>
               </tr>

@@ -1,4 +1,5 @@
-import { engravingText } from '../lib/orders'
+import { engravingText, readyCount } from '../lib/orders'
+import ReadyButton from '../components/ReadyButton'
 // כל מודול מוגדר כאן: שם טבלה ב-Supabase, השדות שלו, ועמודות הטבלה בתצוגה.
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
@@ -50,7 +51,7 @@ function OrderDetail({ row, nav, extra, ui }) {
                 <td>{l.quantity}</td>
                 <td>{l.not_supplied ? '—' : v === undefined ? '—' : <b className={v < 0 ? 'neg' : ''}>{v}</b>}</td>
                 <td><SupplierStock status={l.products?.supplier_stock_status} checkedAt={l.products?.supplier_stock_checked_at} /></td>
-                <td><button type="button" className="cmp-tool" title={l.not_supplied ? 'להחזיר: המוצר יסופק' : 'לא לספק את המוצר (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l, ui)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button></td>
+                <td style={{ whiteSpace: 'nowrap' }}>{!l.not_supplied && <><ReadyButton line={l} onChanged={ui?.reload} />{' '}</>}<button type="button" className="cmp-tool" title={l.not_supplied ? 'להחזיר: המוצר יסופק' : 'לא לספק את המוצר (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l, ui)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button></td>
               </tr>
             )
           })}
@@ -400,6 +401,18 @@ export const MODULES = {
       },
       { key: 'engraving', label: 'חריטה אישית', sortValue: row => row.has_engraving ? 1 : 0, render: row => row.has_engraving ? <span title={engravingText(row.engraving)}>✒️ יש</span> : '—' },
       { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
+      {
+        // כמה מוצרים בהזמנה סומנו "מוכן" / "נחרט ומוכן" מתוך כמה (בלי "לא לספק")
+        key: 'ready',
+        label: 'מוכן',
+        sortValue: row => { const c = readyCount(row); return c.total ? c.ready / c.total : -1 },
+        render: row => {
+          const { ready, total } = readyCount(row)
+          if (!total) return '—'
+          if (ready === total) return <span className="ready-count pos">✓ מוכן</span>
+          return <span className={`ready-count ${ready ? '' : 'neg'}`} title="מוצרים שסומנו מוכנים מתוך כל המוצרים בהזמנה">{ready}/{total}</span>
+        },
+      },
       { key: 'notes', label: 'הערות', render: row => row.notes
         ? <span title={row.notes} style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{row.notes}</span>
         : '—' },

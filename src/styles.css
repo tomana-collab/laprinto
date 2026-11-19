@@ -524,3 +524,7 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 /* כפתורי הכותרת (סנכרן / חדש / ייצוא ...) עדינים */
 .module-head .btn-add{ background:transparent; color:var(--ink); border:1px solid var(--line); padding:6px 13px; font-size:13px; font-weight:600; }
 .module-head .btn-add:hover{ background:var(--hover-bg); }
+/* מוצר שסומן "מוכן" / "נחרט ומוכן" בהזמנה */
+.cmp-tool.ready-on{ background:var(--teal); border-color:var(--teal); color:#fff; }
+.cmp-tool.ready-on:hover{ filter:brightness(1.05); background:var(--teal); }
+.ready-count{ font-weight:700; white-space:nowrap; }

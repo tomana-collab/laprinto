@@ -45,7 +45,7 @@ export function printPackingSlip(order, { engravingText, variationText }) {
     const vari = variationText(l.personalization)
     return `<tr><td class="n">${i + 1}</td><td><b>${esc(l.products?.name || l.product_name || '')}</b>${
       vari ? `<div class="sub">${esc(vari)}</div>` : ''}${eng ? `<div class="sub eng">✒️ חריטה: ${esc(eng)}</div>` : ''}</td>
-      <td dir="ltr">${esc(l.sku || '')}</td><td class="q">${esc(l.quantity)}</td><td class="chk"></td></tr>`
+      <td dir="ltr">${esc(l.sku || '')}</td><td class="q">${esc(l.quantity)}</td><td class="chk">${l.ready_at ? "✓" : ""}</td></tr>`
   }).join('')
   w.document.write(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
     @page { size: A4 portrait; margin: 12mm }
@@ -58,7 +58,7 @@ export function printPackingSlip(order, { engravingText, variationText }) {
     .full { grid-column: 1 / -1 }
     table { width: 100%; border-collapse: collapse }
     th, td { border: 1px solid #bbb; padding: 7px 8px; text-align: right; vertical-align: top } th { background: #f0f0f4 }
-    td.n, td.q { text-align: center; width: 40px; font-weight: bold } td.q { font-size: 17px } td.chk { width: 40px }
+    td.n, td.q { text-align: center; width: 40px; font-weight: bold } td.q { font-size: 17px } td.chk { width: 40px; text-align: center; font-size: 18px; font-weight: bold }
     .sub { font-size: 12.5px; color: #444; margin-top: 3px; white-space: pre-wrap } .eng { color: #1c1c28; font-weight: bold }
     thead { display: table-header-group } tr { page-break-inside: avoid }
     .total { margin-top: 8px; font-size: 13px; color: #555 }
