@@ -7,6 +7,7 @@ import ExportButtons from '../components/ExportButtons'
 import { buildLots, shelfCost } from '../lib/stockValue'
 import LiveStatus from '../components/LiveStatus'
 import CollapsibleSummary from '../components/CollapsibleSummary'
+import SimpleStock from '../components/SimpleStock'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -30,6 +31,7 @@ export default function Inventory() {
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('instock')
+  const [simpleCount, setSimpleCount] = useState(null) // מספר המוצרים בחלון "במלאי" (חישוב פשוט לפי מק"ט)
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
   const [countMode, setCountMode] = useState(false) // ספירת מלאי מרוכזת
@@ -195,11 +197,12 @@ export default function Inventory() {
       <div className="status-filter">
         {FILTERS.map(f => (
           <button key={f.key} className={filter === f.key ? 'active' : ''} onClick={() => setFilter(f.key)}>
-            {f.label} <span style={{ opacity: 0.6 }}>({base.filter(f.test).length})</span>
+            {f.label} <span style={{ opacity: 0.6 }}>({f.key === 'instock' && simpleCount !== null ? simpleCount : base.filter(f.test).length})</span>
           </button>
         ))}
       </div>
 
+      {filter === 'instock' && !countMode ? <SimpleStock q={q} onCount={(n) => setSimpleCount(n)} /> : (
       <div className="table-wrap">
         <table className="data-table">
           <thead>
@@ -248,6 +251,7 @@ export default function Inventory() {
           </tbody>
         </table>
       </div>
+      )}
       <p style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginTop: 10 }}>
         מלאי נוכחי = מלאי פתיחה + מה שנקלט בתעודות שסופקו − הזמנות שנקבע להן סטטוס טיפול (נקלט ובטיפול / חריטה-אריזה / יצא למשלוח / הגיע ללקוח) או שהושלמו באתר. הזמנה בלי סטטוס טיפול לא מורידה מהמלאי; חוסר מחושב מולה במסך "השלמת מוצרים". "נמכר (סה״כ הזמנות)" סופר את כל ההזמנות שבטיפול/הושלמו. לחיצה על שורה = ספירת מלאי.
       </p>
