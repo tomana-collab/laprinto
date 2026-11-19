@@ -609,6 +609,7 @@ function OrderLines({ order, onChanged }) {
   const nav = useNav()
   const lines = order.lines || [order]
   const [engEdit, setEngEdit] = useState(null) // { id, text }
+  const [replacing, setReplacing] = useState(null) // שורה שמחליפים לה את המוצר
   async function saveEngraving(l, text) {
     const t = String(text || '').trim()
     const { error } = await supabase.from('orders').update({ engraving: t, has_engraving: t !== '' }).eq('id', l.id)
@@ -669,6 +670,7 @@ function OrderLines({ order, onChanged }) {
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {!l.not_supplied && <ReadyButton line={l} onChanged={onChanged} />}
                   <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title={l.not_supplied ? 'להחזיר לסטטוס רגיל: המוצר יסופק' : 'לא לספק את המוצר הזה (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button>
+                  {order.wc_order_id && !l.not_supplied && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="מחליף את המוצר באחר: הכמות, החריטה והווריאציה עוברים למוצר החדש (אפשר לשנות), והמוצר הזה מסומן 'לא לספק'" onClick={() => setReplacing(l)}>🔁 החלף מוצר</button>}
                   {l.manual_line && <button type="button" className="cmp-tool" style={{ marginInlineStart: 6 }} title="הסר מוצר ללא חיוב" onClick={() => removeFree(l)}>🗑 הסר</button>}
                 </td>
               </tr>
@@ -677,20 +679,28 @@ function OrderLines({ order, onChanged }) {
         </tbody>
       </table>
     </div>
-    {order.wc_order_id && <AddFreeProduct order={order} onChanged={onChanged} />}
+    {order.wc_order_id && (replacing
+      ? <AddFreeProduct key={replacing.id} order={order} replace={replacing} onDone={() => setReplacing(null)} onChanged={onChanged} />
+      : <AddFreeProduct order={order} onChanged={onChanged} />)}
     </>
   )
 }
 
 // הוספת מוצר ללא חיוב (מתנה) להזמנת אתר. נשמר כשורת פריט נוספת באותה הזמנה, במחיר 0, ויורד מהמלאי יחד עם ההזמנה.
 // סנכרון ההזמנות מהאתר לא נוגע בשורה הזו (אין לה wc_line_item_id).
-function AddFreeProduct({ order, onChanged }) {
+// replace = החלפת מוצר: הכמות, החריטה והווריאציה נמשכים מהשורה הקודמת (ניתנים לשינוי), והשורה הקודמת מסומנת "לא לספק".
+// הכסף נשאר על השורה הקודמת (כפי ששולם באתר), והעלות נספרת רק למוצר החדש.
+function AddFreeProduct({ order, onChanged, replace, onDone }) {
   const { user } = useAuth()
-  const [open, setOpen] = useState(false)
+  const [openState, setOpen] = useState(false)
+  const open = !!replace || openState
   const [products, setProducts] = useState(null) // [{ id, name, sku, stock }]
-  const [q, setQ] = useState('')
+  // בהחלפה: מחפשים מראש לפי שם הדגם (בלי הצבע / הווריאציה שאחרי המקף)
+  const [q, setQ] = useState(() => replace ? String(replace.products?.name || replace.product_name || '').split(/\s[–-]\s/)[0] : '')
   const [picked, setPicked] = useState(null)
-  const [qty, setQty] = useState(1)
+  const [qty, setQty] = useState(replace ? Number(replace.quantity) || 1 : 1)
+  const [engText, setEngText] = useState(replace?.has_engraving ? engravingText(replace.engraving) : '')
+  const [varText, setVarText] = useState(replace ? variationText(replace.personalization) : '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [copyEng, setCopyEng] = useState(true)
@@ -732,18 +742,26 @@ function AddFreeProduct({ order, onChanged }) {
       customer_name: t.customer_name, customer_phone: t.customer_phone, customer_email: t.customer_email,
       shipping_address: t.shipping_address, shipping_method: t.shipping_method, payment_method: t.payment_method,
       customer_note: t.customer_note, coupons: t.coupons, shipping_total: t.shipping_total, order_total: t.order_total,
-      ...(engSrc && copyEng ? { engraving: engSrc.engraving, has_engraving: true } : {}),
+      ...(replace
+        ? { engraving: engText.trim(), has_engraving: engText.trim() !== '', personalization: varText.trim() || null }
+        : engSrc && copyEng ? { engraving: engSrc.engraving, has_engraving: true } : {}),
     })
+    if (!error && replace) {
+      const r = await supabase.from('orders').update({ not_supplied: true }).eq('id', replace.id)
+      if (r.error) { setBusy(false); setErr('המוצר החדש נוסף, אבל סימון "לא לספק" על הקודם נכשל: ' + r.error.message); onChanged?.(); return }
+    }
     setBusy(false)
     if (error) { setErr(error.message); return }
     setPicked(null); setQ(''); setQty(1); setOpen(false)
+    onDone?.()
     onChanged?.()
   }
+  const cancel = () => { setOpen(false); setPicked(null); setQ(''); onDone?.() }
 
   if (!open) return <button type="button" className="cmp-tool" onClick={() => setOpen(true)}>➕ הוסף מוצר ללא חיוב</button>
   return (
     <div className="free-add">
-      <b>הוספת מוצר ללא חיוב</b>
+      <b>{replace ? `החלפת "${replace.products?.name || replace.product_name}" במוצר אחר` : 'הוספת מוצר ללא חיוב'}</b>
       {picked ? (
         <div className="free-picked">
           <span>{picked.name}{picked.sku ? ` · ${picked.sku}` : ''} <span className="cmp-sub">(מלאי כעת: {picked.stock})</span></span>
@@ -761,7 +779,17 @@ function AddFreeProduct({ order, onChanged }) {
           {needle && products && matches.length === 0 && <div className="cmp-sub">לא נמצא מוצר</div>}
         </>
       )}
-      {engSrc && (
+      {replace && (
+        <>
+          <label className="free-field">✒️ חריטה אישית (ריק = בלי חריטה)
+            <textarea rows={2} value={engText} onChange={e => setEngText(e.target.value)} placeholder="מה לחרוט על המוצר" />
+          </label>
+          <label className="free-field">וריאציה / פרטים נוספים
+            <textarea rows={2} value={varText} onChange={e => setVarText(e.target.value)} placeholder="לדוגמה: צבע: שקוף רוזגולד" />
+          </label>
+        </>
+      )}
+      {!replace && engSrc && (
         <label className="cmp-check" title="החריטה לא עוברת לבד כשמחליפים מוצר">
           <input type="checkbox" checked={copyEng} onChange={e => setCopyEng(e.target.checked)} />
           ✒️ להעתיק את החריטה מ"{engSrc.products?.name || engSrc.product_name}" למוצר החדש
@@ -769,11 +797,11 @@ function AddFreeProduct({ order, onChanged }) {
       )}
       <div className="free-row">
         <label>כמות <input type="number" min="1" style={{ width: 80 }} value={qty} onChange={e => setQty(e.target.value)} /></label>
-        <button type="button" className="btn-add" disabled={!picked || busy} onClick={add}>{busy ? 'מוסיף…' : 'הוסף להזמנה'}</button>
-        <button type="button" className="cmp-tool" onClick={() => { setOpen(false); setPicked(null); setQ('') }}>ביטול</button>
+        <button type="button" className="btn-add" disabled={!picked || busy} onClick={add}>{busy ? 'שומר…' : replace ? 'החלף מוצר' : 'הוסף להזמנה'}</button>
+        <button type="button" className="cmp-tool" onClick={cancel}>ביטול</button>
       </div>
       <div className="cmp-sub">
-        המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא מוחזק במלאי יחד עם ההזמנה (יורד מהמלאי מיד).
+        {replace ? 'המוצר הקודם מסומן "לא לספק" (לא יורד מהמלאי ואין לו עלות), והחדש נוסף במקומו. הסכום ששולם נשאר כמו שהוא, והרווח מחושב לפי עלות המוצר החדש.' : <>המוצר נוסף בלי חיוב (מחיר 0), עלותו נספרת ברווח ההזמנה, והוא מוחזק במלאי יחד עם ההזמנה (יורד מהמלאי מיד).</>}
       </div>
       {err && <div className="err-inline">{err}</div>}
     </div>

@@ -31,12 +31,12 @@ async function toggleSupplied(l, ui) {
   ui?.reload?.()
 }
 
-// פירוט הזמנה עם כמה מוצרים: מלאי קיים ומלאי אצל הספק לכל מוצר, וכפתור לפתיחת ההזמנה
+// פירוט הזמנה עם כמה מוצרים: מלאי קיים לכל מוצר, וכפתור לפתיחת ההזמנה
 function OrderDetail({ row, nav, extra, ui }) {
   return (
     <div className="order-detail">
       <table className="data-table">
-        <thead><tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מלאי קיים</th><th>מלאי אצל הספק</th><th></th></tr></thead>
+        <thead><tr><th>מוצר</th><th>מק"ט</th><th>כמות</th><th>מלאי קיים</th><th></th></tr></thead>
         <tbody>
           {row.lines.map(l => {
             const v = stockOf(extra, l)
@@ -50,7 +50,6 @@ function OrderDetail({ row, nav, extra, ui }) {
                 <td>{l.sku || '—'}</td>
                 <td>{l.quantity}</td>
                 <td>{l.not_supplied ? '—' : v === undefined ? '—' : <b className={v < 0 ? 'neg' : ''}>{v}</b>}</td>
-                <td><SupplierStock status={l.products?.supplier_stock_status} checkedAt={l.products?.supplier_stock_checked_at} /></td>
                 <td style={{ whiteSpace: 'nowrap' }}>{!l.not_supplied && <><ReadyButton line={l} onChanged={ui?.reload} />{' '}</>}<button type="button" className="cmp-tool" title={l.not_supplied ? 'להחזיר: המוצר יסופק' : 'לא לספק את המוצר (הכסף וההזמנה לא משתנים)'} onClick={() => toggleSupplied(l, ui)}>{l.not_supplied ? '↺ יסופק' : '✕ לא לספק'}</button></td>
               </tr>
             )
@@ -385,18 +384,6 @@ export const MODULES = {
           if (row.lines.length === 1) return vals[0] === undefined ? '—' : <span className={vals[0] < 0 ? 'neg' : ''}>{vals[0]}</span>
           const short = vals.filter(v => v !== undefined && v < 0).length
           return short ? <span className="neg" title="מוצרים בהזמנה שאין להם מלאי">חסר ב-{short}</span> : <span className="pos">✓ במלאי</span>
-        },
-      },
-      {
-        // מצב המלאי אצל הספק. בהזמנה עם כמה מוצרים: סיכום בלבד (הפירוט בלחיצה על "מוצרים")
-        key: 'supplier_stock',
-        label: 'מלאי אצל הספק',
-        noSort: true,
-        render: row => {
-          const st = l => l.products?.supplier_stock_status
-          if (row.lines.length === 1) return <SupplierStock status={st(row.lines[0])} checkedAt={row.lines[0].products?.supplier_stock_checked_at} />
-          const out = row.lines.filter(l => st(l) === 'out_of_stock').length
-          return out ? <span className="sup-stock sup-out_of_stock">אזל ב-{out}</span> : '—'
         },
       },
       { key: 'engraving', label: 'חריטה אישית', sortValue: row => row.has_engraving ? 1 : 0, render: row => row.has_engraving ? <span title={engravingText(row.engraving)}>✒️ יש</span> : '—' },

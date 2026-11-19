@@ -24,7 +24,9 @@ export function calcProduct({ cost, supplier_discount_percent, extra_expenses, p
 
 // עלות שורת פריט אחת (עלות כולל מע"מ + הוצאות נלוות, כפול כמות), או null אם חסרה עלות.
 // העלות נלקחת מהמוצר כפי שהיא היום (cost_with_vat מחושב ב-DB אחרי הנחת ספק) — לא עלות היסטורית.
+// שורה שסומנה "לא לספק" (למשל מוצר שהוחלף) לא יוצאת מהמלאי, ולכן אין לה עלות.
 export function lineCost(line) {
+  if (line.not_supplied) return 0
   const p = line.products
   if (!p || !(Number(p.cost_with_vat) > 0)) return null
   return r2((Number(p.cost_with_vat) + (Number(p.extra_expenses) || 0)) * (Number(line.quantity) || 0))

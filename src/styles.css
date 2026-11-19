@@ -491,6 +491,8 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .free-option{ text-align:right; background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13.5px; display:flex; justify-content:space-between; gap:10px; }
 .free-option:hover{ background:var(--hover-bg); }
 .free-picked{ display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--teal-soft); border-radius:8px; padding:8px 10px; }
+.free-field{ display:flex; flex-direction:column; gap:4px; font-size:13px; }
+.free-field textarea{ width:100%; }
 .free-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .ns-name{ text-decoration:line-through; color:var(--coral) !important; }
 
