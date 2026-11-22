@@ -17,7 +17,7 @@ const norm = s => String(s || '').trim().toUpperCase()
 export async function loadSimpleStock() {
   const [ri, or, op, wo] = await Promise.all([
     supabase.from('stock_receipt_items').select('quantity, product_id, products(name, sku, category, subcategory, wc_categories, price, cost_with_vat), stock_receipts(status)'),
-    supabase.from('orders').select('sku, product_id, quantity, wc_status, not_supplied'),
+    supabase.from('orders').select('sku, product_id, quantity, wc_status, not_supplied, products(sku)'),
     supabase.from('products').select('id, name, sku, category, subcategory, wc_categories, price, cost_with_vat, opening_stock').neq('opening_stock', 0),
     supabase.from('stock_writeoffs').select('quantity, product_id, products(sku)'),
   ])
@@ -45,7 +45,7 @@ export async function loadSimpleStock() {
     if (o.not_supplied) continue
     if (o.wc_status && !['processing', 'completed'].includes(o.wc_status)) continue
     // מוצר בלי מק"ט: לפי המוצר עצמו
-    const e = map.get(norm(o.sku) || 'ID:' + o.product_id)
+    const e = map.get(norm(o.sku) || norm(o.products?.sku) || 'ID:' + o.product_id)
     if (e) e.sold += Number(o.quantity) || 0
   }
   for (const w of wo.data || []) {

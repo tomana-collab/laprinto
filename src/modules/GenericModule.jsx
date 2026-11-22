@@ -107,6 +107,10 @@ export default function GenericModule({ config, focusId = null }) {
       if (error) { setError(error.message); return }
     } else {
       payload.created_by = user?.email || ''
+      if (config.beforeInsert) {
+        const msg = await config.beforeInsert(payload)
+        if (msg) { setError(msg); return }
+      }
       if (config.statusField && !payload[config.statusField]) {
         payload[config.statusField] = config.statusOptions[0]
       }

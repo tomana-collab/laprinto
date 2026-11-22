@@ -316,13 +316,30 @@ export const MODULES = {
     fields: [
       // מוצר/מחיר/כמות מסונכרנים מהאתר — מוצגים לעריכה רק בהזמנה ידנית
       { key: 'product_id', label: 'מוצר', type: 'relation', relation: { table: 'products', labelField: 'name' }, required: true, manualOnly: true },
-      { key: 'price', label: 'מחיר ליחידה (₪)', type: 'number', required: true, manualOnly: true },
+      { key: 'customer_name', label: 'שם הלקוח / למי', type: 'text', manualOnly: true },
       { key: 'quantity', label: 'כמות', type: 'number', default: 1, required: true, manualOnly: true },
+      { key: 'is_promo', label: '🎁 קד״מ — ללא חיוב (יורד מהמלאי, העלות נספרת ברווח)', type: 'checkbox', manualOnly: true },
+      { key: 'price', label: 'מחיר ליחידה (₪) — ריק = המחיר באתר', type: 'number', manualOnly: true },
       { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES] },
       { key: 'notes', label: 'הערות פנימיות', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
     isOrder: true,
+    // הזמנה ידנית חדשה: שם ומק"ט מהמוצר (כדי שתרד מהמלאי בכל המסכים), סטטוס "בטיפול" (כדי שתופיע ברשימה כמו הזמנת אתר),
+    // קד"מ = מחיר 0, ובלי מחיר = המחיר באתר. מחזיר הודעת שגיאה או null
+    beforeInsert: async payload => {
+      if (!payload.product_id) return 'בחר מוצר'
+      const { data: p, error } = await supabase.from('products').select('name, sku, price').eq('id', payload.product_id).maybeSingle()
+      if (error || !p) return error?.message || 'המוצר לא נמצא'
+      payload.product_name = p.name
+      payload.sku = p.sku || ''
+      payload.order_date = new Date().toISOString()
+      payload.wc_status = 'processing'
+      payload.handling_status = payload.handling_status || null
+      if (payload.is_promo) payload.price = 0
+      else if (!(Number(payload.price) > 0)) payload.price = Number(p.price) || 0
+      return null
+    },
     liveTables: ['orders', 'stock_receipts', 'stock_receipt_items', 'products'],
     expandRender: (row, nav, extra, ui) => row.lines.length > 1 ? <OrderDetail row={row} nav={nav} extra={extra} ui={ui} /> : null,
     // כפתור "סנכרן הזמנות מהאתר" — אותה Edge Function, target=orders
@@ -357,7 +374,7 @@ export const MODULES = {
         label: 'מוצר',
         // בלי סימון "לא לספק" ברשימה: הוא מופיע רק בחלון ההזמנה ובפירוט שנפתח מתחת לשורה
         render: (row, nav, extra, ui) => row.lines.length === 1
-          ? <OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} pen={row.has_engraving} />
+          ? <>{row.lines[0].is_promo && <span className="sup-stock" title="קד״מ: ללא חיוב, יורד מהמלאי" style={{ marginInlineEnd: 6 }}>🎁 קד״מ</span>}<OneLine main={lineLabel(row.lines[0])} count={1} tip={lineLabel(row.lines[0])} pen={row.has_engraving} /></>
           : <button type="button" className={`order-multi ${ui?.expanded ? 'on' : ''}`} title="לחץ לפירוט המוצרים והמלאי" onClick={e => { e.stopPropagation(); ui?.toggle() }}>
               {row.has_engraving && '✒️ '}{liveCount(row) === 1 ? '1 מוצר' : `${liveCount(row)} מוצרים`} {ui?.expanded ? '▴' : '▾'}
             </button>,
