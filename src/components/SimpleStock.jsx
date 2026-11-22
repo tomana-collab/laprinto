@@ -92,16 +92,6 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
   return (
     <>
       {error && <div className="err-inline">{error}</div>}
-      {/* סיכום לפי מה שמוצג (קטגוריה / חיפוש) */}
-      <div className="summary-row">
-        <div className="summary-card"><span>מוצרים</span><b>{shown.length}</b></div>
-        <div className="summary-card"><span>יחידות במלאי</span><b>{units}</b></div>
-        <div className="summary-card"><span>נמכרו</span><b>{shown.reduce((a, r) => a + r.sold, 0)}</b></div>
-        <div className="summary-card"><span>נקלטו בתעודות</span><b>{shown.reduce((a, r) => a + r.received, 0)}</b></div>
-        {hasWriteoff && <div className="summary-card"><span>פחת</span><b className="neg">{shown.reduce((a, r) => a + (r.writeoff || 0), 0)}</b></div>}
-        <div className="summary-card"><span>שווי במכירה (כולל מע״מ)</span><b>{ils(totalSale)}</b></div>
-        <div className="summary-card"><span>שווי בקנייה (כולל מע״מ)</span><b>{ils(totalCost)}</b></div>
-      </div>
       <div className="cmp-sub" style={{ marginBottom: 8 }}>
         לפי מק"ט: מה שנקלט בתעודות פחות מה שנמכר בהזמנות{hasWriteoff ? ' ופחות פחת' : ''}{hasAdjust ? ', ועוד תיקון מספירת מלאי' : ''}.
       </div>
@@ -117,6 +107,18 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
             {hasWriteoff && <SortTh k="writeoff" sort={sort} onSort={onSort} title="נשבר / נפל / אבד (חלון פחת)">פחת</SortTh>}
             {hasAdjust && <SortTh k="adjust" sort={sort} onSort={onSort} title="ההפרש שנשמר בספירת מלאי">תיקון ספירה</SortTh>}
             <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
+          </tr>
+          {/* שורת סיכום מעל כל עמודה — לפי מה שמוצג (קטגוריה / חיפוש) */}
+          <tr className="totals-row">
+            <td>סה״כ · {shown.length} מוצרים</td>
+            <td>{units}</td>
+            <td>{shown.reduce((a, r) => a + r.sold, 0)}</td>
+            <td>{shown.reduce((a, r) => a + r.received, 0)}</td>
+            <td>{ils(totalSale)}</td>
+            <td>{ils(totalCost)}</td>
+            {hasWriteoff && <td className="neg">−{shown.reduce((a, r) => a + (r.writeoff || 0), 0)}</td>}
+            {hasAdjust && <td>{shown.reduce((a, r) => a + (r.adjust || 0), 0)}</td>}
+            <td></td>
           </tr></thead>
           <tbody>
             {shown.length === 0 && <tr><td className="empty-col" colSpan={7 + (hasAdjust ? 1 : 0) + (hasWriteoff ? 1 : 0)}>אין מוצרים במלאי</td></tr>}

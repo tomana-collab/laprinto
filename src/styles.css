@@ -535,3 +535,6 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 .cmp-tool.ready-on{ background:var(--teal); border-color:var(--teal); color:#fff; }
 .cmp-tool.ready-on:hover{ filter:brightness(1.05); background:var(--teal); }
 .ready-count{ font-weight:700; white-space:nowrap; }
+
+/* שורת סיכום מעל עמודות הטבלה */
+.totals-row td{ font-weight:700; background:var(--teal-soft); border-bottom:2px solid var(--line); white-space:nowrap; }

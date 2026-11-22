@@ -173,19 +173,6 @@ export default function Inventory() {
         ))}
       </div>
 
-      {/* סיכום לחלונות "אף פעם לא נמכר" / "מלאי נמוך" / ספירה — לפי הסינון שמוצג */}
-      {(countMode || (filter !== 'instock' && filter !== 'writeoff')) && (() => {
-        const live = shown.filter(r => r.stock > 0)
-        return (
-          <div className="summary-row">
-            <div className="summary-card"><span>מוצרים</span><b>{shown.length}</b></div>
-            <div className="summary-card"><span>יחידות במלאי</span><b>{num(live.reduce((a, r) => a + r.stock, 0))}</b></div>
-            <div className="summary-card"><span>נמכרו</span><b>{num(shown.reduce((a, r) => a + r.sold_total, 0))}</b></div>
-            <div className="summary-card"><span>נקלטו בתעודות</span><b>{num(shown.reduce((a, r) => a + r.received, 0))}</b></div>
-            <div className="summary-card"><span>שווי במכירה (כולל מע״מ)</span><b>₪{num(Math.round(live.reduce((a, r) => a + r.stock * r.unit_price, 0)))}</b></div>
-          </div>
-        )
-      })()}
       {filter === 'writeoff' && !countMode ? <Writeoffs onCount={setWriteoffUnits} /> : filter === 'instock' && !countMode ? <SimpleStock q={q} category={category} onCount={(n, units) => setSimpleCount(units)} /> : (
       <div className="table-wrap">
         <table className="data-table">
@@ -204,6 +191,21 @@ export default function Inventory() {
               <th title="עלות כל היחידות שעל המדף (כולל השמורות להזמנות)">שווי בעלות</th>
               <SortTh k="status" sort={sort} onSort={onSort}>מצב</SortTh>
               {countMode && <th>ספירה בפועל</th>}
+            </tr>
+            {/* שורת סיכום מעל כל עמודה — לפי מה שמוצג */}
+            <tr className="totals-row">
+              <td>סה״כ · {shown.length} מוצרים</td>
+              <td>{num(shown.filter(r => r.stock > 0).reduce((a, r) => a + r.stock, 0))}</td>
+              <td>{num(shown.reduce((a, r) => a + r.sold_total, 0))}</td>
+              <td>{num(shown.reduce((a, r) => a + r.received, 0))}</td>
+              <td></td><td></td>
+              <td>{num(shown.reduce((a, r) => a + r.sold, 0))}</td>
+              <td>{num(shown.reduce((a, r) => a + r.incoming, 0)) || ''}</td>
+              <td>{num(shown.reduce((a, r) => a + r.reserved, 0)) || ''}</td>
+              <td></td>
+              <td>₪{num(Math.round(shown.filter(r => r.physical > 0).reduce((a, r) => a + r.shelf_cost, 0)))}</td>
+              <td></td>
+              {countMode && <td></td>}
             </tr>
           </thead>
           <tbody>
