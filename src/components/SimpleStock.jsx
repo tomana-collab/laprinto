@@ -17,7 +17,7 @@ const norm = s => String(s || '').trim().toUpperCase()
 export async function loadSimpleStock() {
   const [ri, or, op, wo] = await Promise.all([
     supabase.from('stock_receipt_items').select('quantity, product_id, products(name, sku, category, subcategory, wc_categories, price, cost_with_vat), stock_receipts(status)'),
-    supabase.from('orders').select('sku, product_id, quantity, wc_status, not_supplied, products(sku)'),
+    supabase.from('orders').select('sku, product_id, quantity, wc_status, not_supplied, products(name, sku, category, subcategory, wc_categories, price, cost_with_vat)'),
     supabase.from('products').select('id, name, sku, category, subcategory, wc_categories, price, cost_with_vat, opening_stock').neq('opening_stock', 0),
     supabase.from('stock_writeoffs').select('quantity, product_id, products(sku)'),
   ])
@@ -45,7 +45,15 @@ export async function loadSimpleStock() {
     if (o.not_supplied) continue
     if (o.wc_status && !['processing', 'completed'].includes(o.wc_status)) continue
     // מוצר בלי מק"ט: לפי המוצר עצמו
-    const e = map.get(norm(o.sku) || norm(o.products?.sku) || 'ID:' + o.product_id)
+    const k = norm(o.sku) || norm(o.products?.sku) || (o.product_id ? 'ID:' + o.product_id : '')
+    if (!k) continue
+    // מוצר שנמכר ולא נקלט בתעודה: נכנס לרשימה (מוצג בחלון "כל המוצרים" עם מלאי שלילי = חסר)
+    let e = map.get(k)
+    if (!e && o.products) {
+      const p = o.products
+      e = { sku: p.sku || '', name: p.name, category: p.category, subcategory: p.subcategory, wc_categories: p.wc_categories, price: Number(p.price) || 0, cost: Number(p.cost_with_vat) || 0, product_id: o.product_id, received: 0, sold: 0, adjust: 0 }
+      map.set(k, e)
+    }
     if (e) e.sold += Number(o.quantity) || 0
   }
   for (const w of wo.data || []) {
@@ -55,11 +63,13 @@ export async function loadSimpleStock() {
   const r2 = n => Math.round(n * 100) / 100
   return [...map.values()].map(e => {
     const stock = e.received - e.sold - (e.writeoff || 0) + e.adjust
-    return { ...e, stock, saleValue: r2(stock * e.price), costValue: r2(stock * e.cost) }
+    const left = Math.max(0, stock) // שווי רק למה שיש פיזית (חסר לא נספר בשווי)
+    return { ...e, stock, saleValue: r2(left * e.price), costValue: r2(left * e.cost) }
   })
 }
 
-export default function SimpleStock({ q = '', category = '', onCount }) {
+// all = חלון "כל המוצרים": כל מוצר שהייתה לו תנועה (נקלט / נמכר / פחת / ספירה), כולל מה שאזל או חסר
+export default function SimpleStock({ q = '', category = '', onCount, all = false }) {
   const { openRecord } = useNav()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
@@ -74,20 +84,21 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
     return (rows || [])
-      .filter(r => r.stock > 0)
+      .filter(r => all ? (r.received || r.sold || r.writeoff || r.adjust) : r.stock > 0)
       .filter(r => inCategory(r, category))
       .filter(r => !t || r.name.toLowerCase().includes(t) || r.sku.toLowerCase().includes(t))
       .sort((a, b) => a.name.localeCompare(b.name, 'he'))
-  }, [rows, q, category])
+  }, [rows, q, category, all])
   const sorted = sortRows(shown, { name: r => r.name, stock: r => r.stock, sold: r => r.sold, received: r => r.received, adjust: r => r.adjust, writeoff: r => r.writeoff || 0, sku: r => r.sku, saleValue: r => r.saleValue, costValue: r => r.costValue }, sort)
-  useEffect(() => { onCount?.(shown.length, shown.reduce((a, r) => a + r.stock, 0)) }, [shown])
+  useEffect(() => { onCount?.(shown.length, shown.reduce((a, r) => a + Math.max(0, r.stock), 0)) }, [shown])
 
   const hasAdjust = (rows || []).some(r => r.adjust)
   const hasWriteoff = (rows || []).some(r => r.writeoff)
   const ils = n => `₪${Math.round(n).toLocaleString('he-IL')}`
   const totalSale = shown.reduce((a, r) => a + r.saleValue, 0)
   const totalCost = shown.reduce((a, r) => a + r.costValue, 0)
-  const units = shown.reduce((a, r) => a + r.stock, 0)
+  const units = shown.reduce((a, r) => a + Math.max(0, r.stock), 0)
+  const statusOf = r => r.stock > 0 ? { t: 'במלאי', c: 'pos' } : r.stock === 0 ? { t: 'אזל', c: '' } : { t: `חסר ${-r.stock}`, c: 'neg' }
   if (rows === null) return <div className="loading">טוען מלאי...</div>
   return (
     <>
@@ -107,6 +118,7 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
             {hasWriteoff && <SortTh k="writeoff" sort={sort} onSort={onSort} title="נשבר / נפל / אבד (חלון פחת)">פחת</SortTh>}
             {hasAdjust && <SortTh k="adjust" sort={sort} onSort={onSort} title="ההפרש שנשמר בספירת מלאי">תיקון ספירה</SortTh>}
             <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
+            {all && <SortTh k="stock" sort={sort} onSort={onSort}>מצב</SortTh>}
           </tr>
           {/* שורת סיכום מעל כל עמודה — לפי מה שמוצג (קטגוריה / חיפוש) */}
           <tr className="totals-row">
@@ -119,13 +131,14 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
             {hasWriteoff && <td className="neg">−{shown.reduce((a, r) => a + (r.writeoff || 0), 0)}</td>}
             {hasAdjust && <td>{shown.reduce((a, r) => a + (r.adjust || 0), 0)}</td>}
             <td></td>
+            {all && <td>{shown.filter(r => r.stock < 0).length ? <span className="neg">{shown.filter(r => r.stock < 0).length} חסרים</span> : ''}</td>}
           </tr></thead>
           <tbody>
-            {shown.length === 0 && <tr><td className="empty-col" colSpan={7 + (hasAdjust ? 1 : 0) + (hasWriteoff ? 1 : 0)}>אין מוצרים במלאי</td></tr>}
+            {shown.length === 0 && <tr><td className="empty-col" colSpan={7 + (hasAdjust ? 1 : 0) + (hasWriteoff ? 1 : 0) + (all ? 1 : 0)}>אין מוצרים במלאי</td></tr>}
             {sorted.map(r => (
               <tr key={r.sku} style={{ cursor: 'default' }}>
                 <td><a href="#" onClick={e => { e.preventDefault(); openRecord('products', r.product_id) }}>{r.name}</a></td>
-                <td><b>{r.stock}</b></td>
+                <td><b className={r.stock < 0 ? 'neg' : ''}>{r.stock}</b></td>
                 <td>{r.sold}</td>
                 <td>{r.received}</td>
                 <td>{r.price ? ils(r.saleValue) : '—'}</td>
@@ -133,6 +146,7 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
                 {hasWriteoff && <td>{r.writeoff ? <span className="neg">−{r.writeoff}</span> : '—'}</td>}
                 {hasAdjust && <td>{r.adjust ? (r.adjust > 0 ? `+${r.adjust}` : r.adjust) : '—'}</td>}
                 <td>{r.sku}</td>
+                {all && <td><span className={statusOf(r).c}>{statusOf(r).t}</span></td>}
               </tr>
             ))}
           </tbody>
