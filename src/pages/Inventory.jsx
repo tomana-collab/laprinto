@@ -8,6 +8,7 @@ import { buildLots, shelfCost } from '../lib/stockValue'
 import LiveStatus from '../components/LiveStatus'
 import CollapsibleSummary from '../components/CollapsibleSummary'
 import SimpleStock from '../components/SimpleStock'
+import Writeoffs from '../components/Writeoffs'
 import { inCategory } from '../lib/category'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
@@ -32,6 +33,7 @@ export default function Inventory() {
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('instock')
+  const [writeoffUnits, setWriteoffUnits] = useState(null) // יחידות שנרשמו כפחת
   const [simpleCount, setSimpleCount] = useState(null) // מספר המוצרים בחלון "במלאי" (חישוב פשוט לפי מק"ט)
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
@@ -70,7 +72,7 @@ export default function Inventory() {
       const physical = (Number(x.stock) || 0) + (Number(x.reserved) || 0)
       const fallback = Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0)
       const shelf_cost = shelfCost(lots.get(pr.id), physical, fallback) // עלות היחידות שעל המדף לפי התעודות (הנקלטות האחרונות)
-      return { ...pr, shelf_cost, shelf_unit_cost: physical > 0 ? shelf_cost / physical : fallback, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, reserved: Number(x.reserved) || 0, physical: (Number(x.stock) || 0) + (Number(x.reserved) || 0), incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, open_orders: Number(x.open_orders) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
+      return { ...pr, shelf_cost, shelf_unit_cost: physical > 0 ? shelf_cost / physical : fallback, opening: Number(x.opening) || 0, received: Number(x.received) || 0, sold: Number(x.sold) || 0, stock: Number(x.stock) || 0, reserved: Number(x.reserved) || 0, physical: (Number(x.stock) || 0) + (Number(x.reserved) || 0), incoming: Number(x.incoming) || 0, sold_total: Number(x.sold_total) || 0, writeoff: Number(x.writeoff) || 0, open_orders: Number(x.open_orders) || 0, stock_min: Number(pr.stock_min) || 0, unit_cost: Number(pr.cost_after_discount) || (rc.get(pr.id)?.qty ? rc.get(pr.id).sum / rc.get(pr.id).qty : 0), unit_price: Number(pr.price) || 0 }
     }))
   }
   useEffect(() => { load() }, [])
@@ -93,7 +95,7 @@ export default function Inventory() {
     if (!window.confirm(`לעדכן את המלאי של ${changed.length} מוצרים לפי הספירה?`)) return
     setSavingCount(true)
     const results = await Promise.all(changed.map(r =>
-      supabase.from('products').update({ opening_stock: Number(counts[r.id]) - r.received + r.sold - r.reserved }).eq('id', r.id)))
+      supabase.from('products').update({ opening_stock: Number(counts[r.id]) - r.received + r.sold - r.reserved + r.writeoff }).eq('id', r.id)))
     setSavingCount(false)
     const failed = results.find(x => x.error)
     if (failed) { setError(failed.error.message); return }
@@ -106,6 +108,7 @@ export default function Inventory() {
     { key: 'instock', label: 'במלאי', test: r => r.stock > 0 },
     { key: 'unsold', label: 'במלאי, אף פעם לא נמכר', test: r => r.stock > 0 && r.sold_total === 0 },
     { key: 'low', label: 'מלאי נמוך (פחות מ-2)', test: r => r.stock > 0 && status(r).key === 'low' },
+    { key: 'writeoff', label: 'פחת', test: () => false },
   ]
   // קטגוריה וחיפוש חלים על הכול, כך שגם המספרים על הכפתורים מתעדכנים
   const base = useMemo(() => (rows || []).filter(r => {
@@ -207,12 +210,12 @@ export default function Inventory() {
       <div className="status-filter">
         {FILTERS.map(f => (
           <button key={f.key} className={filter === f.key ? 'active' : ''} onClick={() => setFilter(f.key)}>
-            {f.label} <span style={{ opacity: 0.6 }}>({f.key === 'instock' && simpleCount !== null ? `${simpleCount} יח׳` : base.filter(f.test).length})</span>
+            {f.label} <span style={{ opacity: 0.6 }}>({f.key === 'instock' && simpleCount !== null ? `${simpleCount} יח׳` : f.key === 'writeoff' ? `${writeoffUnits ?? rows.reduce((t, r) => t + r.writeoff, 0)} יח׳` : base.filter(f.test).length})</span>
           </button>
         ))}
       </div>
 
-      {filter === 'instock' && !countMode ? <SimpleStock q={q} category={category} onCount={(n, units) => setSimpleCount(units)} /> : (
+      {filter === 'writeoff' && !countMode ? <Writeoffs onCount={setWriteoffUnits} /> : filter === 'instock' && !countMode ? <SimpleStock q={q} category={category} onCount={(n, units) => setSimpleCount(units)} /> : (
       <div className="table-wrap">
         <table className="data-table">
           <thead>
