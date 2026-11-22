@@ -62,7 +62,8 @@ export default function GenericModule({ config, focusId = null }) {
   // מעבר ממודול אחר (למשל הזמנה → מוצר): פותח את הרשומה לעריכה ברגע שהנתונים נטענו
   useEffect(() => {
     if (!focusId || !rows) return
-    const row = rows.find(r => r.id === focusId)
+    // בהזמנה עם כמה מוצרים: גם מזהה של שורה אחרת בהזמנה פותח את ההזמנה
+    const row = rows.find(r => r.id === focusId || r.line_ids?.includes(focusId))
     if (row) setEditing(row)
   }, [focusId, rows === null])
 
@@ -994,6 +995,56 @@ function OrderDetails({ order }) {
   )
 }
 
+// הזמנות של המוצר: מי קנה אותו. לפי המוצר המקושר בשורה או לפי המק"ט. לחיצה על הזמנה פותחת אותה
+function ProductOrders({ product }) {
+  const nav = useNav()
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let q = supabase.from('orders')
+      .select('id, order_number, order_date, created_at, customer_name, quantity, total_amount, wc_status, handling_status, not_supplied, manual_line, replaces_line_id, sku, product_id')
+    const sku = String(product.sku || '').trim()
+    q = sku ? q.or(`product_id.eq.${product.id},sku.ilike.${sku.replace(/[,()]/g, '')}`) : q.eq('product_id', product.id)
+    q.order('order_date', { ascending: false }).then(({ data, error: e }) => {
+      if (e) { setError(e.message); setRows([]); return }
+      setRows(data || [])
+    })
+  }, [product.id])
+  if (rows === null) return <div className="cmp-sub" style={{ margin: '12px 0' }}>טוען הזמנות של המוצר…</div>
+  const counted = rows.filter(r => !r.not_supplied && isCountedOrder(r))
+  const units = counted.reduce((a, r) => a + (Number(r.quantity) || 0), 0)
+  return (
+    <div className="summary-card" style={{ display: 'block', margin: '12px 0' }}>
+      <b>הזמנות של המוצר</b>
+      <span className="cmp-sub"> · {counted.length} הזמנות, {units} יח׳ (בלי מבוטלות, לא לספק ומוחלפים)</span>
+      {error && <div className="err-inline">{error}</div>}
+      {rows.length === 0 ? <div className="cmp-sub" style={{ marginTop: 6 }}>המוצר עוד לא הוזמן</div> : (
+        <div className="table-wrap" style={{ marginTop: 8 }}>
+          <table className="data-table">
+            <thead><tr><th>תאריך</th><th>הזמנה</th><th>מזמין</th><th>כמות</th><th>מחיר מכירה</th><th>סטטוס</th><th>סטטוס טיפול</th></tr></thead>
+            <tbody>
+              {rows.map(r => {
+                const off = r.not_supplied || !isCountedOrder(r)
+                return (
+                  <tr key={r.id} style={{ cursor: 'pointer', opacity: off ? 0.55 : 1 }} title="פתח את ההזמנה" onClick={() => nav.openRecord('orders', r.id)}>
+                    <td>{formatDateDots(r.order_date || r.created_at)}</td>
+                    <td><a href="#" onClick={e => e.preventDefault()}>{r.order_number ? `#${r.order_number}` : 'ידנית'}</a></td>
+                    <td>{r.customer_name || '—'}</td>
+                    <td>{Number(r.quantity)}</td>
+                    <td>{r.manual_line && !r.replaces_line_id ? 'ללא חיוב' : `₪${Number(r.total_amount) || 0}`}</td>
+                    <td>{r.not_supplied ? <span className="sup-stock sup-out_of_stock">{r.manual_line ? 'לא לספק' : 'הוחלף / לא לספק'}</span> : (ORDER_STATUS_LABELS[r.wc_status] || r.wc_status || 'ידנית')}</td>
+                    <td>{r.handling_status || '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ProductBreakdown({ form }) {
   const c = calcProduct(form)
   const row = (label, value, cls) => (
@@ -1068,6 +1119,7 @@ function EditModal({ config, initial, onCancel, onSave, onDelete, onOrderChanged
         </div>
 
         {config.isProduct && <ProductBreakdown form={form} />}
+        {config.isProduct && initial.id && <ProductOrders product={initial} />}
 
         {config.hasLoginAction && <SetPasswordAction email={form.email} />}
 
