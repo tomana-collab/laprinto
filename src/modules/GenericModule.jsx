@@ -846,7 +846,7 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
       wc_order_id: t.wc_order_id, wc_line_item_id: null, order_number: t.order_number, order_date: t.order_date, wc_status: t.wc_status,
       handling_status: t.handling_status, received_by: t.received_by, delivered_notified_at: t.delivered_notified_at,
       customer_name: t.customer_name, customer_phone: t.customer_phone, customer_email: t.customer_email,
-      shipping_address: t.shipping_address, shipping_city: t.shipping_city || '', shipping_method: t.shipping_method, payment_method: t.payment_method,
+      shipping_address: t.shipping_address, shipping_city: t.shipping_city || '', shipping_company: t.shipping_company || '', shipping_method: t.shipping_method, payment_method: t.payment_method,
       customer_note: t.customer_note, coupons: t.coupons, shipping_total: t.shipping_total, order_total: t.order_total,
       ...(replace
         ? { engraving: engText.trim(), has_engraving: engText.trim() !== '', personalization: varText.trim() || null }
@@ -957,7 +957,7 @@ function OrderBreakdown({ order }) {
       {hr}
       {row('עלות המוצרים כולל מע"מ והוצאות נלוות', c.cost === null ? `חסרה עלות: ${c.missing.join(', ')}` : `−₪${c.cost}`, c.cost === null ? '' : 'neg')}
       {row(`עמלת סליקה (0.75% + מע"מ מ-₪${c.paid})`, `−₪${c.fee}`, 'neg')}
-      {row(ships ? 'עלות משלוח (מההגדרות)' : 'עלות משלוח (איסוף עצמי)', ships ? (c.shipCost ? `−₪${c.shipCost}` : '₪0 (לא הוגדרה בהגדרות)') : '₪0', c.shipCost ? 'neg' : '')}
+      {row(order.shipping_company ? `עלות משלוח (${order.shipping_company})` : ships ? 'עלות משלוח (מההגדרות, לא נבחרה חברת משלוחים)' : 'עלות משלוח (איסוף עצמי)', c.shipCost ? `−₪${c.shipCost}` : '₪0', c.shipCost ? 'neg' : '')}
       {hr}
       {row('רווח כולל מע"מ', c.promoOnly ? '🎁 קד״מ: לא נספר ברווח' : c.profit === null ? '—' : `₪${c.profit}`, c.promoOnly || c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
       {c.giveCost > 0 && <div className="cmp-sub" style={{ marginTop: 4 }}>🎁 מתנה / קד״מ בהזמנה: עלות ₪{c.giveCost}. לא נכלל ברווח ההזמנה, ונספר בדשבורד ב"עלות מוצרים בפחת וקד״מ".</div>}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getShippingCost, setShippingCost } from '../lib/pricing'
+import { getShippingCost, setShippingCost, SHIPPING_COMPANIES, getCompanyCost, setCompanyCost } from '../lib/pricing'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { getStoredTheme, setTheme } from '../lib/theme'
@@ -58,14 +58,18 @@ export default function Settings() {
   const isAdmin = profile?.role === 'אדמין'
   // עלות משלוח להזמנה: יורדת מהרווח של כל הזמנה שנשלחת (לא איסוף עצמי)
   const [shipCost, setShipCostInput] = useState(String(getShippingCost()))
+  const [companyCosts, setCompanyCosts] = useState(() => Object.fromEntries(SHIPPING_COMPANIES.map(c => [c.key, String(getCompanyCost(c.key))])))
   const [shipMsg, setShipMsg] = useState(null)
   async function saveShipCost(e) {
     e.preventDefault(); setShipMsg(null)
-    const v = Number(shipCost)
-    if (!(v >= 0) || shipCost.trim() === '') { setShipMsg({ type: 'err', text: 'סכום לא תקין' }); return }
-    const { data, error } = await supabase.from('app_settings').update({ value: v, updated_at: new Date().toISOString(), updated_by: user?.email || '' }).eq('key', 'shipping_cost').select('value')
-    if (error || !data?.length) { setShipMsg({ type: 'err', text: error?.message || 'אין הרשאה לעדכן' }); return }
-    setShippingCost(v)
+    const entries = [['shipping_cost', shipCost], ...SHIPPING_COMPANIES.map(c => ['ship_cost_' + c.key, companyCosts[c.key]])]
+    if (entries.some(([, x]) => String(x).trim() === '' || !(Number(x) >= 0))) { setShipMsg({ type: 'err', text: 'סכום לא תקין' }); return }
+    const now = new Date().toISOString()
+    const res = await Promise.all(entries.map(([key, x]) => supabase.from('app_settings').update({ value: Number(x), updated_at: now, updated_by: user?.email || '' }).eq('key', key).select('value')))
+    const bad = res.find(r => r.error || !r.data?.length)
+    if (bad) { setShipMsg({ type: 'err', text: bad.error?.message || 'אין הרשאה לעדכן' }); return }
+    setShippingCost(Number(shipCost))
+    for (const c of SHIPPING_COMPANIES) setCompanyCost(c.key, Number(companyCosts[c.key]))
     setShipMsg({ type: 'ok', text: 'נשמר. הרווח בהזמנות מחושב מעכשיו לפי העלות החדשה' })
   }
   const [hook, setHook] = useState({ is_set: false, tail: null })
@@ -136,11 +140,18 @@ export default function Settings() {
         <div className="settings-section">
           <h3>עלות משלוח</h3>
           <div className="settings-readonly">
-            כמה עולה לך משלוח של הזמנה אחת (₪). הסכום יורד מהרווח (כולל מע"מ) של כל הזמנה שנשלחת ללקוח, כולל משלוח חינם. באיסוף עצמי לא יורד כלום.
+            כמה עולה לך משלוח של הזמנה אחת (₪), לפי חברת המשלוחים שנבחרה בהזמנה. הסכום יורד מהרווח של ההזמנה.
+            הזמנה שלא נבחרה לה חברה: העלות הכללית, אם היא נשלחת ללקוח (כולל משלוח חינם). באיסוף עצמי לא יורד כלום.
           </div>
           <form onSubmit={saveShipCost}>
+            {SHIPPING_COMPANIES.map(c => (
+              <div className="field" key={c.key}>
+                <label>{c.label} (₪ למשלוח)</label>
+                <input type="number" min="0" step="0.01" value={companyCosts[c.key]} onChange={e => setCompanyCosts(x => ({ ...x, [c.key]: e.target.value }))} />
+              </div>
+            ))}
             <div className="field">
-              <label>עלות משלוח להזמנה (₪)</label>
+              <label>עלות כללית להזמנה שלא נבחרה לה חברה (₪)</label>
               <input type="number" min="0" step="0.01" value={shipCost} onChange={e => setShipCostInput(e.target.value)} />
             </div>
             <button className="btn btn-primary" type="submit">שמירה</button>

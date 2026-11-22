@@ -42,7 +42,7 @@ export default function Dashboard() {
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
         supabase.from('stock_receipts').select('doc_date, created_at, stock_receipt_items(quantity, unit_cost, discount_percent)'),
-        supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, not_supplied, manual_line, product_id, replaces_line_id, is_promo, shipping_total, shipping_method, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
+        supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, not_supplied, manual_line, product_id, replaces_line_id, is_promo, shipping_total, shipping_method, shipping_company, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
@@ -170,7 +170,7 @@ export default function Dashboard() {
         <div className="summary-row wide">
           <div className="summary-card"><span>סה״כ מכר: כל מה שהלקוחות שילמו ({periodOrders.length} הזמנות, כולל משלוח ומע״מ)</span><b className="pos">{ils(periodIncome)}</b></div>
           <div className="summary-card"><span>עלות המוצרים שבהזמנות (כולל מע״מ, אחרי הנחת ספק)</span><b className="neg">−{ils(cogs)}</b></div>
-          <div className="summary-card"><span>עלות משלוחים (₪{getShippingCost()} להזמנה שנשלחה)</span><b className="neg">−{ils(shipCosts)}</b></div>
+          <div className="summary-card"><span>עלות משלוחים (לפי חברת המשלוחים; בלי חברה ₪{getShippingCost()})</span><b className="neg">−{ils(shipCosts)}</b></div>
           <div className="summary-card"><span>רווח על ההזמנות (מכר פחות עלות מוצרים ומשלוחים)</span><b className={grossProfit >= 0 ? 'pos' : 'neg'}>{ils(grossProfit)}</b></div>
           <div className="summary-card"><span>עמלות סליקה (0.75% + מע״מ)</span><b className="neg">−{ils(fees)}</b></div>
           <div className="summary-card"><span>עלות מוצרים בפחת וקד״מ (כולל מע״מ) · פחת {writeoffUnits} יח׳ {ils(writeoffCost)} · קד״מ / ללא חיוב {giveUnits} יח׳ {ils(giveCost)}{giveMissing ? ` · ${giveMissing} בלי עלות` : ''}</span><b className="neg">−{ils(writeoffCost + giveCost)}</b></div>

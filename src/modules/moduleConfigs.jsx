@@ -4,7 +4,7 @@ import ReadyButton from '../components/ReadyButton'
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
 
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
-import { calcOrder } from '../lib/pricing'
+import { calcOrder, SHIPPING_COMPANIES } from '../lib/pricing'
 import { supabase } from '../supabaseClient'
 
 const SHOWN_ORDER_STATUSES = ['processing', 'completed']
@@ -335,6 +335,8 @@ export const MODULES = {
       { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES] },
       // שיטת משלוח: שינוי כאן נשמר ב-CRM בלבד (לא נשלח לאתר), ולא נדרס בסנכרון הבא (manual_fields). משפיע על עלות המשלוח ברווח
       { key: 'shipping_method', label: 'שיטת משלוח (שינוי ב-CRM בלבד, לא באתר)', type: 'select', options: ['', ...SHIPPING_METHODS] },
+      // חברת משלוחים (ב-CRM בלבד): קובעת את עלות המשלוח ברווח — פרדי / הובלות / אנחנו (המחירים בהגדרות)
+      { key: 'shipping_company', label: 'חברת משלוחים (קובעת את עלות המשלוח ברווח)', type: 'select', options: ['', ...SHIPPING_COMPANIES.map(c => c.label)] },
       { key: 'notes', label: 'הערות פנימיות', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
@@ -384,7 +386,7 @@ export const MODULES = {
       { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
       // שיטת משלוח בקיצור (המלא במעבר עכבר). בהזמנה עם איסוף עצמי אין עיר
       { key: 'shipping_method', label: 'משלוח', sortValue: row => shipShort(row.shipping_method), render: row => row.shipping_method
-        ? <span title={row.shipping_method} className={`ship-badge ${/איסוף/.test(row.shipping_method) ? 'ship-pickup' : 'ship-delivery'}`}>{shipShort(row.shipping_method)}</span>
+        ? <span title={row.shipping_method + (row.shipping_company ? ` · ${row.shipping_company}` : '')} className={`ship-badge ${/איסוף/.test(row.shipping_method) ? 'ship-pickup' : 'ship-delivery'}`}>{shipShort(row.shipping_method)}{row.shipping_company ? ` · ${row.shipping_company}` : ''}</span>
         : '—' },
       { key: 'shipping_city', label: 'עיר', sortValue: row => cityOf(row), render: row => /איסוף/.test(row.shipping_method || '') ? '—' : (cityOf(row) || '—') },
       {

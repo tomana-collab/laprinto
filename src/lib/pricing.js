@@ -14,6 +14,23 @@ export const getShippingCost = () => SHIPPING_COST
 // הזמנה מהאתר שנשלחת ללקוח (כל שיטת משלוח חוץ מאיסוף עצמי, כולל משלוח חינם) — עולה לי משלוח
 export const orderShips = order => !!order.wc_order_id && !/איסוף/.test(order.shipping_method || '')
 
+// חברות משלוח (orders.shipping_company) ועלות למשלוח מההגדרות (app_settings: ship_cost_<key>)
+export const SHIPPING_COMPANIES = [
+  { key: 'freddy', label: 'פרדי' },
+  { key: 'hovalot', label: 'הובלות' },
+  { key: 'us', label: 'אנחנו' },
+]
+const COMPANY_COST = { freddy: 50, hovalot: 45, us: 0 }
+export const setCompanyCost = (key, n) => { if (n !== undefined && n !== null) COMPANY_COST[key] = Number(n) || 0 }
+export const getCompanyCost = key => COMPANY_COST[key] ?? 0
+const companyKey = label => SHIPPING_COMPANIES.find(c => c.label === label)?.key
+// עלות המשלוח שלי להזמנה: לפי חברת המשלוח אם נבחרה, אחרת העלות הכללית להזמנה שנשלחת (איסוף עצמי = 0)
+export const orderShipCost = order => {
+  const k = companyKey(order.shipping_company)
+  if (k) return COMPANY_COST[k]
+  return orderShips(order) ? SHIPPING_COST : 0
+}
+
 export function calcProduct({ cost, supplier_discount_percent, extra_expenses, price }) {
   const c = Number(cost) || 0
   const d = Number(supplier_discount_percent) || 0
@@ -73,7 +90,7 @@ export function calcOrder(order, replaced, opts = {}) {
   const shipping = r2(Number(order.shipping_total) || 0)
   const paid = r2(sale + shipping)
   const fee = r2(paid * CLEARING_RATE * (1 + VAT_RATE))
-  const shipCost = orderShips(order) ? SHIPPING_COST : 0
+  const shipCost = orderShipCost(order)
   const costs = lines.map(lineCost)
   const missing = lines.filter((_, i) => costs[i] === null).map(l => l.products?.name || l.product_name || '?')
   const cost = missing.length ? null : r2(costs.reduce((a, c) => a + c, 0))
