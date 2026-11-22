@@ -3,32 +3,32 @@ import { supabase } from '../supabaseClient'
 import { formatDate, formatDateTime, isCountedOrder, FINANCE_START } from '../lib/format'
 import { calcOrder, receiptsTotalWithVat } from '../lib/pricing'
 import { groupOrders } from '../lib/orders'
+import { loadSimpleStock } from '../components/SimpleStock'
 
 const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
 const CLOSED_OPP_STATUSES = ['סגור-הצלחה', 'סגור-נכשל']
 const today = () => new Date().toISOString().slice(0, 10)
 
-// תקופות לסיכום כספי: מספר חודשים אחורה (כולל החודש הנוכחי), או 0 = הכל
-const PERIODS = [
-  { months: 1, label: 'החודש הנוכחי' },
-  { months: 2, label: 'חודשיים' },
-  { months: 3, label: 'רבעון (3 חודשים)' },
-  { months: 6, label: 'חצי שנה' },
-  { months: 12, label: 'שנה' },
-  { months: 0, label: 'הכל' },
-]
+// תקופות לסיכום כספי. range מחזיר [from, to) בתאריכים YYYY-MM-DD ('' = בלי גבול)
 const pad = n => String(n).padStart(2, '0')
-function periodStart(months) {
-  if (!months) return ''
-  const d = new Date()
-  const s = new Date(d.getFullYear(), d.getMonth() - (months - 1), 1)
-  return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-01`
-}
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const PERIODS = [
+  { key: 'month', label: 'החודש', range: () => { const d = new Date(); return [ymd(new Date(d.getFullYear(), d.getMonth(), 1)), ''] } },
+  { key: 'last', label: 'חודש שעבר', range: () => { const d = new Date(); return [ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 1))] } },
+  { key: 'quarter', label: 'רבעון (3 חודשים)', range: () => { const d = new Date(); return [ymd(new Date(d.getFullYear(), d.getMonth() - 2, 1)), ''] } },
+  { key: 'custom', label: 'מותאם אישית', range: null },
+  { key: 'all', label: 'הכל', range: () => ['', ''] },
+]
+const ils = n => `₪${Math.round(n).toLocaleString('he-IL')}`
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
-  const [periodMonths, setPeriodMonths] = useState(1)
+  const [period, setPeriod] = useState('month') // ברירת מחדל: החודש
+  const [customFrom, setCustomFrom] = useState(() => ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
+  const [customTo, setCustomTo] = useState(() => ymd(new Date()))
+  const [stock, setStock] = useState(null) // שווי הסחורה שבמלאי (חלון "במלאי")
+  useEffect(() => { loadSimpleStock().then(setStock).catch(() => setStock([])) }, [])
 
   useEffect(() => {
     async function load() {
@@ -78,14 +78,9 @@ export default function Dashboard() {
 
   // ביטולים/החזרים/ממתינות לתשלום לא נספרים כהכנסה
   const sales = data.orders.filter(isCountedOrder)
-  const totalIncome = sales.reduce((a, o) => a + (o.total_amount || 0), 0)
-  const monthPrefix = new Date().toISOString().slice(0, 7)
-  const monthSales = sales.filter(o => (o.order_date || '').startsWith(monthPrefix))
-  const monthIncome = monthSales.reduce((a, o) => a + (o.total_amount || 0), 0)
   // הזמנה עם כמה פריטים מוצגת כשורה אחת
   const recentSales = groupOrders(sales).slice(0, 10)
   const totalExpenses = data.expenses.reduce((a, e) => a + (e.amount || 0), 0)
-  const profit = totalIncome - totalExpenses
   const paidExpenses = data.expenses.filter(e => e.status === 'שולם').reduce((a, e) => a + (e.amount || 0), 0)
   const pendingExpenses = totalExpenses - paidExpenses
 
@@ -96,19 +91,32 @@ export default function Dashboard() {
   }
   const paidByEntries = Object.entries(paidByTotals).sort((a, b) => b[1] - a[1])
 
-  // סיכום לתקופה שנבחרה: הכנסות (הזמנות שנספרות) מול הוצאות לפי תאריך
-  // לא סופרים לפני FINANCE_START, גם ב"הכל" וגם בתקופות ארוכות
-  const from = [periodStart(periodMonths), FINANCE_START].sort().pop()
-  const periodSales = sales.filter(o => !from || (o.order_date || '') >= from)
-  const periodIncome = periodSales.reduce((a, o) => a + (o.total_amount || 0), 0)
-  // הוצאות = קליטת תעודות ספק (כולל מע"מ) בתקופה
-  const periodExpenses = receiptsTotalWithVat(data.receipts, from)
-  const periodBalance = periodIncome - periodExpenses
-  // רווח ממכירות לאחר עלות סחורה ועמלת סליקה (רק הזמנות שיש עלות לכל מוצריהן)
+  // סיכום לתקופה שנבחרה. לא סופרים לפני FINANCE_START
+  const P = PERIODS.find(x => x.key === period)
+  const [rawFrom, to] = P.range ? P.range() : [customFrom, customTo ? ymd(new Date(new Date(customTo).getTime() + 86400000)) : '']
+  const from = [rawFrom, FINANCE_START].sort().pop()
+  const inPeriod = o => { const d = String(o.order_date || '').slice(0, 10); return d >= from && (!to || d < to) }
+  const periodSales = sales.filter(inPeriod)
+  // לפי הזמנה (שורות של אותה הזמנה מאוחדות; מוצר שהוחלף לא נספר פעמיים)
   const periodOrders = groupOrders(periodSales).map(calcOrder)
-  const productProfit = periodOrders.reduce((a, c) => a + (c.profit ?? 0), 0)
-  const missingCost = periodOrders.filter(c => c.profit === null).length
-  const periodLabel = PERIODS.find(x => x.months === periodMonths)?.label
+  const known = periodOrders.filter(c => c.cost !== null)
+  const missingCost = periodOrders.length - known.length
+  const salesProducts = periodOrders.reduce((a, c) => a + c.sale, 0)          // מכר מוצרים (אחרי קופונים, בלי משלוח)
+  const salesKnown = known.reduce((a, c) => a + c.sale, 0)
+  const cogs = known.reduce((a, c) => a + c.cost, 0)                          // עלות המוצרים שנמכרו (כולל מע"מ)
+  const grossProfit = salesKnown - cogs                                       // מכר פחות עלות מוצרים
+  const productProfit = known.reduce((a, c) => a + c.profit, 0)               // אחרי משלוח, עמלת סליקה ועלות משלוח
+  const periodIncome = periodOrders.reduce((a, c) => a + c.paid, 0)           // כל מה ששולם (כולל משלוח)
+  // הוצאות = קליטת תעודות ספק (כולל מע"מ) בתקופה
+  const periodExpenses = (data.receipts || []).filter(r => { const d = String(r.doc_date || r.created_at || '').slice(0, 10); return !to || d < to })
+    .reduce((a, r) => a + receiptsTotalWithVat([r], from), 0)
+  const periodBalance = periodIncome - periodExpenses
+  const periodLabel = P.key === 'custom' ? 'מותאם אישית' : P.label
+  // סחורה שבמלאי ולא נמכרה (נקלט − נמכר − פחת, לפי מק"ט) — לא תלוי בתקופה
+  const inStock = (stock || []).filter(r => r.stock > 0)
+  const stockCost = inStock.reduce((a, r) => a + r.costValue, 0)
+  const stockSale = inStock.reduce((a, r) => a + r.saleValue, 0)
+  const stockNoCost = inStock.filter(r => !r.cost).length
 
   const activeProducts = data.products.filter(p => p.status === 'פעיל').length
 
@@ -120,18 +128,31 @@ export default function Dashboard() {
 
       <div className="dash-section">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>סיכום כספי · {periodLabel}{from ? ` (מ-${formatDate(from)})` : ''}</h3>
+          <h3 style={{ margin: 0 }}>סיכום כספי · {periodLabel}{from ? ` (מ-${formatDate(from)}${to ? ` עד ${formatDate(ymd(new Date(new Date(to).getTime() - 86400000)))}` : ''})` : ''}</h3>
           <div className="status-filter" style={{ margin: 0 }}>
             {PERIODS.map(x => (
-              <button key={x.months} className={periodMonths === x.months ? 'active' : ''} onClick={() => setPeriodMonths(x.months)}>{x.label}</button>
+              <button key={x.key} className={period === x.key ? 'active' : ''} onClick={() => setPeriod(x.key)}>{x.label}</button>
             ))}
           </div>
         </div>
+        {period === 'custom' && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <label>מתאריך <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} /></label>
+            <label>עד תאריך <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} /></label>
+          </div>
+        )}
+        <div className="summary-row wide">
+          <div className="summary-card"><span>סה״כ מכר בהזמנות ({periodOrders.length} הזמנות, מוצרים אחרי קופונים, כולל מע״מ, בלי משלוח)</span><b className="pos">{ils(salesProducts)}</b></div>
+          <div className="summary-card"><span>עלות המוצרים שנמכרו (כולל מע״מ){missingCost ? ` · ${missingCost} הזמנות בלי עלות לא נכללו` : ''}</span><b className="neg">−{ils(cogs)}</b></div>
+          <div className="summary-card"><span>רווח על ההזמנות (מכר פחות עלות מוצרים)</span><b className={grossProfit >= 0 ? 'pos' : 'neg'}>{ils(grossProfit)}</b></div>
+          <div className="summary-card"><span>רווח כולל מע״מ אחרי משלוח ועמלת סליקה</span><b className={productProfit >= 0 ? 'pos' : 'neg'}>{ils(productProfit)}</b></div>
+        </div>
         <div className="summary-row wide" style={{ marginBottom: 0 }}>
-          <div className="summary-card"><span>הכנסות (מכירות כולל מע"מ)</span><b className="pos">₪{periodIncome.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
-          <div className="summary-card"><span>הוצאות (קליטת תעודות, כולל מע"מ)</span><b className="neg">₪{periodExpenses.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
-          <div className="summary-card"><span>הכנסות פחות הוצאות</span><b className={periodBalance >= 0 ? 'pos' : 'neg'}>₪{periodBalance.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
-          <div className="summary-card"><span>רווח ממכירות (אחרי עלות סחורה ועמלה){missingCost ? ` · ${missingCost} הזמנות בלי עלות לא נכללו` : ''}</span><b className={productProfit >= 0 ? 'pos' : 'neg'}>₪{productProfit.toLocaleString('he-IL', { maximumFractionDigits: 0 })}</b></div>
+          <div className="summary-card"><span>סחורה במלאי שלא נמכרה — לפי עלות קנייה (כולל מע״מ){stockNoCost ? ` · ${stockNoCost} מוצרים בלי עלות` : ''}</span><b>{stock ? ils(stockCost) : '…'}</b></div>
+          <div className="summary-card"><span>אותה סחורה לפי מחיר באתר</span><b>{stock ? ils(stockSale) : '…'}</b></div>
+          <div className="summary-card"><span>כל מה ששולם בתקופה (כולל משלוח)</span><b>{ils(periodIncome)}</b></div>
+          <div className="summary-card"><span>קליטת תעודות בתקופה (כולל מע״מ)</span><b className="neg">{ils(periodExpenses)}</b></div>
+          <div className="summary-card"><span>ששולם פחות קליטת תעודות</span><b className={periodBalance >= 0 ? 'pos' : 'neg'}>{ils(periodBalance)}</b></div>
         </div>
       </div>
 
