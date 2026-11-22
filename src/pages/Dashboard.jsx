@@ -4,6 +4,7 @@ import { formatDate, formatDateTime, isCountedOrder, FINANCE_START } from '../li
 import { calcOrder, receiptsTotalWithVat, getShippingCost } from '../lib/pricing'
 import { groupOrders } from '../lib/orders'
 import { loadSimpleStock } from '../components/SimpleStock'
+import { useNav } from '../contexts/NavContext'
 
 const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
 const CLOSED_OPP_STATUSES = ['סגור-הצלחה', 'סגור-נכשל']
@@ -24,6 +25,7 @@ const ils = n => `₪${Math.round(n).toLocaleString('he-IL')}`
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const nav = useNav()
   const [period, setPeriod] = useState('month') // ברירת מחדל: החודש
   const [customFrom, setCustomFrom] = useState(() => ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [customTo, setCustomTo] = useState(() => ymd(new Date()))
@@ -113,7 +115,11 @@ export default function Dashboard() {
   const writeoffCost = periodWriteoffs.reduce((a, w) => a + Number(w.quantity) * Number(w.unit_cost), 0)
   const writeoffUnits = periodWriteoffs.reduce((a, w) => a + Number(w.quantity), 0)
   // לפי הזמנה (שורות של אותה הזמנה מאוחדות; מוצר שהוחלף לא נספר פעמיים)
-  const periodOrders = groupOrders(periodSales.filter(l => !isGiveaway(l))).map(calcOrder)
+  const periodGroups = groupOrders(periodSales.filter(l => !isGiveaway(l)))
+  const periodOrders = periodGroups.map(calcOrder)
+  // הזמנות עם מוצר בלי עלות: לפירוט בהערה (מספר הזמנה ומוצר, לחיצים)
+  const missingList = periodGroups.filter((g, i) => periodOrders[i].cost === null)
+    .map(g => ({ id: g.id, num: g.order_number, paid: calcOrder(g).paid, products: (g.lines || [g]).filter(l => !l.not_supplied && (l.product_id ? !(Number(l.products?.cost_with_vat) > 0) : !l.manual_line)) }))
   // מוצר שהוחלף לא נספר פעמיים: calcOrder סופר רק את המוצר המחליף (המכירה עברה אליו, ולמוצר שהוחלף אין עלות)
   // הרווח מחושב רק על הזמנות שיש עלות לכל המוצרים שלהן (הזמנה עם מוצר בלי עלות לא נכללת ברווח)
   const known = periodOrders.filter(c => c.cost !== null)
@@ -170,7 +176,21 @@ export default function Dashboard() {
           <div className="summary-card"><span>עלות מוצרים בפחת וקד״מ (כולל מע״מ) · פחת {writeoffUnits} יח׳ {ils(writeoffCost)} · קד״מ / ללא חיוב {giveUnits} יח׳ {ils(giveCost)}{giveMissing ? ` · ${giveMissing} בלי עלות` : ''}</span><b className="neg">−{ils(writeoffCost + giveCost)}</b></div>
           <div className="summary-card"><span>רווח סופי (אחרי עמלות סליקה, פחת וקד״מ)</span><b className={finalProfit >= 0 ? 'pos' : 'neg'}>{ils(finalProfit)}</b></div>
         </div>
-        {missingCost > 0 && <div className="cmp-sub" style={{ margin: '-4px 0 10px' }}>⚠️ {missingCost} הזמנות ({ils(missingSales)}) כוללות מוצר בלי עלות, ולכן לא נכללות ברווח. הן כן נכללות בסה״כ מכר. כשתוזן עלות למוצר, הן ייכנסו.</div>}
+        {missingCost > 0 && (
+          <div className="cmp-sub" style={{ margin: '-4px 0 10px' }}>
+            ⚠️ {missingCost} הזמנות ({ils(missingSales)}) כוללות מוצר בלי עלות, ולכן לא נכללות ברווח (כן נכללות בסה״כ מכר). לחץ על המוצר כדי להזין לו עלות, או על ההזמנה:
+            {missingList.map(m => (
+              <div key={m.id} style={{ marginTop: 4 }}>
+                <a href="#" onClick={e => { e.preventDefault(); nav.openRecord('orders', m.id) }}>הזמנה {m.num ? `#${m.num}` : 'ידנית'}</a> ({ils(m.paid)}):{' '}
+                {m.products.map((l, i) => (
+                  <span key={l.id}>{i > 0 && ', '}{l.product_id
+                    ? <a href="#" onClick={e => { e.preventDefault(); nav.openRecord('products', l.product_id) }}>{l.products?.name || l.product_name}</a>
+                    : <span>{l.product_name} <span className="neg">(לא מקושר למוצר ב-CRM: פתח את ההזמנה)</span></span>}</span>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="summary-row wide" style={{ marginBottom: 0 }}>
           <div className="summary-card"><span>סחורה במלאי שלא נמכרה — לפי עלות קנייה (כולל מע״מ){stockNoCost ? ` · ${stockNoCost} מוצרים בלי עלות` : ''}</span><b>{stock ? ils(stockCost) : '…'}</b></div>
           <div className="summary-card"><span>אותה סחורה לפי מחיר באתר</span><b>{stock ? ils(stockSale) : '…'}</b></div>
