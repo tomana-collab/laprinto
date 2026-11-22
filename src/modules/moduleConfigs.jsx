@@ -22,6 +22,8 @@ const cityOf = row => {
   if (parts.length > 1) return parts[parts.length - 1]
   return parts[0] ? parts[0].split(/\s+/).pop() : ''
 }
+// שיטות המשלוח באתר (כפי שהן מגיעות בסנכרון)
+const SHIPPING_METHODS = ['משלוח עד בית הלקוח', 'משלוח חינם עד בית הלקוח', 'איסוף עצמי - ללא עלות', 'משלוח', 'משלוח חינם', 'תעריף קבוע']
 // כמה מוצרים בהזמנה יסופקו בפועל (בלי שורות שסומנו "לא לספק")
 const liveCount = row => row.lines.filter(l => !l.not_supplied).length
 const lineLabel = l => (Number(l.quantity) > 1 ? `${lineName(l)} ×${l.quantity}` : lineName(l))
@@ -329,6 +331,8 @@ export const MODULES = {
       { key: 'is_promo', label: '🎁 קד״מ — ללא חיוב (יורד מהמלאי, העלות נספרת ברווח)', type: 'checkbox', manualOnly: true },
       { key: 'price', label: 'מחיר ליחידה (₪) — ריק = המחיר באתר', type: 'number', manualOnly: true },
       { key: 'handling_status', label: 'סטטוס טיפול', type: 'select', options: ['', ...HANDLING_STATUSES] },
+      // שיטת משלוח: שינוי כאן נשמר ב-CRM בלבד (לא נשלח לאתר), ולא נדרס בסנכרון הבא (manual_fields). משפיע על עלות המשלוח ברווח
+      { key: 'shipping_method', label: 'שיטת משלוח (שינוי ב-CRM בלבד, לא באתר)', type: 'select', options: ['', ...SHIPPING_METHODS] },
       { key: 'notes', label: 'הערות פנימיות', type: 'textarea' },
     ],
     // total_amount מחושב אוטומטית ב-DB (generated column, כמו profit במוצרים)
