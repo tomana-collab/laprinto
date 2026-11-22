@@ -16,9 +16,9 @@ const norm = s => String(s || '').trim().toUpperCase()
 
 export async function loadSimpleStock() {
   const [ri, or, op, wo] = await Promise.all([
-    supabase.from('stock_receipt_items').select('quantity, product_id, products(name, sku, category, subcategory, price, cost_with_vat), stock_receipts(status)'),
+    supabase.from('stock_receipt_items').select('quantity, product_id, products(name, sku, category, subcategory, wc_categories, price, cost_with_vat), stock_receipts(status)'),
     supabase.from('orders').select('sku, product_id, quantity, wc_status, not_supplied'),
-    supabase.from('products').select('id, name, sku, category, subcategory, price, cost_with_vat, opening_stock').neq('opening_stock', 0),
+    supabase.from('products').select('id, name, sku, category, subcategory, wc_categories, price, cost_with_vat, opening_stock').neq('opening_stock', 0),
     supabase.from('stock_writeoffs').select('quantity, product_id, products(sku)'),
   ])
   if (wo.error) throw wo.error
@@ -30,14 +30,14 @@ export async function loadSimpleStock() {
     if ((i.stock_receipts?.status || 'סופק') !== 'סופק') continue
     const k = norm(i.products?.sku)
     if (!k) continue
-    const e = map.get(k) || { sku: i.products.sku, name: i.products.name, category: i.products.category, subcategory: i.products.subcategory, price: Number(i.products.price) || 0, cost: Number(i.products.cost_with_vat) || 0, product_id: i.product_id, received: 0, sold: 0, adjust: 0 }
+    const e = map.get(k) || { sku: i.products.sku, name: i.products.name, category: i.products.category, subcategory: i.products.subcategory, wc_categories: i.products.wc_categories, price: Number(i.products.price) || 0, cost: Number(i.products.cost_with_vat) || 0, product_id: i.product_id, received: 0, sold: 0, adjust: 0 }
     e.received += Number(i.quantity) || 0
     map.set(k, e)
   }
   // תיקון מספירת מלאי — גם למוצר שאף פעם לא נקלט בתעודה (למשל סחורה שהייתה לפני התעודות)
   for (const p of op.data || []) {
     const k = norm(p.sku) || 'ID:' + p.id
-    const e = map.get(k) || { sku: p.sku || '', name: p.name, category: p.category, subcategory: p.subcategory, price: Number(p.price) || 0, cost: Number(p.cost_with_vat) || 0, product_id: p.id, received: 0, sold: 0, adjust: 0 }
+    const e = map.get(k) || { sku: p.sku || '', name: p.name, category: p.category, subcategory: p.subcategory, wc_categories: p.wc_categories, price: Number(p.price) || 0, cost: Number(p.cost_with_vat) || 0, product_id: p.id, received: 0, sold: 0, adjust: 0 }
     e.adjust += Number(p.opening_stock) || 0
     map.set(k, e)
   }

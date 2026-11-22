@@ -9,7 +9,7 @@ import LiveStatus from '../components/LiveStatus'
 import CollapsibleSummary from '../components/CollapsibleSummary'
 import SimpleStock from '../components/SimpleStock'
 import Writeoffs from '../components/Writeoffs'
-import { inCategory } from '../lib/category'
+import { inCategory, categoryOptions } from '../lib/category'
 
 const num = n => (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -46,7 +46,7 @@ export default function Inventory() {
   async function load() {
     setError('')
     const [p, s, ri, mg] = await Promise.all([
-      supabase.from('products').select('id, name, sku, category, subcategory, cost_after_discount, price, opening_stock, stock_min, wc_product_id, wc_parent_id, suppliers(name)').order('name'),
+      supabase.from('products').select('id, name, sku, category, subcategory, wc_categories, cost_after_discount, price, opening_stock, stock_min, wc_product_id, wc_parent_id, suppliers(name)').order('name'),
       supabase.from('product_stock').select('*'),
       supabase.from('stock_receipt_items').select('product_id, quantity, unit_cost, discount_percent, stock_receipts(status, doc_date, created_at)'),
       supabase.from('product_merges').select('from_product_id'), // מוצרים שאוחדו למוצר אחר: לא מוצגים, הכמויות שלהם נספרות במוצר שאליו אוחדו
@@ -191,18 +191,13 @@ export default function Inventory() {
               r.physical > 0 && r.shelf_unit_cost ? r2(r.shelf_unit_cost) : '', r.physical > 0 ? r2(r.shelf_cost) : '', status(r).text]),
           }
         }} />
-        {/* קטגוריה ותתי הקטגוריות שלה: "קטגוריה" = הכול בה, "קטגוריה>תת" = רק תת הקטגוריה */}
+        {/* קטגוריות ראשיות ותתי קטגוריות. בחירה בשם כוללת כל מוצר ששייך לקטגוריה הזו באתר */}
         <select value={category} onChange={e => setCategory(e.target.value)}>
           <option value="">כל הקטגוריות</option>
-          {[...new Set(rows.map(r => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he')).map(c => {
-            const subs = [...new Set(rows.filter(r => r.category === c).map(r => r.subcategory).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'))
-            return (
-              <optgroup key={c} label={c}>
-                <option value={c}>כל {c}</option>
-                {subs.map(sc => <option key={sc} value={`${c}>${sc}`}>{sc}</option>)}
-              </optgroup>
-            )
-          })}
+          {(() => { const { roots, subs } = categoryOptions(rows); return <>
+            <optgroup label="קטגוריות">{roots.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+            <optgroup label="תתי קטגוריות">{subs.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+          </> })()}
         </select>
 
       </div>
