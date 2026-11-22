@@ -383,7 +383,9 @@ export const MODULES = {
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
       { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
       // שיטת משלוח בקיצור (המלא במעבר עכבר). בהזמנה עם איסוף עצמי אין עיר
-      { key: 'shipping_method', label: 'משלוח', sortValue: row => shipShort(row.shipping_method), render: row => row.shipping_method ? <span title={row.shipping_method}>{shipShort(row.shipping_method)}</span> : '—' },
+      { key: 'shipping_method', label: 'משלוח', sortValue: row => shipShort(row.shipping_method), render: row => row.shipping_method
+        ? <span title={row.shipping_method} className={`ship-badge ${/איסוף/.test(row.shipping_method) ? 'ship-pickup' : 'ship-delivery'}`}>{shipShort(row.shipping_method)}</span>
+        : '—' },
       { key: 'shipping_city', label: 'עיר', sortValue: row => cityOf(row), render: row => /איסוף/.test(row.shipping_method || '') ? '—' : (cityOf(row) || '—') },
       {
         // הזמנה עם מוצר אחד: שם המוצר. עם כמה מוצרים: "3 מוצרים", ולחיצה עליהם פותחת פירוט (עם מלאי) מתחת לשורה

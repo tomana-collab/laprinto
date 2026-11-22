@@ -538,3 +538,8 @@ main{ flex:1; min-width:0; padding:24px 28px; background:var(--main-bg); }
 
 /* שורת סיכום מעל עמודות הטבלה */
 .totals-row td{ font-weight:700; background:var(--teal-soft); border-bottom:2px solid var(--line); white-space:nowrap; }
+
+/* שיטת משלוח ברשימת ההזמנות: משלוח = ירוק בהיר, איסוף עצמי = תכלת. טקסט שחור (גם במצב כהה) */
+.ship-badge{ display:inline-block; padding:3px 10px; border-radius:6px; color:#000 !important; font-weight:600; white-space:nowrap; }
+.ship-delivery{ background:#c8f2cf; }
+.ship-pickup{ background:#c7e8fb; }
