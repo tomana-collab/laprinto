@@ -28,7 +28,11 @@ export default function Dashboard() {
   const [customFrom, setCustomFrom] = useState(() => ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [customTo, setCustomTo] = useState(() => ymd(new Date()))
   const [stock, setStock] = useState(null) // שווי הסחורה שבמלאי (חלון "במלאי")
-  useEffect(() => { loadSimpleStock().then(setStock).catch(() => setStock([])) }, [])
+  const [writeoffs, setWriteoffs] = useState([]) // פחת
+  useEffect(() => {
+    loadSimpleStock().then(setStock).catch(() => setStock([]))
+    supabase.from('stock_writeoffs').select('quantity, unit_cost, created_at').then(({ data }) => setWriteoffs(data || []))
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -36,7 +40,7 @@ export default function Dashboard() {
         supabase.from('tasks').select('*, team_members(full_name)'),
         supabase.from('expenses').select('*, team_members(full_name)'),
         supabase.from('stock_receipts').select('doc_date, created_at, stock_receipt_items(quantity, unit_cost, discount_percent)'),
-        supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, not_supplied, manual_line, product_id, replaces_line_id, shipping_total, shipping_method, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
+        supabase.from('orders').select('id, wc_order_id, total_amount, discount_amount, quantity, order_date, order_number, sku, product_name, wc_status, not_supplied, manual_line, product_id, replaces_line_id, is_promo, shipping_total, shipping_method, products(name, product_url, cost_with_vat, extra_expenses)').order('order_date', { ascending: false }),
         supabase.from('opportunities').select('status, value'),
         supabase.from('products').select('status'),
         supabase.from('suppliers').select('id', { count: 'exact', head: true }),
@@ -97,8 +101,19 @@ export default function Dashboard() {
   const from = [rawFrom, FINANCE_START].sort().pop()
   const inPeriod = o => { const d = String(o.order_date || '').slice(0, 10); return d >= from && (!to || d < to) }
   const periodSales = sales.filter(inPeriod)
+  // קד"מ / ללא חיוב (הזמנת קד"מ, או מוצר שנוסף להזמנה בלי חיוב) לא נכנסים לרווח על ההזמנות — העלות שלהם בקובייה נפרדת
+  const isGiveaway = l => l.is_promo || (l.manual_line && !l.replaces_line_id && !(Number(l.total_amount) > 0))
+  const giveLines = periodSales.filter(l => isGiveaway(l) && !l.not_supplied)
+  const lineCostOf = l => Number(l.products?.cost_with_vat) > 0 ? (Number(l.products.cost_with_vat) + (Number(l.products.extra_expenses) || 0)) * (Number(l.quantity) || 0) : null
+  const giveCost = giveLines.reduce((a, l) => a + (lineCostOf(l) || 0), 0)
+  const giveMissing = giveLines.filter(l => l.product_id && lineCostOf(l) === null).length
+  const giveUnits = giveLines.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
+  // פחת בתקופה: כמות × עלות ליחידה ברגע הרישום
+  const periodWriteoffs = writeoffs.filter(w => { const d = String(w.created_at || '').slice(0, 10); return d >= from && (!to || d < to) })
+  const writeoffCost = periodWriteoffs.reduce((a, w) => a + Number(w.quantity) * Number(w.unit_cost), 0)
+  const writeoffUnits = periodWriteoffs.reduce((a, w) => a + Number(w.quantity), 0)
   // לפי הזמנה (שורות של אותה הזמנה מאוחדות; מוצר שהוחלף לא נספר פעמיים)
-  const periodOrders = groupOrders(periodSales).map(calcOrder)
+  const periodOrders = groupOrders(periodSales.filter(l => !isGiveaway(l))).map(calcOrder)
   // מוצר שהוחלף לא נספר פעמיים: calcOrder סופר רק את המוצר המחליף (המכירה עברה אליו, ולמוצר שהוחלף אין עלות)
   // הרווח מחושב רק על הזמנות שיש עלות לכל המוצרים שלהן (הזמנה עם מוצר בלי עלות לא נכללת ברווח)
   const known = periodOrders.filter(c => c.cost !== null)
@@ -152,6 +167,9 @@ export default function Dashboard() {
           <div className="summary-card"><span>רווח על ההזמנות (מכר פחות עלות מוצרים ומשלוחים)</span><b className={grossProfit >= 0 ? 'pos' : 'neg'}>{ils(grossProfit)}</b></div>
           <div className="summary-card"><span>עמלות סליקה (0.75% + מע״מ)</span><b className="neg">−{ils(fees)}</b></div>
           <div className="summary-card"><span>רווח סופי (אחרי עמלות סליקה)</span><b className={finalProfit >= 0 ? 'pos' : 'neg'}>{ils(finalProfit)}</b></div>
+        </div>
+        <div className="summary-row wide">
+          <div className="summary-card"><span>עלות מוצרים בפחת וקד״מ (כולל מע״מ) · פחת {writeoffUnits} יח׳ {ils(writeoffCost)} · קד״מ / ללא חיוב {giveUnits} יח׳ {ils(giveCost)}{giveMissing ? ` · ${giveMissing} בלי עלות` : ''}</span><b className="neg">−{ils(writeoffCost + giveCost)}</b></div>
         </div>
         {missingCost > 0 && <div className="cmp-sub" style={{ margin: '-4px 0 10px' }}>⚠️ {missingCost} הזמנות ({ils(missingSales)}) כוללות מוצר בלי עלות, ולכן לא נכללות ברווח. הן כן נכללות בסה״כ מכר. כשתוזן עלות למוצר, הן ייכנסו.</div>}
         <div className="summary-row wide" style={{ marginBottom: 0 }}>
