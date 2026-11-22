@@ -87,12 +87,23 @@ export default function SimpleStock({ q = '', category = '', onCount }) {
   const ils = n => `₪${Math.round(n).toLocaleString('he-IL')}`
   const totalSale = shown.reduce((a, r) => a + r.saleValue, 0)
   const totalCost = shown.reduce((a, r) => a + r.costValue, 0)
+  const units = shown.reduce((a, r) => a + r.stock, 0)
   if (rows === null) return <div className="loading">טוען מלאי...</div>
   return (
     <>
       {error && <div className="err-inline">{error}</div>}
+      {/* סיכום לפי מה שמוצג (קטגוריה / חיפוש) */}
+      <div className="summary-row">
+        <div className="summary-card"><span>מוצרים</span><b>{shown.length}</b></div>
+        <div className="summary-card"><span>יחידות במלאי</span><b>{units}</b></div>
+        <div className="summary-card"><span>נמכרו</span><b>{shown.reduce((a, r) => a + r.sold, 0)}</b></div>
+        <div className="summary-card"><span>נקלטו בתעודות</span><b>{shown.reduce((a, r) => a + r.received, 0)}</b></div>
+        {hasWriteoff && <div className="summary-card"><span>פחת</span><b className="neg">{shown.reduce((a, r) => a + (r.writeoff || 0), 0)}</b></div>}
+        <div className="summary-card"><span>שווי במכירה (כולל מע״מ)</span><b>{ils(totalSale)}</b></div>
+        <div className="summary-card"><span>שווי בקנייה (כולל מע״מ)</span><b>{ils(totalCost)}</b></div>
+      </div>
       <div className="cmp-sub" style={{ marginBottom: 8 }}>
-        לפי מק"ט: מה שנקלט בתעודות פחות מה שנמכר בהזמנות{hasWriteoff ? ' ופחות פחת' : ''}{hasAdjust ? ', ועוד תיקון מספירת מלאי' : ''}. {shown.length} מוצרים, {shown.reduce((a, r) => a + r.stock, 0)} יחידות. שווי במכירה: <b>{ils(totalSale)}</b> · שווי בקנייה: <b>{ils(totalCost)}</b>
+        לפי מק"ט: מה שנקלט בתעודות פחות מה שנמכר בהזמנות{hasWriteoff ? ' ופחות פחת' : ''}{hasAdjust ? ', ועוד תיקון מספירת מלאי' : ''}.
       </div>
       <div className="table-wrap">
         <table className="data-table">

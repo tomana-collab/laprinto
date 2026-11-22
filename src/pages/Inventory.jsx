@@ -6,7 +6,6 @@ import { useLiveReload } from '../lib/useLive'
 import ExportButtons from '../components/ExportButtons'
 import { buildLots, shelfCost } from '../lib/stockValue'
 import LiveStatus from '../components/LiveStatus'
-import CollapsibleSummary from '../components/CollapsibleSummary'
 import SimpleStock from '../components/SimpleStock'
 import Writeoffs from '../components/Writeoffs'
 import { inCategory, categoryOptions } from '../lib/category'
@@ -122,20 +121,6 @@ export default function Inventory() {
 
   if (rows === null) return <div className="loading">טוען מלאי...</div>
 
-  const inStock = rows.filter(r => r.stock > 0)
-  const unsold = inStock.filter(r => r.sold_total === 0) // יש במלאי ועדיין לא נמכרה אפילו יחידה
-  const receivedUnits = rows.reduce((a, r) => a + r.received, 0)
-  const incomingUnits = rows.reduce((a, r) => a + r.incoming, 0)
-  const stockUnits = inStock.reduce((a, r) => a + r.stock, 0) // פנויות למכירה: רק מלאי חיובי, בלי חוסרים
-  // פיזית במחסן (לפני הזמנות פתוחות שמורות) ושווי הסחורה שבמלאי: יחידות × עלות (לפני מע"מ) ושווי מכירה באתר
-  const onShelf = rows.filter(r => r.physical > 0)
-  const physicalUnits = onShelf.reduce((a, r) => a + r.physical, 0)
-  const reservedUnits = rows.reduce((a, r) => a + Math.min(r.reserved, Math.max(0, r.physical)), 0)
-  const stockCost = onShelf.reduce((a, r) => a + r.shelf_cost, 0)
-  const stockSale = onShelf.reduce((a, r) => a + r.physical * r.unit_price, 0)
-  const unsoldUnits = unsold.reduce((a, r) => a + r.stock, 0)
-  const unsoldCost = unsold.reduce((a, r) => a + r.shelf_cost, 0) // מוצר שלא נמכר: כל הנקלט עדיין על המדף
-  const unsoldSale = unsold.reduce((a, r) => a + r.stock * r.unit_price, 0)
 
   return (
     <div>
@@ -153,28 +138,6 @@ export default function Inventory() {
       </div>}
       {error && <div className="err-inline">{error}</div>}
 
-      <CollapsibleSummary title="📊 סיכום מלאי" preview={`${num(physicalUnits)} יח׳ במחסן · עלות ₪${num(Math.round(stockCost))}`}>
-      <div className="summary-row">
-        <div className="summary-card"><span>יחידות שנקלטו בתעודות (סה״כ שהגיעו)</span><b>{num(receivedUnits)}</b></div>
-        <div className="summary-card"><span>יחידות שהוזמנו וממתינות לאספקה</span><b>{num(incomingUnits)}</b></div>
-        <div className="summary-card"><span>יחידות במחסן (פיזית)</span><b>{num(physicalUnits)}</b></div>
-        <div className="summary-card"><span>מתוכן שמורות להזמנות פתוחות</span><b>{num(reservedUnits)}</b></div>
-        <div className="summary-card"><span>פנויות למכירה</span><b>{num(stockUnits)}</b></div>
-      </div>
-
-      <div className="summary-row">
-        <div className="summary-card"><span>עלות הסחורה שבמלאי (לפני מע״מ)</span><b>₪{num(Math.round(stockCost))}</b></div>
-        <div className="summary-card"><span>שווי מכירה שלה באתר (כולל מע״מ)</span><b>₪{num(Math.round(stockSale))}</b></div>
-        <div className="summary-card"><span>מוצרים במלאי</span><b>{onShelf.length}</b></div>
-      </div>
-
-      <div className="summary-row">
-        <div className="summary-card"><span>יחידות שטרם נמכרה אפילו אחת מהן ({unsold.length} מוצרים)</span><b>{num(unsoldUnits)}</b></div>
-        <div className="summary-card"><span>כסף תקוע בהן — לפי עלות (לפני מע״מ)</span><b>₪{num(Math.round(unsoldCost))}</b></div>
-        <div className="summary-card"><span>שווי מכירה שלהן באתר (כולל מע״מ)</span><b>₪{num(Math.round(unsoldSale))}</b></div>
-      </div>
-
-      </CollapsibleSummary>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input type="text" placeholder="חיפוש שם / מק״ט" value={q} onChange={e => setQ(e.target.value)} />
@@ -210,6 +173,19 @@ export default function Inventory() {
         ))}
       </div>
 
+      {/* סיכום לחלונות "אף פעם לא נמכר" / "מלאי נמוך" / ספירה — לפי הסינון שמוצג */}
+      {(countMode || (filter !== 'instock' && filter !== 'writeoff')) && (() => {
+        const live = shown.filter(r => r.stock > 0)
+        return (
+          <div className="summary-row">
+            <div className="summary-card"><span>מוצרים</span><b>{shown.length}</b></div>
+            <div className="summary-card"><span>יחידות במלאי</span><b>{num(live.reduce((a, r) => a + r.stock, 0))}</b></div>
+            <div className="summary-card"><span>נמכרו</span><b>{num(shown.reduce((a, r) => a + r.sold_total, 0))}</b></div>
+            <div className="summary-card"><span>נקלטו בתעודות</span><b>{num(shown.reduce((a, r) => a + r.received, 0))}</b></div>
+            <div className="summary-card"><span>שווי במכירה (כולל מע״מ)</span><b>₪{num(Math.round(live.reduce((a, r) => a + r.stock * r.unit_price, 0)))}</b></div>
+          </div>
+        )
+      })()}
       {filter === 'writeoff' && !countMode ? <Writeoffs onCount={setWriteoffUnits} /> : filter === 'instock' && !countMode ? <SimpleStock q={q} category={category} onCount={(n, units) => setSimpleCount(units)} /> : (
       <div className="table-wrap">
         <table className="data-table">
