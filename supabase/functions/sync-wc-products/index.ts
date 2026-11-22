@@ -156,7 +156,7 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
   const wcProducts = await fetchAllWcProducts()
   const catMap = await fetchAllWcCategories()
 
-  const { data: existing, error: existingErr } = await admin.from('products').select('id, name, wc_product_id, wc_removed_at, cost, supplier_id, supplier_url, supplier_discount_percent, extra_expenses')
+  const { data: existing, error: existingErr } = await admin.from('products').select('id, name, wc_product_id, wc_removed_at, cost, supplier_id, supplier_url, supplier_discount_percent, extra_expenses, manual_fields')
   if (existingErr) throw new Error(existingErr.message)
 
   const byWcId = new Map<number, any>()
@@ -234,7 +234,12 @@ async function syncProducts(admin: ReturnType<typeof createClient>): Promise<Sta
     }
     seenWcIds.add(Number(wc.id))
     const match = byWcId.get(wc.id) || unlinkedByName.get(name.toLowerCase())
-    if (match) toUpdate.push({ id: match.id, data: siteData })
+    if (match) {
+      // שדות שנערכו ידנית ב-CRM (manual_fields) לא נדרסים
+      const data: Record<string, unknown> = { ...siteData }
+      for (const f of match.manual_fields || []) delete data[f]
+      toUpdate.push({ id: match.id, data })
+    }
     else {
       // וריאציה חדשה יורשת עלות/ספק מהמוצר הראשי אם כבר הוזנו שם
       const pr = parent ? byWcId.get(parent.id) : null

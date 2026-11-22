@@ -995,6 +995,28 @@ function OrderDetails({ order }) {
   )
 }
 
+// שדות שנערכו ידנית ב-CRM ולכן לא מתעדכנים בסנכרון מהאתר (products.manual_fields). אפשר להחזיר אותם לסנכרון
+const SITE_FIELD_LABELS = { name: 'שם', sku: 'מק"ט', product_url: 'קישור', image_url: 'תמונה', category: 'קטגוריה', subcategory: 'תת-קטגוריה',
+  price: 'מחיר', regular_price: 'מחיר רגיל', sale_price: 'מחיר מבצע', status: 'סטטוס', description: 'תיאור', short_description: 'תיאור קצר' }
+function ManualFieldsNote({ product }) {
+  const [fields, setFields] = useState(product.manual_fields || [])
+  const [err, setErr] = useState('')
+  if (!fields.length) return null
+  async function release() {
+    if (!window.confirm('להחזיר את השדות לסנכרון? בסנכרון הבא הם יתעדכנו לפי האתר.')) return
+    const { error } = await supabase.from('products').update({ manual_fields: [] }).eq('id', product.id)
+    if (error) { setErr(error.message); return }
+    setFields([])
+  }
+  return (
+    <div className="summary-row" style={{ display: 'block', padding: '8px 12px', margin: '10px 0' }}>
+      ✋ נערך ידנית ולא מתעדכן מהאתר: <b>{fields.map(f => SITE_FIELD_LABELS[f] || f).join(', ')}</b>
+      {' '}<button type="button" className="link-btn" onClick={release}>החזר לסנכרון מהאתר</button>
+      {err && <div className="err-inline">{err}</div>}
+    </div>
+  )
+}
+
 // הזמנות של המוצר: מי קנה אותו. לפי המוצר המקושר בשורה או לפי המק"ט. לחיצה על הזמנה פותחת אותה
 function ProductOrders({ product }) {
   const nav = useNav()
@@ -1119,6 +1141,7 @@ function EditModal({ config, initial, onCancel, onSave, onDelete, onOrderChanged
         </div>
 
         {config.isProduct && <ProductBreakdown form={form} />}
+        {config.isProduct && initial.manual_fields?.length > 0 && <ManualFieldsNote product={initial} />}
         {config.isProduct && initial.id && <ProductOrders product={initial} />}
 
         {config.hasLoginAction && <SetPasswordAction email={form.email} />}
