@@ -14,6 +14,14 @@ const HANDLING_STATUSES = ['נקלט ובטיפול', 'בוצעה חריטה / �
 // הזמנה עם כמה מוצרים: בטבלה מוצגת שורה אחת בלבד (המוצר הראשון + "+N"), כדי שהשורות לא יתארכו.
 // ריחוף מציג את כל המוצרים, ולחיצה על השורה פותחת את ההזמנה המלאה (שם כל הפריטים מופיעים בטבלה).
 const lineName = l => l.products?.name || l.product_name || '—'
+// עיר למשלוח: מהשדה shipping_city (מהאתר). בהזמנות שעוד לא סונכרנו מאז — מתוך הכתובת ("שם · רחוב, עיר, מיקוד")
+const cityOf = row => {
+  if (row.shipping_city) return row.shipping_city
+  const addr = String(row.shipping_address || '').split(' · ').pop()
+  const parts = addr.split(',').map(x => x.trim()).filter(x => x && !/^\d+$/.test(x))
+  if (parts.length > 1) return parts[parts.length - 1]
+  return parts[0] ? parts[0].split(/\s+/).pop() : ''
+}
 // כמה מוצרים בהזמנה יסופקו בפועל (בלי שורות שסומנו "לא לספק")
 const liveCount = row => row.lines.filter(l => !l.not_supplied).length
 const lineLabel = l => (Number(l.quantity) > 1 ? `${lineName(l)} ×${l.quantity}` : lineName(l))
@@ -368,6 +376,7 @@ export const MODULES = {
     columns: [
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
       { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
+      { key: 'shipping_city', label: 'עיר', sortValue: row => cityOf(row), render: row => /איסוף/.test(row.shipping_method || '') ? <span className="cmp-sub">איסוף עצמי</span> : (cityOf(row) || '—') },
       {
         // הזמנה עם מוצר אחד: שם המוצר. עם כמה מוצרים: "3 מוצרים", ולחיצה עליהם פותחת פירוט (עם מלאי) מתחת לשורה
         key: 'product',

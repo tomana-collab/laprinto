@@ -361,6 +361,7 @@ async function syncOrders(admin: ReturnType<typeof createClient>): Promise<Stats
         `${ship?.first_name || ''} ${ship?.last_name || ''}`.trim(),
         addressText(ship),
       ].filter(Boolean).join(' · '),
+      shipping_city: String(ship?.city || '').trim(),
       shipping_method: (o.shipping_lines || []).map((l: any) => l.method_title).filter(Boolean).join(', '),
       payment_method: o.payment_method_title || o.payment_method || '',
       customer_note: o.customer_note || '',

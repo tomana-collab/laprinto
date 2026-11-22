@@ -844,7 +844,7 @@ function AddFreeProduct({ order, onChanged, replace, onDone }) {
       wc_order_id: t.wc_order_id, wc_line_item_id: null, order_number: t.order_number, order_date: t.order_date, wc_status: t.wc_status,
       handling_status: t.handling_status, received_by: t.received_by, delivered_notified_at: t.delivered_notified_at,
       customer_name: t.customer_name, customer_phone: t.customer_phone, customer_email: t.customer_email,
-      shipping_address: t.shipping_address, shipping_method: t.shipping_method, payment_method: t.payment_method,
+      shipping_address: t.shipping_address, shipping_city: t.shipping_city || '', shipping_method: t.shipping_method, payment_method: t.payment_method,
       customer_note: t.customer_note, coupons: t.coupons, shipping_total: t.shipping_total, order_total: t.order_total,
       ...(replace
         ? { engraving: engText.trim(), has_engraving: engText.trim() !== '', personalization: varText.trim() || null }
