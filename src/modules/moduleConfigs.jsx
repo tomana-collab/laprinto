@@ -22,6 +22,8 @@ const cityOf = row => {
   if (parts.length > 1) return parts[parts.length - 1]
   return parts[0] ? parts[0].split(/\s+/).pop() : ''
 }
+// קיצור לשיטת משלוח לרשימה: איסוף עצמי / משלוח חינם / משלוח
+const shipShort = m => !m ? '' : /איסוף/.test(m) ? 'איסוף עצמי' : /חינם/.test(m) ? 'משלוח חינם' : /משלוח/.test(m) ? 'משלוח' : m
 // שיטות המשלוח באתר (כפי שהן מגיעות בסנכרון)
 const SHIPPING_METHODS = ['משלוח עד בית הלקוח', 'משלוח חינם עד בית הלקוח', 'איסוף עצמי - ללא עלות', 'משלוח', 'משלוח חינם', 'תעריף קבוע']
 // כמה מוצרים בהזמנה יסופקו בפועל (בלי שורות שסומנו "לא לספק")
@@ -380,7 +382,9 @@ export const MODULES = {
     columns: [
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
       { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
-      { key: 'shipping_city', label: 'עיר', sortValue: row => cityOf(row), render: row => /איסוף/.test(row.shipping_method || '') ? <span className="cmp-sub">איסוף עצמי</span> : (cityOf(row) || '—') },
+      // שיטת משלוח בקיצור (המלא במעבר עכבר). בהזמנה עם איסוף עצמי אין עיר
+      { key: 'shipping_method', label: 'משלוח', sortValue: row => shipShort(row.shipping_method), render: row => row.shipping_method ? <span title={row.shipping_method}>{shipShort(row.shipping_method)}</span> : '—' },
+      { key: 'shipping_city', label: 'עיר', sortValue: row => cityOf(row), render: row => /איסוף/.test(row.shipping_method || '') ? '—' : (cityOf(row) || '—') },
       {
         // הזמנה עם מוצר אחד: שם המוצר. עם כמה מוצרים: "3 מוצרים", ולחיצה עליהם פותחת פירוט (עם מלאי) מתחת לשורה
         key: 'product',
