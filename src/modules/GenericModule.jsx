@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { calcProduct, calcOrder, receiptsTotalWithVat, replacedLineIds, orderShips } from '../lib/pricing'
+import { calcProduct, calcOrder, receiptsTotalWithVat, replacedLineIds, orderShips, isGiveawayLine } from '../lib/pricing'
 import ExportButtons from '../components/ExportButtons'
 import { printPackingSlip } from '../lib/exportPdf'
 import { groupOrders, engravingText, variationText } from '../lib/orders'
@@ -660,9 +660,11 @@ function OrderLines({ order, onChanged }) {
             const name = l.products?.name || l.product_name || '—'
             const c = calcOrder({ lines: [l] }, replaced)
             // מוצר שהוחלף / לא מסופק: הנתונים המקוריים נשארים לתצוגה (באפור וקו חוצה), אבל לא נספרים במכירה, בעלות ובמלאי
-            const o = l.not_supplied ? calcOrder({ lines: [{ ...l, not_supplied: false }] }, new Set()) : c
+            const give = isGiveawayLine(l) && !l.not_supplied // מתנה / קד"מ: העלות מוצגת באפור, נספרת בפחת וקד"מ ולא ברווח
+            const o = l.not_supplied || give ? calcOrder({ lines: [{ ...l, not_supplied: false }] }, new Set(), { raw: true }) : c
             const oProfit = o.cost === null ? null : Math.round((o.sale - o.cost) * 100) / 100
-            const tip = replaced.has(l.id) ? 'הנתונים לפני ההחלפה. לא נספרים: המכירה עברה למוצר המחליף' : 'לא מסופק: לא נספר בעלות ובמלאי'
+            const tip = give ? 'מתנה / קד״מ: לא נספר ברווח ההזמנה. העלות נספרת בפחת וקד״מ בדשבורד'
+              : replaced.has(l.id) ? 'הנתונים לפני ההחלפה. לא נספרים: המכירה עברה למוצר המחליף' : 'לא מסופק: לא נספר בעלות ובמלאי'
             const old = (counted, orig, text) => counted === orig ? null : <span className="ns-val" title={tip}>{text}</span>
             const href = wpProductEditUrl(l.products?.wc_product_id)
             return (
@@ -694,7 +696,7 @@ function OrderLines({ order, onChanged }) {
                 <td>{Number(l.discount_amount) > 0 ? <span className="neg">−₪{l.discount_amount}</span> : '—'}</td>
                 <td>{old(c.sale, o.sale, `₪${o.sale}`) || `₪${c.sale}`}</td>
                 <td>{old(c.cost, o.cost, o.cost === null ? '—' : `₪${o.cost}`) || (c.cost === null ? <span title="המוצר לא מקושר או שלא הוזנה לו עלות">—</span> : `₪${c.cost}`)}</td>
-                <td>{l.not_supplied
+                <td>{l.not_supplied || give
                   ? <span className="ns-val" title={tip}>{oProfit === null ? '—' : `₪${oProfit}`}</span>
                   : c.cost === null ? '—' : <span className={c.sale - c.cost >= 0 ? 'pos' : 'neg'}>₪{Math.round((c.sale - c.cost) * 100) / 100}</span>}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
@@ -957,7 +959,8 @@ function OrderBreakdown({ order }) {
       {row(`עמלת סליקה (0.75% + מע"מ מ-₪${c.paid})`, `−₪${c.fee}`, 'neg')}
       {row(ships ? 'עלות משלוח (מההגדרות)' : 'עלות משלוח (איסוף עצמי)', ships ? (c.shipCost ? `−₪${c.shipCost}` : '₪0 (לא הוגדרה בהגדרות)') : '₪0', c.shipCost ? 'neg' : '')}
       {hr}
-      {row('רווח כולל מע"מ', c.profit === null ? '—' : `₪${c.profit}`, c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
+      {row('רווח כולל מע"מ', c.promoOnly ? '🎁 קד״מ: לא נספר ברווח' : c.profit === null ? '—' : `₪${c.profit}`, c.promoOnly || c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
+      {c.giveCost > 0 && <div className="cmp-sub" style={{ marginTop: 4 }}>🎁 מתנה / קד״מ בהזמנה: עלות ₪{c.giveCost}. לא נכלל ברווח ההזמנה, ונספר בדשבורד ב"עלות מוצרים בפחת וקד״מ".</div>}
     </div>
   )
 }

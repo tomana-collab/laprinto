@@ -52,13 +52,22 @@ export function replacedLineIds(lines) {
   const ids = new Set((lines || []).map(l => l.replaces_line_id).filter(Boolean))
   return new Set((lines || []).filter(l => l.not_supplied && ids.has(l.id)).map(l => l.id))
 }
+// קד"מ / ללא חיוב: הזמנת קד"מ, או מוצר שנוסף להזמנה בלי חיוב (לא מוצר מחליף). לא חלק מהמכירות, העלות והרווח —
+// העלות שלו נספרת בנפרד ("פחת וקד״מ"), ומוחזרת כאן ב-giveCost
+export const isGiveawayLine = l => !!l.is_promo || (!!l.manual_line && !l.replaces_line_id && !(Number(l.total_amount) > 0))
+
 // replaced = מזהי שורות שהוחלפו (כשמחשבים שורה בודדת מתוך הזמנה). ברירת מחדל: מחושב מהשורות עצמן
-export function calcOrder(order, replaced) {
+// opts.raw = בלי להוציא קד"מ (לתצוגת הנתונים המקוריים של שורה)
+export function calcOrder(order, replaced, opts = {}) {
   const all = order.lines || [order]
   // (בודק שזה Set: calcOrder נקרא גם דרך .map, שמעביר אינדקס כפרמטר שני)
   const skip = replaced instanceof Set ? replaced : replacedLineIds(all)
-  const sold = all.filter(l => !skip.has(l.id))
-  const lines = all
+  const give = opts.raw ? [] : all.filter(l => isGiveawayLine(l) && !l.not_supplied)
+  const giveIds = new Set(give.map(l => l.id))
+  const sold = all.filter(l => !skip.has(l.id) && !giveIds.has(l.id))
+  const lines = all.filter(l => !giveIds.has(l.id))
+  const giveCost = r2(give.reduce((a, l) => a + (lineCost(l) || 0), 0))
+  const promoOnly = give.length > 0 && lines.every(l => l.not_supplied)
   const sale = r2(sold.reduce((a, l) => a + (Number(l.total_amount) || 0), 0))
   const discount = r2(sold.reduce((a, l) => a + (Number(l.discount_amount) || 0), 0))
   const shipping = r2(Number(order.shipping_total) || 0)
@@ -69,7 +78,7 @@ export function calcOrder(order, replaced) {
   const missing = lines.filter((_, i) => costs[i] === null).map(l => l.products?.name || l.product_name || '?')
   const cost = missing.length ? null : r2(costs.reduce((a, c) => a + c, 0))
   return {
-    sale, discount, before: r2(sale + discount), shipping, paid, fee, shipCost, cost, missing,
+    sale, discount, before: r2(sale + discount), shipping, paid, fee, shipCost, cost, missing, giveCost, promoOnly,
     profit: cost === null ? null : r2(paid - cost - fee - shipCost),
   }
 }

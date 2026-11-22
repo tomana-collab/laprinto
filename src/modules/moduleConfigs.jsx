@@ -448,10 +448,12 @@ export const MODULES = {
         // ברשימה רק רווח כולל מע"מ (בלי עמודות מכירה ועלות, כדי שלא תהיה גלילה לצד). הפירוט במעבר עכבר ובתוך ההזמנה
         sortValue: row => calcOrder(row).profit ?? -Infinity,
         render: row => {
-          const { profit, sale, cost, missing } = calcOrder(row)
+          const { profit, sale, cost, missing, giveCost, promoOnly } = calcOrder(row)
+          // הזמנת קד"מ: לא חלק מהרווח. העלות שלה נספרת ב"פחת וקד״מ" בדשבורד
+          if (promoOnly) return <span className="sup-stock" title={`קד״מ: לא נספר ברווח. עלות ₪${giveCost} נספרת בפחת וקד״מ`}>🎁 קד״מ</span>
           return profit === null
             ? <span title={`חסרה עלות: ${missing.join(', ')}`}>—</span>
-            : <span className={profit >= 0 ? 'pos' : 'neg'} title={`מכירה ₪${sale} · עלות כולל מע"מ ₪${cost}`}>₪{profit}</span>
+            : <span className={profit >= 0 ? 'pos' : 'neg'} title={`מכירה ₪${sale} · עלות כולל מע"מ ₪${cost}${giveCost ? ` · מתנה / קד״מ ₪${giveCost} (נספר בפחת וקד״מ, לא כאן)` : ''}`}>₪{profit}</span>
         },
       },
     ],

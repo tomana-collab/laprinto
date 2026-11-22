@@ -221,7 +221,7 @@ export default function Dashboard() {
                       <td>{o.sku || '—'}</td>
                       <td>{o.quantity}</td>
                       <td>₪{c.sale}</td>
-                      <td>{c.profit === null ? '—' : <span className={c.profit >= 0 ? 'pos' : 'neg'}>₪{c.profit}</span>}</td>
+                      <td>{c.promoOnly ? <span className="sup-stock" title={`עלות ₪${c.giveCost} נספרת בפחת וקד״מ`}>🎁 קד״מ</span> : c.profit === null ? '—' : <span className={c.profit >= 0 ? 'pos' : 'neg'}>₪{c.profit}</span>}</td>
                     </tr>
                   )
                 })}
