@@ -965,6 +965,18 @@ function OrderBreakdown({ order }) {
   )
 }
 
+// כפתור "העתק" קטן: מעתיק את הטקסט ללוח ומראה "✓ הועתק" לשנייה וחצי
+function CopyButton({ text }) {
+  const [done, setDone] = useState(false)
+  async function copy(e) {
+    e.preventDefault(); e.stopPropagation()
+    try { await navigator.clipboard.writeText(String(text || '').trim()) }
+    catch { window.prompt('העתק את המספר:', String(text || '').trim()); return }
+    setDone(true); setTimeout(() => setDone(false), 1500)
+  }
+  return <button type="button" className="cmp-tool" style={{ padding: '2px 8px', fontSize: 12 }} title="העתק את המספר" onClick={copy}>{done ? '✓ הועתק' : '📋 העתק'}</button>
+}
+
 function OrderDetails({ order }) {
   const phoneDigits = (order.customer_phone || '').replace(/\D/g, '')
   // וואטסאפ: מספר ישראלי שמתחיל ב-0 → קידומת 972
@@ -984,7 +996,7 @@ function OrderDetails({ order }) {
       <div className="fields-grid cols-4" style={{ marginTop: 8 }}>
         {item('שם המזמין', order.customer_name)}
         {item('טלפון', phoneDigits
-          ? <span><a href={`tel:${order.customer_phone}`}>{order.customer_phone}</a>{' · '}<a href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer">וואטסאפ</a></span>
+          ? <span><a href={`tel:${order.customer_phone}`}>{order.customer_phone}</a>{' '}<CopyButton text={order.customer_phone} />{' · '}<a href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer">וואטסאפ</a></span>
           : null)}
         {item('אימייל', order.customer_email ? <a href={`mailto:${order.customer_email}`}>{order.customer_email}</a> : null)}
         {item('סטטוס הזמנה', ORDER_STATUS_LABELS[order.wc_status] || order.wc_status)}
