@@ -219,8 +219,13 @@ export const MODULES = {
       { key: 'cost_with_vat', label: 'עלות כולל מע"מ', render: row => `₪${row.cost_with_vat}` },
       { key: 'clearing_fee', label: 'עמלת סליקה', render: row => `₪${row.clearing_fee}` },
       // רווח בסוף: שורת התוצאה
-      { key: 'profit', label: 'רווח', render: row => <span className={row.profit >= 0 ? 'pos' : 'neg'}>₪{row.profit}</span> },
-      { key: 'margin_percent', label: 'מרווח', render: row => `${row.margin_percent}%` },
+      // רווח נטו ליחידה: מחיר באתר פחות עלות קנייה כולל מע"מ (אחרי הנחת ספק), הוצאות נלוות ועמלת סליקה. בלי משלוח.
+      // מחושב ב-DB (profit). מוצר בלי עלות: "—" (אחרת היה נראה כאילו כל המחיר רווח)
+      { key: 'profit', label: 'רווח נטו (בלי משלוח)', sortValue: row => Number(row.cost) > 0 ? Number(row.profit) : -Infinity,
+        render: row => Number(row.cost) > 0
+          ? <span className={row.profit >= 0 ? 'pos' : 'neg'} title={`מחיר באתר ₪${row.price} − עלות כולל מע״מ ₪${row.cost_with_vat}${Number(row.extra_expenses) ? ` − הוצאות נלוות ₪${row.extra_expenses}` : ''} − עמלת סליקה ₪${row.clearing_fee}`}><b>₪{row.profit}</b></span>
+          : <span className="cmp-sub" title="לא הוזנה עלות למוצר">אין עלות</span> },
+      { key: 'margin_percent', label: 'מרווח', sortValue: row => Number(row.cost) > 0 ? Number(row.margin_percent) : -Infinity, render: row => Number(row.cost) > 0 ? `${row.margin_percent}%` : '—' },
     ],
   },
 
