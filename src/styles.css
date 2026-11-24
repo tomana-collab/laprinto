@@ -829,3 +829,14 @@ main{ padding:24px 28px 40px; background:var(--main-bg); }
   .summary-card::before{ inset-block:12px; }
   .summary-card:hover{ transform:none; }
 }
+
+/* קליטת תעודות: מצב תשלום לספק */
+.data-table select.pay-select{ font-weight:700; border-radius:999px; padding:4px 10px; }
+.pay-paid{ background:var(--teal-soft) !important; color:var(--teal-ink) !important; border-color:color-mix(in srgb, var(--teal) 35%, transparent) !important; }
+.pay-unpaid{ background:var(--coral-soft) !important; color:#C7402A !important; border-color:color-mix(in srgb, var(--coral) 35%, transparent) !important; }
+.pay-partial{ background:var(--amber-soft) !important; color:#9A5B0B !important; border-color:color-mix(in srgb, var(--amber) 40%, transparent) !important; }
+:root[data-theme="dark"] .pay-unpaid{ color:#FF9A88 !important; }
+:root[data-theme="dark"] .pay-partial{ color:#F2C27A !important; }
+.debt-suppliers{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:-4px 0 14px; }
+.debt-chip{ background:var(--paper); border:1px solid color-mix(in srgb, var(--coral) 30%, var(--line)); border-radius:999px; padding:4px 12px; font-size:13px; }
+.debt-chip b{ color:var(--coral); font-variant-numeric:tabular-nums; margin-inline-start:4px; }
