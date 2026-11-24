@@ -406,7 +406,7 @@ export const MODULES = {
     // מספר הזמנה ופרטים מלאים — בתוך חלון העריכה בלבד
     columns: [
       { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
-      { key: 'customer_name', label: 'מזמין', render: row => row.customer_name || '—' },
+      { key: 'customer_name', label: 'מזמין', render: row => <>{row.customer_name || '—'}{row.merged_orders && <span className="merge-tag" title={`הזמנה מאוחדת: ${row.merged_orders.join(' + ')}`}>🔗 {row.merged_orders.length}</span>}</> },
       // שיטת משלוח בקיצור (המלא במעבר עכבר). בהזמנה עם איסוף עצמי אין עיר
       { key: 'shipping_method', label: 'משלוח', sortValue: row => shipShort(row.shipping_method), render: row => row.shipping_method
         ? <span title={row.shipping_method + (row.shipping_company ? ` · ${row.shipping_company}` : '')} className={`ship-badge ${/איסוף/.test(row.shipping_method) ? 'ship-pickup' : 'ship-delivery'}`}>{shipShort(row.shipping_method)}{row.shipping_company ? ` · ${row.shipping_company}` : ''}</span>

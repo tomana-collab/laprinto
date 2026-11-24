@@ -851,3 +851,7 @@ main{ padding:24px 28px 40px; background:var(--main-bg); }
 .fit-table .order-cell{ max-width:240px; }
 .fit-table .order-multi{ white-space:normal; }
 @media (max-width:860px){ .table-wrap.fit-table{ overflow-x:auto; } }
+
+/* איחוד הזמנות (CRM בלבד) */
+.merge-tag{ display:inline-block; margin-inline-start:6px; background:var(--violet-soft); color:var(--violet); border-radius:999px; font-size:11.5px; font-weight:700; padding:1px 7px; white-space:nowrap; }
+.merge-banner{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; background:var(--violet-soft); border:1px solid color-mix(in srgb, var(--violet) 25%, transparent); border-radius:12px; padding:10px 12px; margin:10px 0; font-size:13.5px; }

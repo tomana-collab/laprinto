@@ -173,6 +173,19 @@ export default function GenericModule({ config, focusId = null }) {
     setSelected(new Set()); load()
   }
 
+  // איחוד הזמנות ב-CRM בלבד (לא באתר): השורות של ההזמנות האחרות מצטרפות להזמנה הראשונה (הישנה ביותר) מהאתר
+  async function mergeOrders(list) {
+    const site = list.filter(o => o.wc_order_id).sort((a, b) => String(a.order_date || '').localeCompare(String(b.order_date || '')))
+    if (!site.length) { window.alert('אפשר לאחד רק כשלפחות אחת ההזמנות שנבחרו היא הזמנה מהאתר.'); return }
+    const main = site[0]
+    const names = list.map(o => o.order_number ? `#${o.order_number}` : 'ידנית').join(' + ')
+    if (!window.confirm(`לאחד את ההזמנות ${names} להזמנה אחת (#${main.order_number})?\nהאיחוד רק ב-CRM, באתר ההזמנות נשארות נפרדות. אפשר לבטל את האיחוד מתוך ההזמנה.`)) return
+    const ids = list.filter(o => o !== main).flatMap(idsOf)
+    const { error } = await supabase.from(config.table).update({ merged_into_wc_order_id: main.wc_order_id }).in('id', ids)
+    if (error) { setError(error.message); return }
+    setSelected(new Set()); load()
+  }
+
   if (rows === null && error) return <div className="err-inline">שגיאה בטעינת {config.label}: {error}</div>
   if (rows === null) return <div className="loading">טוען {config.label}...</div>
 
@@ -348,6 +361,7 @@ export default function GenericModule({ config, focusId = null }) {
               {Object.entries(bs.labels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           ))}
+          {config.isOrder && selectedRows.length > 1 && <button className="btn-add" onClick={() => mergeOrders(selectedRows)} title="איחוד ב-CRM בלבד, לא באתר">🔗 איחוד הזמנות</button>}
           <button className="btn-add" onClick={() => bulkDelete(selectedRows)}>מחיקה</button>
           <button className="btn-add" onClick={() => setSelected(new Set())}>ביטול בחירה</button>
         </div>
@@ -603,10 +617,30 @@ function OrderPanel({ order, onChanged }) {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
         <button type="button" className="cmp-tool" onClick={printSlip} title="מדפיס דף למחסן: פרטי לקוח, כתובת, טלפון ומה יש בהזמנה, בלי מחירים">🖨 הדפסה למחסן (PDF)</button>
       </div>
+      {order.merged_orders && <MergedBanner order={order} onChanged={onChanged} />}
       {order.wc_order_id && <OrderDetails order={order} />}
       <OrderLines order={order} onChanged={onChanged} />
       <OrderBreakdown order={order} />
     </>
+  )
+}
+
+// הזמנה שאוחדה ב-CRM: מאילו הזמנות, וביטול האיחוד (כל הזמנה חוזרת להיות נפרדת)
+function MergedBanner({ order, onChanged }) {
+  const [busy, setBusy] = useState(false)
+  async function unmerge() {
+    if (!window.confirm('לבטל את האיחוד? כל הזמנה תחזור להופיע בנפרד.')) return
+    setBusy(true)
+    const { error } = await supabase.from('orders').update({ merged_into_wc_order_id: null }).in('id', order.line_ids || [order.id])
+    setBusy(false)
+    if (error) { window.alert(error.message); return }
+    onChanged?.()
+  }
+  return (
+    <div className="merge-banner">
+      <span>🔗 הזמנה מאוחדת (ב-CRM בלבד): <b>{order.merged_orders.join(' + ')}</b> · דמי המשלוח וסה״כ באתר מסוכמים מכל ההזמנות</span>
+      <button type="button" className="cmp-tool" disabled={busy} onClick={unmerge}>ביטול איחוד</button>
+    </div>
   )
 }
 

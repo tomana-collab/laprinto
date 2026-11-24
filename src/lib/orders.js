@@ -20,16 +20,35 @@ export const variationText = t => splitMeta(t).other
 
 // שורות בטבלת orders הן שורות פריט. הזמנה מהאתר עם כמה פריטים (אותו wc_order_id)
 // מאוחדת כאן להזמנה אחת עם lines. הזמנה ידנית (בלי wc_order_id) נשארת שורה בודדת.
+// איחוד הזמנות (ב-CRM בלבד): שורה עם merged_into_wc_order_id מצטרפת להזמנה הזו.
+export const orderKey = r => r.merged_into_wc_order_id || r.wc_order_id || null
 export function groupOrders(rows) {
   const byOrder = new Map()
-  const out = []
+  let out = []
   for (const r of rows) {
-    if (!r.wc_order_id) { out.push({ ...r, lines: [r], line_ids: [r.id] }); continue }
-    let g = byOrder.get(r.wc_order_id)
-    if (!g) { g = { ...r, lines: [], line_ids: [] }; byOrder.set(r.wc_order_id, g); out.push(g) }
+    const key = orderKey(r)
+    if (!key) { out.push({ ...r, lines: [r], line_ids: [r.id] }); continue }
+    let g = byOrder.get(key)
+    if (!g) { g = { ...r, lines: [], line_ids: [], _key: key }; byOrder.set(key, g); out.push(g) }
     g.lines.push(r)
     g.line_ids.push(r.id)
   }
+  // הזמנה מאוחדת: פרטי ההזמנה מההזמנה הראשית, השורות שלה ראשונות, ודמי משלוח וסה"כ באתר מסוכמים מכל ההזמנות
+  out = out.map(g => {
+    if (!g._key) return g
+    const mergedIn = g.lines.filter(l => l.merged_into_wc_order_id)
+    if (!mergedIn.length) { delete g._key; return g }
+    const isMain = l => !l.merged_into_wc_order_id && l.wc_order_id === g._key
+    const lines = [...g.lines.filter(isMain), ...g.lines.filter(l => !isMain(l))]
+    const main = lines.find(isMain) || lines[0]
+    const perOrder = new Map()
+    for (const l of lines) { const k = l.wc_order_id || 'm' + l.id; if (!perOrder.has(k)) perOrder.set(k, l) }
+    const firsts = [...perOrder.values()]
+    const sum = f => firsts.some(l => l[f] != null) ? Math.round(firsts.reduce((a, l) => a + (Number(l[f]) || 0), 0) * 100) / 100 : null
+    return { ...main, wc_order_id: g._key, lines, line_ids: lines.map(l => l.id),
+      merged_orders: firsts.map(l => l.order_number ? `#${l.order_number}` : 'ידנית'),
+      shipping_total: sum('shipping_total'), order_total: sum('order_total') }
+  })
   for (const g of out) {
     if (g.lines.length < 2) continue
     const nameOf = l => l.products?.name || l.product_name || ''
