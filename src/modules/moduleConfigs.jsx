@@ -169,10 +169,12 @@ export const MODULES = {
     filters: [
       { key: 'category', label: 'כל הקטגוריות', type: 'values' },
       // מה נשאר להשלים במוצרים (המספר בסוגריים מתעדכן לפי הנתונים)
-      // ברירת מחדל: רק מוצרים שיש מהם במלאי (אותו חישוב כמו "במלאי" בעמוד המלאי: נקלט − נמכר − פחת, לפי מק"ט)
+      // ברירת מחדל: המוצרים שבחנות עצמה — מפורסמים באתר (פעיל), לא הוסרו, ובמלאי באתר (לא "אין במלאי").
+      // מוצר ראשי של וריאציות לא מוצג (הוריאציות שלו מוצגות), וגם לא מוצר שלא קיים באתר
       { key: 'missing', type: 'preset', options: [
-        { value: 'in_stock', label: 'במלאי', test: (r, extra) => !extra || inStockOf(r, extra) > 0 },
+        { value: 'store', label: 'בחנות (פעילים ובמלאי באתר)', test: r => r.status === 'פעיל' && !r.wc_removed_at && ['instock', 'onbackorder'].includes(r.stock_status) },
         { value: 'all', label: 'כל המוצרים' },
+        { value: 'in_stock', label: 'יש במחסן (לפי קליטות ומכירות)', test: (r, extra) => !extra || inStockOf(r, extra) > 0 },
         { value: 'no_sku', label: 'ללא מק"ט', test: r => !String(r.sku || '').trim() },
         { value: 'no_price', label: 'ללא מחיר', test: r => !(Number(r.price) > 0) },
         { value: 'no_supplier', label: 'ללא ספק', test: r => !r.supplier_id },
