@@ -785,3 +785,47 @@ main{ padding:24px 28px 40px; background:var(--main-bg); }
 @media (prefers-contrast: more){
   :root{ --line:#B9BCCB; --line-strong:#8E92A6; --ink-soft:#40445A; }
 }
+
+/* ---------- קוביות סיכום: מראה מודרני ושקט ----------
+   פס צבע דק בקצה + הילה רכה בפינה, לפי מצב המספר (רווח / הוצאה / ניטרלי).
+   בלי אייקונים או רעש נוסף: המספר נשאר הדבר הבולט. */
+.summary-card{
+  --tone: var(--violet);
+  position:relative; overflow:hidden; isolation:isolate;
+  padding:15px 18px 14px; gap:8px;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--paper) 92%, var(--tone)) 0%, var(--paper) 55%);
+  transition:transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s ease;
+}
+.summary-card:has(b.pos){ --tone: var(--teal); }
+.summary-card:has(b.neg){ --tone: var(--coral); }
+/* פס צבע בקצה ההתחלה (ימין ב-RTL) */
+.summary-card::before{
+  content:''; position:absolute; inset-block:14px; inset-inline-start:0; width:3px;
+  border-start-end-radius:3px; border-end-end-radius:3px;
+  background:var(--tone); opacity:.85;
+}
+/* הילה רכה בפינה */
+.summary-card::after{
+  content:''; position:absolute; z-index:-1; width:140px; height:140px; inset-block-start:-70px; inset-inline-end:-60px;
+  background:radial-gradient(closest-side, color-mix(in srgb, var(--tone) 16%, transparent), transparent);
+  pointer-events:none;
+}
+.summary-card span{ font-size:12px; font-weight:600; letter-spacing:.01em; }
+.summary-card b{ font-size:23px; font-weight:600; line-height:1.15; letter-spacing:-.02em; }
+.summary-card:hover{ transform:translateY(-2px); box-shadow:var(--shadow); border-color:color-mix(in srgb, var(--tone) 25%, var(--line)); }
+/* בתוך מקטע דשבורד: רקע אפור עם אותו פס והילה */
+.dash-section .summary-card{
+  background:linear-gradient(180deg, color-mix(in srgb, var(--hover-bg) 88%, var(--tone)) 0%, var(--hover-bg) 60%);
+}
+.dash-section .summary-card:hover{ box-shadow:var(--shadow-sm); border-color:color-mix(in srgb, var(--tone) 22%, transparent); }
+/* קוביות שמשמשות כפאנל (מחשבון רווח, הודעה במלאי) — בלי פס והילה */
+.summary-card[style*="block"]::before, .summary-card[style*="block"]::after,
+.summary-row[style*="block"]::before{ display:none; }
+.summary-card[style*="block"]{ background:var(--paper); }
+.summary-card[style*="block"]:hover{ transform:none; }
+@media (max-width:640px){
+  .summary-card{ padding:12px 13px 11px; gap:6px; }
+  .summary-card b{ font-size:18px; }
+  .summary-card::before{ inset-block:12px; }
+  .summary-card:hover{ transform:none; }
+}
