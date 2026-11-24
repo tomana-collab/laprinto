@@ -193,7 +193,8 @@ export default function GenericModule({ config, focusId = null }) {
   for (const f of config.filters || []) {
     if (f.type === 'preset') {
       const opt = f.options.find(o => o.value === (filterValues[f.key] ?? f.options[0].value))
-      if (opt?.test) filtered = filtered.filter(opt.test)
+      // הסינון מקבל גם את נתוני העזר (extra), למשל מלאי למוצרים
+      if (opt?.test) filtered = filtered.filter(r => opt.test(r, extra))
       continue
     }
     const val = filterValues[f.key]
@@ -208,7 +209,7 @@ export default function GenericModule({ config, focusId = null }) {
     const norm = v => (v === '' || v === undefined ? null : typeof v === 'string' && v.trim() !== '' && !isNaN(v) ? Number(v) : v)
     const sign = sort.dir === 'desc' ? -1 : 1
     filtered = [...filtered].sort((a, b) => {
-      const x = norm(get(a)), y = norm(get(b))
+      const x = norm(get(a, extra)), y = norm(get(b, extra))
       if (x === null && y === null) return 0
       if (x === null) return 1 // ריקים תמיד בסוף
       if (y === null) return -1
@@ -305,7 +306,7 @@ export default function GenericModule({ config, focusId = null }) {
           {(config.filters || []).map(f => (
             f.type === 'preset' ? (
               <select key={f.key} value={filterValues[f.key] ?? f.options[0].value} onChange={e => setFilter(f.key, e.target.value)}>
-                {f.options.map(o => <option key={o.value} value={o.value}>{o.label}{o.test ? ` (${viewRows.filter(o.test).length})` : ''}</option>)}
+                {f.options.map(o => <option key={o.value} value={o.value}>{o.label}{o.test ? ` (${viewRows.filter(r => o.test(r, extra)).length})` : ''}</option>)}
               </select>
             ) : f.type === 'relation' ? (
               <RelationField

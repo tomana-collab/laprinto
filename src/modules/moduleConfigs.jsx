@@ -6,6 +6,7 @@ import ReadyButton from '../components/ReadyButton'
 import { formatDate, formatDateTime, ORDER_STATUS_LABELS } from '../lib/format'
 import { calcOrder, SHIPPING_COMPANIES } from '../lib/pricing'
 import { supabase } from '../supabaseClient'
+import { loadSimpleStock } from '../components/SimpleStock'
 
 const SHOWN_ORDER_STATUSES = ['processing', 'completed']
 const SHOWN_ORDER_LABELS = Object.fromEntries(SHOWN_ORDER_STATUSES.map(k => [k, ORDER_STATUS_LABELS[k]]))
@@ -22,6 +23,9 @@ const cityOf = row => {
   if (parts.length > 1) return parts[parts.length - 1]
   return parts[0] ? parts[0].split(/\s+/).pop() : ''
 }
+// מלאי של מוצר לפי חישוב "במלאי" (extra של מודול המוצרים)
+const normSku = s => String(s || '').trim().toUpperCase()
+const inStockOf = (r, extra) => !extra ? 0 : (r.sku ? extra.bySku.get(normSku(r.sku)) : extra.byId.get(r.id)) ?? 0
 // קיצור לשיטת משלוח לרשימה: איסוף עצמי / משלוח חינם / משלוח
 const shipShort = m => !m ? '' : /איסוף/.test(m) ? 'איסוף עצמי' : /חינם/.test(m) ? 'משלוח חינם' : /משלוח/.test(m) ? 'משלוח' : m
 // שיטות המשלוח באתר (כפי שהן מגיעות בסנכרון)
@@ -165,7 +169,9 @@ export const MODULES = {
     filters: [
       { key: 'category', label: 'כל הקטגוריות', type: 'values' },
       // מה נשאר להשלים במוצרים (המספר בסוגריים מתעדכן לפי הנתונים)
+      // ברירת מחדל: רק מוצרים שיש מהם במלאי (אותו חישוב כמו "במלאי" בעמוד המלאי: נקלט − נמכר − פחת, לפי מק"ט)
       { key: 'missing', type: 'preset', options: [
+        { value: 'in_stock', label: 'במלאי', test: (r, extra) => !extra || inStockOf(r, extra) > 0 },
         { value: 'all', label: 'כל המוצרים' },
         { value: 'no_sku', label: 'ללא מק"ט', test: r => !String(r.sku || '').trim() },
         { value: 'no_price', label: 'ללא מחיר', test: r => !(Number(r.price) > 0) },
@@ -176,6 +182,13 @@ export const MODULES = {
     ],
     // לחיצה על כותרת עמודה ממיינת לפיה
     sortable: true,
+    // מלאי לכל מוצר (לסינון "במלאי" ולעמודת המלאי): מק"ט → יחידות במלאי, ומוצר בלי מק"ט לפי המזהה
+    extraLoad: async () => {
+      const rows = await loadSimpleStock().catch(() => [])
+      const bySku = new Map(), byId = new Map()
+      for (const r of rows) { if (r.sku) bySku.set(normSku(r.sku), r.stock); else byId.set(r.product_id, r.stock) }
+      return { bySku, byId }
+    },
     // כפתור "סנכרן מהאתר" — קורא ל-Edge Function sync-wc-products
     syncFunction: 'sync-wc-products',
     syncBody: { target: 'products' },
@@ -194,6 +207,7 @@ export const MODULES = {
         </div>
       ) },
       { key: 'sku', label: 'מק"ט', render: row => row.sku || '—' },
+      { key: 'in_stock', label: 'במלאי', sortValue: (row, extra) => inStockOf(row, extra), render: (row, nav, extra) => { const n = inStockOf(row, extra); return n > 0 ? <b>{n}</b> : n < 0 ? <span className="neg" title="נמכר יותר ממה שנקלט">{n}</span> : '—' } },
       { key: 'subcategory', label: 'תת-קטגוריה', render: row => row.subcategory || '—' },
       { key: 'supplier', label: 'ספק', render: row => row.suppliers?.name || '—', sortValue: row => row.suppliers?.name || null },
       {
