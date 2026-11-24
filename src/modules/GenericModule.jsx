@@ -353,7 +353,7 @@ export default function GenericModule({ config, focusId = null }) {
         </div>
       )}
 
-      <div className="table-wrap">
+      <div className={`table-wrap${config.isOrder ? ' fit-table' : ''}`}>
         <table className="data-table">
           <thead>
             <tr>

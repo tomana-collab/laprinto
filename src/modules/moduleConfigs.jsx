@@ -1,4 +1,4 @@
-import { engravingText, readyCount } from '../lib/orders'
+import { engravingText } from '../lib/orders'
 import ReadyButton from '../components/ReadyButton'
 // כל מודול מוגדר כאן: שם טבלה ב-Supabase, השדות שלו, ועמודות הטבלה בתצוגה.
 // כדי להוסיף מודול חדש בעתיד — רק מוסיפים בלוק כאן, אין צורך בקוד UI נוסף.
@@ -452,18 +452,6 @@ export const MODULES = {
       },
       { key: 'engraving', label: 'חריטה אישית', sortValue: row => row.has_engraving ? 1 : 0, render: row => row.has_engraving ? <span title={engravingText(row.engraving)}>✒️ יש</span> : '—' },
       { key: 'handling_status', label: 'סטטוס טיפול', render: row => row.handling_status || '—' },
-      {
-        // כמה מוצרים בהזמנה סומנו "מוכן" / "נחרט ומוכן" מתוך כמה (בלי "לא לספק")
-        key: 'ready',
-        label: 'מוכן',
-        sortValue: row => { const c = readyCount(row); return c.total ? c.ready / c.total : -1 },
-        render: row => {
-          const { ready, total } = readyCount(row)
-          if (!total) return '—'
-          if (ready === total) return <span className="ready-count pos">✓ מוכן</span>
-          return <span className={`ready-count ${ready ? '' : 'neg'}`} title="מוצרים שסומנו מוכנים מתוך כל המוצרים בהזמנה">{ready}/{total}</span>
-        },
-      },
       // הערות פנימיות: ברשימה רק יש / אין. את ההערה עצמה רואים בתוך ההזמנה
       { key: 'notes', label: 'הערות פנימיות', sortValue: row => row.notes?.trim() ? 1 : 0, render: row => row.notes?.trim() ? '📝 יש' : '—' },
       // רווח כולל מע"מ בסוף: מכירה (אחרי קופון) - עלות - עמלה

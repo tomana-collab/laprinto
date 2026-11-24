@@ -840,3 +840,14 @@ main{ padding:24px 28px 40px; background:var(--main-bg); }
 .debt-suppliers{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:-4px 0 14px; }
 .debt-chip{ background:var(--paper); border:1px solid color-mix(in srgb, var(--coral) 30%, var(--line)); border-radius:999px; padding:4px 12px; font-size:13px; }
 .debt-chip b{ color:var(--coral); font-variant-numeric:tabular-nums; margin-inline-start:4px; }
+
+/* הזמנות: הטבלה נכנסת כולה במסך, בלי גלילה ימינה ושמאלה.
+   כותרות ותאים יורדים שורה במקום להרחיב את הטבלה, ריווח צדדי קטן יותר */
+.table-wrap.fit-table{ overflow-x:hidden; }
+.fit-table .data-table th{ white-space:normal; line-height:1.25; padding:11px 8px; }
+.fit-table .data-table td{ padding:10px 8px; overflow-wrap:anywhere; }
+.fit-table .data-table td:first-child, .fit-table .data-table th:first-child{ padding-inline-start:14px; }
+.fit-table .ship-badge{ white-space:normal; }
+.fit-table .order-cell{ max-width:240px; }
+.fit-table .order-multi{ white-space:normal; }
+@media (max-width:860px){ .table-wrap.fit-table{ overflow-x:auto; } }
