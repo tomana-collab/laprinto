@@ -141,7 +141,8 @@ export const MODULES = {
     statusField: 'status',
     statusOptions: ['פעיל', 'לא פעיל'], // מסונכרן מהאתר: מפורסם = פעיל
     // מביא גם את שם הספק (suppliers) דרך ה-foreign key
-    selectQuery: '*, suppliers(name)',
+    // + הצעות מתחרים (לסינון "ללא השוואה": אין התאמה מאושרת אצל אף מתחרה)
+    selectQuery: '*, suppliers(name), competitor_offers(review_status)',
     fields: [
       { key: 'name', label: 'שם מוצר', type: 'text', required: true },
       { key: 'sku', label: 'מק"ט — מסונכרן מהאתר', type: 'text' },
@@ -169,7 +170,8 @@ export const MODULES = {
         { value: 'no_sku', label: 'ללא מק"ט', test: r => !String(r.sku || '').trim() },
         { value: 'no_price', label: 'ללא מחיר', test: r => !(Number(r.price) > 0) },
         { value: 'no_supplier', label: 'ללא ספק', test: r => !r.supplier_id },
-        { value: 'no_cost', label: 'ללא עלות', test: r => !(Number(r.cost) > 0) },
+        { value: 'no_cost', label: 'ללא מחיר קנייה', test: r => !(Number(r.cost) > 0) },
+        { value: 'no_compare', label: 'ללא השוואה למתחרים', test: r => !(r.competitor_offers || []).some(o => o.review_status === 'approved') },
       ] },
     ],
     // לחיצה על כותרת עמודה ממיינת לפיה
@@ -210,14 +212,14 @@ export const MODULES = {
           ? <a href={row.product_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>פתח</a>
           : '—',
       },
-      { key: 'cost_after_discount', label: 'עלות (מחיר סופי אחרי הנחה)', render: row => `₪${row.cost_after_discount}` },
+      { key: 'cost_after_discount', label: 'עלות (מחיר סופי אחרי הנחה)', render: row => Number(row.cost) > 0 ? `₪${row.cost_after_discount}` : '—' },
       { key: 'price', label: 'מחיר באתר', render: row => (
         row.sale_price != null && row.regular_price != null && row.sale_price < row.regular_price
           ? <span>₪{row.price} <s style={{ opacity: 0.55 }}>₪{row.regular_price}</s></span>
           : `₪${row.price}`
       ) },
-      { key: 'cost_with_vat', label: 'עלות כולל מע"מ', render: row => `₪${row.cost_with_vat}` },
-      { key: 'clearing_fee', label: 'עמלת סליקה', render: row => `₪${row.clearing_fee}` },
+      { key: 'cost_with_vat', label: 'עלות כולל מע"מ', render: row => Number(row.cost) > 0 ? `₪${row.cost_with_vat}` : '—' },
+      { key: 'clearing_fee', label: 'עמלת סליקה', render: row => Number(row.cost) > 0 ? `₪${row.clearing_fee}` : '—' },
       // רווח בסוף: שורת התוצאה
       // רווח נטו ליחידה: מחיר באתר פחות עלות קנייה כולל מע"מ (אחרי הנחת ספק), הוצאות נלוות ועמלת סליקה. בלי משלוח.
       // מחושב ב-DB (profit). מוצר בלי עלות: "—" (אחרת היה נראה כאילו כל המחיר רווח)
