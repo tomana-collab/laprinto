@@ -877,3 +877,4 @@ button.sidebar-brand:active{ transform:scale(.97); }
   .fit-table .ship-badge, .fit-table .order-multi{ white-space:nowrap; }
   .fit-table .order-cell{ max-width:180px; }
 }
+@media (max-width:860px){ .dt-time{ display:none; } }

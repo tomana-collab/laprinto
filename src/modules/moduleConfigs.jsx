@@ -405,7 +405,13 @@ export const MODULES = {
     ],
     // מספר הזמנה ופרטים מלאים — בתוך חלון העריכה בלבד
     columns: [
-      { key: 'order_date', label: 'תאריך', render: row => formatDateTime(row.order_date) || '—' },
+      // במובייל רק התאריך, בלי השעה (dt-time מוסתר ב-CSS)
+      { key: 'order_date', label: 'תאריך', render: row => {
+        const t = formatDateTime(row.order_date)
+        if (!t) return '—'
+        const [d, h] = t.split(', ')
+        return <>{d}{h && <span className="dt-time">, {h}</span>}</>
+      } },
       { key: 'customer_name', label: 'מזמין', render: row => <>{row.customer_name || '—'}{row.merged_orders && <span className="merge-tag" title={`הזמנה מאוחדת: ${row.merged_orders.join(' + ')}`}>🔗 {row.merged_orders.length}</span>}</> },
       // שיטת משלוח בקיצור (המלא במעבר עכבר). בהזמנה עם איסוף עצמי אין עיר
       { key: 'shipping_method', label: 'משלוח', sortValue: row => shipShort(row.shipping_method), render: row => row.shipping_method
