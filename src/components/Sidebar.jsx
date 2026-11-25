@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { MODULES } from '../modules/moduleConfigs'
 import { useAuth } from '../contexts/AuthContext'
 import { NOTIFICATIONS_CHANGED } from '../pages/Notifications'
+import Logo from './Logo'
 
 const DEV_GROUP = ['tasks', 'ideas', 'opportunities', 'trends', 'suppliers']
 
@@ -71,11 +72,8 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
       {mobileOpen && <div className="sidebar-scrim" onClick={onClose} />}
       <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="mark">L</div>
-          <div>
-            <h1>Laprinto</h1>
-            <span>CRM פנימי</span>
-          </div>
+          <Logo />
+          <span>CRM פנימי</span>
         </div>
         <nav>
           {ORDER.map(item)}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
+import Logo from '../components/Logo'
 
 export default function Login() {
   const [mode, setMode] = useState('login') // 'login' | 'signup'
@@ -40,8 +41,8 @@ export default function Login() {
   return (
     <div className="auth-screen">
       <form className="auth-box" onSubmit={handleSubmit}>
-        <div className="mark">L</div>
-        <h1>Laprinto CRM</h1>
+        <Logo className="auth-logo" />
+        <h1>CRM</h1>
         <p>{mode === 'login' ? 'התחברות למערכת' : 'הרשמה למערכת'}</p>
 
         <div className="field">
