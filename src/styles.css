@@ -870,3 +870,10 @@ main{ padding:24px 28px 40px; background:var(--main-bg); }
 button.sidebar-brand{ background:none; border:none; text-align:right; border-radius:12px; margin:0 0 4px; transition:background-color .15s ease, transform .1s ease-out; }
 button.sidebar-brand:hover{ background:var(--hover-bg); }
 button.sidebar-brand:active{ transform:scale(.97); }
+
+/* הזמנות במובייל: בלי שבירת טקסט לאורך (משלוח, עיר וכו'). כל תא בשורה אחת, והטבלה נגללת לצד */
+@media (max-width:860px){
+  .fit-table .data-table th, .fit-table .data-table td{ white-space:nowrap; overflow-wrap:normal; }
+  .fit-table .ship-badge, .fit-table .order-multi{ white-space:nowrap; }
+  .fit-table .order-cell{ max-width:180px; }
+}
