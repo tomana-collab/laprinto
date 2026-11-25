@@ -71,10 +71,11 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
     <>
       {mobileOpen && <div className="sidebar-scrim" onClick={onClose} />}
       <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
-        <div className="sidebar-brand">
+        {/* לחיצה על הלוגו חוזרת למסך הראשי (ההזמנות, המסך שנפתח בכניסה) */}
+        <button type="button" className="sidebar-brand" title="חזרה למסך הראשי" onClick={() => { onSelect('orders'); onClose() }}>
           <Logo />
           <span>CRM פנימי</span>
-        </div>
+        </button>
         <nav>
           {ORDER.map(item)}
         </nav>

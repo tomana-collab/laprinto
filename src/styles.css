@@ -867,3 +867,6 @@ main{ padding:24px 28px 40px; background:var(--main-bg); }
 .sidebar-brand > span{ font-size:11px; color:var(--ink-soft); padding-inline-start:4px; }
 .auth-logo{ display:block; width:220px; max-width:80%; margin:0 auto 6px; }
 .auth-box h1{ font-size:15px; font-weight:600; letter-spacing:.18em; color:var(--ink-soft); margin:0 0 6px; }
+button.sidebar-brand{ background:none; border:none; text-align:right; border-radius:12px; margin:0 0 4px; transition:background-color .15s ease, transform .1s ease-out; }
+button.sidebar-brand:hover{ background:var(--hover-bg); }
+button.sidebar-brand:active{ transform:scale(.97); }
