@@ -428,7 +428,7 @@ export const MODULES = {
                 if (error) ui?.setError?.(error.message)
                 ui?.reload?.()
               }}>
-              <option value="">חברת שליחויות…</option>
+              <option value="">— לא נבחר</option>
               {SHIPPING_COMPANIES.map(c => <option key={c.key} value={c.label}>{c.label}</option>)}
             </select>
           )}

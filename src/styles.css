@@ -893,3 +893,4 @@ button.sidebar-brand:active{ transform:scale(.97); }
 .ship-cell{ display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
 .data-table select.ship-company-select{ font-size:12px; padding:3px 6px; border-radius:6px; max-width:120px; font-weight:600; }
 @media (max-width:860px){ .ship-cell{ flex-direction:row; align-items:center; } }
+.data-table select.ship-company-select:has(option[value=""]:checked){ color:var(--ink-soft); font-weight:500; }
