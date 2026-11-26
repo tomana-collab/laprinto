@@ -12,13 +12,14 @@ import Inventory from './pages/Inventory'
 import Competitors from './pages/Competitors'
 import Notifications from './pages/Notifications'
 import ProfitCalc from './pages/ProfitCalc'
+import Shipments from './pages/Shipments'
 import Sidebar from './components/Sidebar'
 import JobAlert from './components/JobAlert'
 import GenericModule from './modules/GenericModule'
 import { MODULES } from './modules/moduleConfigs'
 import { NavProvider } from './contexts/NavContext'
 
-const PAGES = ['dashboard', 'settings', 'bundles', 'receipts', 'inventory', 'competitors', 'restock', 'notifications', 'calculator']
+const PAGES = ['dashboard', 'settings', 'bundles', 'receipts', 'inventory', 'competitors', 'restock', 'notifications', 'calculator', 'shipments']
 const isPage = k => PAGES.includes(k) || !!MODULES[k]
 
 // הדף הפעיל נשמר ב-hash של ה-URL, כך שרענון (או חזרה אחורה) נשארים על אותו דף
@@ -78,6 +79,7 @@ export default function App() {
           : active === 'competitors' ? <Competitors />
           : active === 'notifications' ? <Notifications />
           : active === 'calculator' ? <ProfitCalc />
+          : active === 'shipments' ? <Shipments />
           : <GenericModule key={active} config={MODULES[active]} focusId={focus?.module === active ? focus.id : null} />}
       </main>
     </div>

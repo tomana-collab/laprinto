@@ -42,9 +42,10 @@ export default function Sidebar({ active, onSelect, mobileOpen, onClose }) {
     restock: { icon: '🧩', label: 'השלמת מוצרים' },
     receipts: { icon: '📥', label: 'קליטת תעודות' },
     calculator: { icon: '🧮', label: 'מחשבון רווח' },
+    shipments: { icon: '🚚', label: 'משלוחים' },
   }
   // 'notifications' (הודעות מבדיקת מלאי הספק) הוסר מהתפריט: מלאי אצל הספק לא מוצג בפורטל
-  const ORDER = ['dashboard', 'orders', 'competitors', 'products', 'calculator', 'inventory', 'restock', 'receipts', 'expenses', 'dev']
+  const ORDER = ['dashboard', 'orders', 'shipments', 'competitors', 'products', 'calculator', 'inventory', 'restock', 'receipts', 'expenses', 'dev']
 
   const item = key => {
     if (key === 'dev') return devGroup
