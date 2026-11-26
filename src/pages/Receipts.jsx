@@ -16,6 +16,8 @@ const pct = (g, n) => g > 0 ? `${Math.round((1 - n / g) * 1000) / 10}%` : '—'
 const netCost = i => (Number(i.unit_cost) || 0) * (1 - (Number(i.discount_percent) || 0) / 100)
 const withVat = n => n * (1 + VAT_RATE)
 const PAY = ['לא שולם', 'שולם חלקית', 'שולם']
+// מי שילם לספק
+const PAYERS = ['רועי שילם', 'אמיר שילם', 'לפרינטו שילמה']
 const payClass = st => st === 'שולם' ? 'pay-paid' : st === 'שולם חלקית' ? 'pay-partial' : st === 'לא שולם' ? 'pay-unpaid' : 'pay-none'
 const money = n => '₪' + (Number(n) || 0).toLocaleString('he-IL', { maximumFractionDigits: 2 })
 
@@ -47,7 +49,7 @@ export default function Receipts() {
   }
   useEffect(() => { load() }, [])
 
-  async function handleSave({ supplier_id, doc_number, doc_date, notes, status, payment_status, paid_amount, paid_at, items }) {
+  async function handleSave({ supplier_id, doc_number, doc_date, notes, status, payment_status, paid_amount, paid_at, paid_by, items }) {
     // לא מדלגים בשקט על שורות בעייתיות — עוצרים ומראים איזו שורה לא תקינה
     const filled = items.map((i, n) => ({ ...i, n: n + 1 })).filter(i => i.text || i.product_id || Number(i.quantity) > 0)
     const bad = filled.find(i => !i.product_id)
@@ -57,7 +59,7 @@ export default function Receipts() {
     const clean = filled
     if (clean.length === 0) { setError('הוסף לפחות מוצר אחד עם כמות'); return }
     const fields = { supplier_id: supplier_id || null, doc_number, doc_date, notes, status,
-      payment_status: payment_status || null,
+      payment_status: payment_status || null, paid_by: paid_by || null,
       paid_amount: payment_status === 'שולם חלקית' && paid_amount !== '' ? Number(paid_amount) : null,
       paid_at: payment_status && payment_status !== 'לא שולם' ? (paid_at || today()) : null }
     const rows = id => clean.map(i => ({ receipt_id: id, product_id: i.product_id, quantity: Number(i.quantity), unit_cost: Number(i.unit_cost) || 0, discount_percent: Number(i.discount_percent) || 0 }))
@@ -110,6 +112,15 @@ export default function Receipts() {
     if (e) { setError(e.message); load() }
   }
 
+  // מי שילם: בחירה בתעודה שעוד לא סומנה כשולמה מסמנת אותה "שולם" (תשלום חלקי נשאר חלקי)
+  async function setPayer(r, value) {
+    const patch = { paid_by: value || null }
+    if (value && (!r.payment_status || r.payment_status === 'לא שולם')) Object.assign(patch, { payment_status: 'שולם', paid_amount: null, paid_at: r.paid_at || today() })
+    setReceipts(list => list.map(x => x.id === r.id ? { ...x, ...patch } : x))
+    const { error: e } = await supabase.from('stock_receipts').update(patch).eq('id', r.id)
+    if (e) { setError(e.message); load() }
+  }
+
   async function handleDelete(id) {
     if (!window.confirm('למחוק את התעודה? הכמויות שלה יורדו מהמלאי.')) return
     const { error: e } = await supabase.from('stock_receipts').delete().eq('id', id)
@@ -130,6 +141,9 @@ export default function Receipts() {
   const debt = openRecs.reduce((a, r) => a + owed(r), 0)
   const paidTotal = receipts.reduce((a, r) => a + paidOf(r), 0)
   const unmarked = receipts.filter(r => !r.payment_status)
+  // כמה שילם כל אחד (כולל מע״מ; בתשלום חלקי — הסכום ששולם)
+  const paidBy = who => receipts.filter(r => (r.paid_by || '') === who).reduce((a, r) => a + paidOf(r), 0)
+  const paidNoPayer = paidBy('')
   const bySupplier = Object.entries(openRecs.reduce((m, r) => {
     const k = r.suppliers?.name || 'ללא ספק'; m[k] = (m[k] || 0) + owed(r); return m
   }, {})).sort((a, b) => b[1] - a[1])
@@ -142,7 +156,7 @@ export default function Receipts() {
     `${r.doc_number || ''} ${r.suppliers?.name || ''}`.toLowerCase().includes(needle))
   const sorted = sortRows(shown, {
     date: r => r.doc_date || '', doc: r => r.doc_number || '', supplier: r => r.suppliers?.name || '',
-    status: r => r.status || 'סופק', pay: r => owed(r) || -paidOf(r), items: r => r.stock_receipt_items.length, units,
+    status: r => r.status || 'סופק', pay: r => owed(r) || -paidOf(r), payer: r => r.paid_by || '', items: r => r.stock_receipt_items.length, units,
     total, totalVat: r => withVat(total(r)),
   }, sort)
 
@@ -155,10 +169,12 @@ export default function Receipts() {
       {error && <div className="err-inline">{error}</div>}
 
       <div className="summary-row wide">
-        <div className="summary-card"><span>חוב פתוח לספקים (כולל מע״מ) · {openRecs.length} תעודות</span><b className={debt > 0 ? 'neg' : 'pos'}>{money(debt)}</b></div>
-        <div className="summary-card"><span>שולם לספקים (כולל מע״מ)</span><b className="pos">{money(paidTotal)}</b></div>
+        <div className="summary-card"><span>עוד פתוח, לא שולם (כולל מע״מ) · {openRecs.length} תעודות</span><b className={debt > 0 ? 'neg' : 'pos'}>{money(debt)}</b></div>
+        {PAYERS.map(p => <div key={p} className="summary-card"><span>{p} (כולל מע״מ)</span><b className="pos">{money(paidBy(p))}</b></div>)}
+        {paidNoPayer > 0 && <div className="summary-card"><span>שולם בלי לציין מי שילם</span><b>{money(paidNoPayer)}</b></div>}
         <div className="summary-card"><span>תעודות שלא סומן להן תשלום{unmarked.length ? ` · ${money(unmarked.reduce((a, r) => a + gross(r), 0))}` : ''}</span><b>{unmarked.length}</b></div>
       </div>
+      <div className="cmp-sub" style={{ margin: '-6px 0 12px' }}>סה״כ שולם לספקים: <b>{money(paidTotal)}</b></div>
       {bySupplier.length > 0 && (
         <div className="debt-suppliers">
           <span className="cmp-sub">חוב לפי ספק:</span>
@@ -183,10 +199,10 @@ export default function Receipts() {
             .filter(i => !needle || itemHit(i) || !r.stock_receipt_items.some(itemHit))
             .map(i => {
               const g = grossCost(i), n = netCost(i), line = i.quantity * n
-              return [formatDateDots(r.doc_date), r.doc_number || '', r.suppliers?.name || '', r.status || 'סופק', r.payment_status || 'לא סומן', i.products?.sku || '', i.products?.name || '',
+              return [formatDateDots(r.doc_date), r.doc_number || '', r.suppliers?.name || '', r.status || 'סופק', r.payment_status || 'לא סומן', r.paid_by || '', i.products?.sku || '', i.products?.name || '',
                 Number(i.quantity), r2(g), g > 0 ? r4((1 - n / g) * 100) : '', r2(n), r2(line), r2(withVat(line))]
             }))
-          return { headers: ['תאריך', 'מס׳ תעודה', 'ספק', 'סטטוס', 'תשלום', 'מק״ט', 'מוצר', 'כמות', 'מחיר מקורי', 'אחוז הנחה', 'מחיר שהתקבל', 'סה״כ שורה לפני מע״מ', 'סה״כ שורה כולל מע״מ'], rows }
+          return { headers: ['תאריך', 'מס׳ תעודה', 'ספק', 'סטטוס', 'תשלום', 'מי שילם', 'מק״ט', 'מוצר', 'כמות', 'מחיר מקורי', 'אחוז הנחה', 'מחיר שהתקבל', 'סה״כ שורה לפני מע״מ', 'סה״כ שורה כולל מע״מ'], rows }
         }} /></span>
       </div>
 
@@ -226,6 +242,7 @@ export default function Receipts() {
               <SortTh k="supplier" sort={sort} onSort={onSort}>ספק</SortTh>
               <SortTh k="status" sort={sort} onSort={onSort}>סטטוס</SortTh>
               <SortTh k="pay" sort={sort} onSort={onSort}>תשלום</SortTh>
+              <SortTh k="payer" sort={sort} onSort={onSort}>מי שילם</SortTh>
               <SortTh k="items" sort={sort} onSort={onSort}>פריטים</SortTh>
               <SortTh k="units" sort={sort} onSort={onSort}>יחידות</SortTh>
               <SortTh k="total" sort={sort} onSort={onSort}>סה״כ (לפני מע״מ)</SortTh>
@@ -233,7 +250,16 @@ export default function Receipts() {
             </tr>
           </thead>
           <tbody>
-            {sorted.length === 0 && <tr><td className="empty-col" colSpan={9}>{needle || payFilter !== 'all' ? 'לא נמצאו תעודות מתאימות' : 'אין תעודות עדיין'}</td></tr>}
+            {sorted.length > 0 && (
+              <tr className="totals-row">
+                <td colSpan={6}>סה״כ ({sorted.length} תעודות)</td>
+                <td>{sorted.reduce((a, r) => a + r.stock_receipt_items.length, 0)}</td>
+                <td>{sorted.reduce((a, r) => a + units(r), 0)}</td>
+                <td>{money(sorted.reduce((a, r) => a + total(r), 0))}</td>
+                <td>{money(sorted.reduce((a, r) => a + withVat(total(r)), 0))}</td>
+              </tr>
+            )}
+            {sorted.length === 0 && <tr><td className="empty-col" colSpan={10}>{needle || payFilter !== 'all' ? 'לא נמצאו תעודות מתאימות' : 'אין תעודות עדיין'}</td></tr>}
             {sorted.map(r => [
               <tr key={r.id} onClick={() => setEditing(r)}>
                 <td>{formatDate(r.doc_date)}</td>
@@ -247,6 +273,12 @@ export default function Receipts() {
                   </select>
                   {r.payment_status === 'שולם חלקית' && <div className="cmp-sub">נותר {money(owed(r))}</div>}
                 </td>
+                <td onClick={e => e.stopPropagation()}>
+                  <select className="pay-select" value={r.paid_by || ''} onChange={e => setPayer(r, e.target.value)}>
+                    <option value="">—</option>
+                    {PAYERS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </td>
                 <td>{r.stock_receipt_items.length}</td>
                 <td>{r.stock_receipt_items.reduce((a, i) => a + Number(i.quantity), 0)}</td>
                 <td>{money(total(r))}</td>
@@ -254,7 +286,7 @@ export default function Receipts() {
               </tr>,
               needle && r.stock_receipt_items.some(itemHit) && (
                 <tr key={r.id + '-hit'} onClick={() => setEditing(r)} style={{ background: 'var(--bg-soft, #f7f7fb)' }}>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     {r.stock_receipt_items.filter(itemHit).map(i => (
                       <div key={i.id}>↳ <b>{i.products?.sku || '—'}</b> {i.products?.name} — הוזמן/נקלט: <b>{Number(i.quantity)}</b>
                         {grossCost(i) > 0 && <> · מחיר מקורי {money(grossCost(i))} ← שהתקבל {money(netCost(i))} · <b className="pos">הנחה {pct(grossCost(i), netCost(i))}</b></>}</div>
@@ -287,6 +319,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
   const [payStatus, setPayStatus] = useState(initial.id ? (initial.payment_status || '') : 'לא שולם')
   const [paidAmount, setPaidAmount] = useState(initial.paid_amount ?? '')
   const [paidAt, setPaidAt] = useState(initial.paid_at || '')
+  const [paidBy, setPaidBy] = useState(initial.paid_by || '')
   const [items, setItems] = useState(() => initial.id && initial.stock_receipt_items.length
     ? initial.stock_receipt_items.map(i => {
         const p = products.find(x => x.id === i.product_id)
@@ -330,6 +363,12 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
               {PAY.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
+          {payStatus && payStatus !== 'לא שולם' && <div className="field"><label>מי שילם</label>
+            <select value={paidBy} onChange={e => setPaidBy(e.target.value)}>
+              <option value="">—</option>
+              {PAYERS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>}
           {payStatus === 'שולם חלקית' && <div className="field"><label>כמה שולם (₪, כולל מע״מ)</label><input type="number" min="0" step="0.01" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} /></div>}
           {payStatus && payStatus !== 'לא שולם' && <div className="field"><label>תאריך תשלום</label><input type="date" value={paidAt || today()} onChange={e => setPaidAt(e.target.value)} /></div>}
           <div className="field"><label>הערות</label><input type="text" value={notes} onChange={e => setNotes(e.target.value)} /></div>
@@ -376,7 +415,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
         <div className="modal-actions">
           {onDelete && <button className="btn btn-danger" onClick={onDelete}>מחיקת תעודה</button>}
           <button className="btn btn-ghost" onClick={onCancel}>ביטול</button>
-          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, status, payment_status: payStatus, paid_amount: paidAmount, paid_at: paidAt, items })}>{initial.id ? 'שמירת שינויים' : status === 'סופק' ? 'קליטה למלאי' : 'שמירת הזמנה'}</button>
+          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, status, payment_status: payStatus, paid_amount: paidAmount, paid_at: paidAt, paid_by: payStatus && payStatus !== 'לא שולם' ? paidBy : '', items })}>{initial.id ? 'שמירת שינויים' : status === 'סופק' ? 'קליטה למלאי' : 'שמירת הזמנה'}</button>
         </div>
       </div>
     </div>
