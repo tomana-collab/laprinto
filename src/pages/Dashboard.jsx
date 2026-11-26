@@ -136,10 +136,11 @@ export default function Dashboard() {
   const missingSales = periodOrders.filter(c => c.cost === null).reduce((a, c) => a + c.paid, 0)
   const paidKnown = known.reduce((a, c) => a + c.paid, 0)                     // מה ששולם בהזמנות שבחישוב הרווח
   const cogs = known.reduce((a, c) => a + c.cost, 0)                          // עלות המוצרים (כולל מע"מ, אחרי הנחת ספק)
-  const shipCosts = known.reduce((a, c) => a + c.shipCost, 0)                 // עלות משלוח: רק הזמנות שסומנה בהן חברת שליחויות
+  const shipCosts = periodOrders.reduce((a, c) => a + c.shipCost, 0)          // עלות משלוח: כל ההזמנות שסומנה בהן חברת שליחויות (גם בלי עלות מוצר)
+  const shipKnown = known.reduce((a, c) => a + c.shipCost, 0)                 // אותה עלות, רק להזמנות שבחישוב הרווח
   const fees = known.reduce((a, c) => a + c.fee, 0)                           // עמלת סליקה
   // רווח על ההזמנות = מה שהלקוחות שילמו (כולל מע"מ ומשלוח) − משלוח (רק עם חברת שליחויות) − עמלות סליקה − מחיר קנייה כולל מע"מ ביום המכירה
-  const grossProfit = paidKnown - cogs - shipCosts - fees
+  const grossProfit = paidKnown - cogs - shipKnown - fees
   // רווח סופי (finalProfit, למטה): אחרי עמלות סליקה, ופחות עלות הפחת והקד"מ בתקופה
   const ordersIncome = periodOrders.reduce((a, c) => a + c.paid, 0)           // כל מה ששולם בהזמנות (כולל משלוח)
   // הכנסות = הזמנות + מה ששולם על מוצרים שנלקחו מהמלאי במחיר עלות (ללא מע״מ). ברווח הסופי זה נספר בנפרד (takenPaid), לא דרך כאן
@@ -182,7 +183,7 @@ export default function Dashboard() {
         <div className="summary-row wide">
           <div className="summary-card"><span>סה״כ מכר: כל מה שהלקוחות שילמו ({periodOrders.length} הזמנות, כולל משלוח ומע״מ){takenPaid ? ` + מוצרים שנלקחו בעלות (${takenUnits} יח׳, ללא מע״מ) ${ils(takenPaid)}` : ''}</span><b className="pos">{ils(periodIncome)}</b></div>
           <div className="summary-card"><span>עלות המוצרים שבהזמנות (מחיר קנייה ביום המכירה, כולל מע״מ, אחרי הנחת ספק)</span><b className="neg">−{ils(cogs)}</b></div>
-          <div className="summary-card"><span>עלות משלוחים (רק הזמנות שסומנה בהן חברת שליחויות)</span><b className="neg">−{ils(shipCosts)}</b></div>
+          <div className="summary-card"><span>עלות משלוחים (כל ההזמנות שסומנה בהן חברת שליחויות){shipCosts !== shipKnown ? ` · מתוכם ${ils(shipCosts - shipKnown)} בהזמנות שלא נכנסות לרווח (חסרה עלות מוצר)` : ''}</span><b className="neg">−{ils(shipCosts)}</b></div>
           <div className="summary-card"><span>עמלות סליקה (0.75% + מע״מ)</span><b className="neg">−{ils(fees)}</b></div>
           <div className="summary-card"><span>רווח על ההזמנות (ששולם פחות משלוח, עמלות סליקה ועלות המוצרים)</span><b className={grossProfit >= 0 ? 'pos' : 'neg'}>{ils(grossProfit)}</b></div>
           <div className="summary-card"><span>עלות מוצרים בפחת וקד״מ (כולל מע״מ) · פחת {writeoffUnits} יח׳ {ils(writeoffCost)} · קד״מ / ללא חיוב {giveUnits} יח׳ {ils(giveCost)}{giveMissing ? ` · ${giveMissing} בלי עלות` : ''}</span><b className="neg">−{ils(writeoffCost + giveCost)}</b></div>
