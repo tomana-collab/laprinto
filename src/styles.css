@@ -898,3 +898,11 @@ button.sidebar-brand:active{ transform:scale(.97); }
 /* משלוחים: קוביית חברה לחיצה (מסננת) */
 .summary-card.ship-sum{ cursor:pointer; }
 .summary-card.ship-sum.on{ border-color:var(--ink); box-shadow:0 0 0 1px var(--ink) inset; }
+
+/* הגדרות היקף השוואת מחירים */
+.scope-list{ display:flex; flex-direction:column; gap:2px; max-height:55vh; overflow-y:auto; border:1px solid var(--line); border-radius:12px; padding:4px; }
+.scope-row{ display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; cursor:pointer; }
+.scope-row:hover{ background:var(--hover-bg); }
+.scope-row input{ width:auto; }
+.scope-name{ flex:1; font-weight:600; }
+.scope-row.off .scope-name{ color:var(--ink-soft); text-decoration:line-through; }

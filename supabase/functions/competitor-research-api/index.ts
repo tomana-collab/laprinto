@@ -1,4 +1,5 @@
 // Supabase Edge Function: competitor-research-api
+// פריסה: supabase functions deploy competitor-research-api --no-verify-jwt (האימות במפתח המחקר, לא ב-JWT)
 // API מוגבל לסוכן מחקר המתחרים (ChatGPT Pro). אימות במפתח ייעודי (כותרת x-research-key או Authorization: Bearer),
 // שנבדק בצד השרת מול hash במסד. הסוכן לא מקבל service_role ולא יכול לבחור טבלאות או עמודות:
 // כל פעולה כאן מחזירה רשימת שדות קבועה. אין גישה להזמנות, לקוחות, עלויות, רווחיות או ספקים.
@@ -47,6 +48,14 @@ class ApiError extends Error {
   constructor(public status: number, message: string) { super(message) }
 }
 
+// היקף ההשוואה (v_cmp_scope): רק מוצרים עם מק"ט, שיש מהם במחסן, ושהקטגוריה שלהם לא הוחרגה במסך השוואת המחירים
+async function scopeIds(): Promise<string[]> {
+  const { data, error } = await admin.from('v_cmp_scope').select('id')
+  if (error) throw new ApiError(500, error.message)
+  const ids = (data || []).map((r: any) => r.id)
+  return ids.length ? ids : ['00000000-0000-0000-0000-000000000000']
+}
+
 // מוצרים פעילים שאינם מוצרי אב עם וריאציות (האב לא נמכר בעצמו)
 async function parentIds(): Promise<Set<number>> {
   const { data } = await admin.from('products').select('wc_parent_id').not('wc_parent_id', 'is', null)
@@ -55,7 +64,7 @@ async function parentIds(): Promise<Set<number>> {
 
 const actions: Record<string, (b: any) => Promise<unknown>> = {
   async list_categories() {
-    const { data, error } = await admin.from('products').select('category, subcategory, research_status').eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK)
+    const { data, error } = await admin.from('products').select('category, subcategory, research_status').eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK).in('id', await scopeIds())
     if (error) throw new ApiError(500, error.message)
     const map = new Map<string, { category: string; products: number; pending_research: number; subcategories: Set<string> }>()
     for (const p of data || []) {
@@ -75,7 +84,7 @@ const actions: Record<string, (b: any) => Promise<unknown>> = {
     const offset = clampInt(b.offset, 0, 100000, 0)
     const status = ['pending', 'partial', 'researched', 'no_competitors', 'all'].includes(b.research_status) ? b.research_status : 'pending'
     let q = admin.from('products').select(PRODUCT_LIST_COLS + ', wc_product_id', { count: 'exact' })
-      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK).order('category').order('name')
+      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK).in('id', await scopeIds()).order('name')
     // "pending" = כל מה שממתין למחקר עכשיו: חדש, או שהגיע מועד המחקר החוזר שלו (30 יום)
     if (status === 'pending') q = q.or(`research_status.eq.pending,next_research_at.lte.${new Date().toISOString()}`)
     else if (status !== 'all') q = q.eq('research_status', status)
@@ -217,10 +226,10 @@ const actions: Record<string, (b: any) => Promise<unknown>> = {
     const nowIso = new Date().toISOString()
     const staleIso = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
     let q = admin.from('products').select('id, wc_product_id, name, sku, category')
-      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK)
+      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK).in('id', await scopeIds())
       .or(`research_status.eq.pending,next_research_at.lte.${nowIso}`)
       .or(`research_claimed_at.is.null,research_claimed_at.lt.${staleIso}`)
-      .order('category').order('name').limit(size * 3)
+      .order('name').limit(size * 3)
     if (str(b.category, 120)) q = q.eq('category', str(b.category, 120))
     const { data, error } = await q
     if (error) throw new ApiError(500, error.message)
@@ -237,7 +246,7 @@ const actions: Record<string, (b: any) => Promise<unknown>> = {
   // התקדמות: מה נשאר במנה, וכמה מוצרים בכל סטטוס מחקר
   async progress(b) {
     const { data, error } = await admin.from('products').select('id, wc_product_id, research_status, next_research_at, research_batch_id, research_claimed_at')
-      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK)
+      .eq('status', 'פעיל').is('wc_removed_at', null).or(IN_STOCK).in('id', await scopeIds())
     if (error) throw new ApiError(500, error.message)
     const parents = await parentIds()
     const rows = (data || []).filter((p: any) => !parents.has(Number(p.wc_product_id)))

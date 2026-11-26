@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNav } from '../contexts/NavContext'
+import { useAuth } from '../contexts/AuthContext'
 import { formatDateTime } from '../lib/format'
 
 // השוואת מתחרים. הנתונים (חנויות, התאמות, בדיקות מחיר) נכתבים למסד מבחוץ;
@@ -129,6 +130,73 @@ const STATE_TESTS = {
   no_stock: r => !(r.physical > 0),
 }
 
+// הגדרות היקף השוואת המחירים: אילו קטגוריות נכללות. קטגוריה מוחרגת = מוצר שהקטגוריה הראשית, תת הקטגוריה
+// או אחת מקטגוריות האתר שלו בשם הזה לא מוצג בהשוואה, לא נסרק אוטומטית ולא נשלח לסוכן המחקר
+function ScopeSettings({ onClose, onChanged }) {
+  const { user } = useAuth()
+  const [cats, setCats] = useState(null)      // [{ name, total, inStock }]
+  const [excluded, setExcluded] = useState(new Set())
+  const [busy, setBusy] = useState('')
+  const [err, setErr] = useState('')
+  async function load() {
+    const [p, ex, st] = await Promise.all([
+      supabase.from('products').select('id, sku, category, subcategory, wc_categories').eq('status', 'פעיל').is('wc_removed_at', null),
+      supabase.from('cmp_excluded_categories').select('name'),
+      supabase.from('product_stock').select('product_id, stock, reserved'),
+    ])
+    if (p.error || ex.error) { setErr((p.error || ex.error).message); setCats([]); return }
+    const phys = new Map((st.data || []).map(x => [x.product_id, (Number(x.stock) || 0) + (Number(x.reserved) || 0)]))
+    const map = new Map()
+    for (const r of p.data) {
+      const names = new Set([r.category, r.subcategory, ...(Array.isArray(r.wc_categories) ? r.wc_categories : [])].filter(Boolean))
+      for (const n of names) {
+        const e = map.get(n) || { name: n, total: 0, inStock: 0 }
+        e.total++
+        if ((r.sku || '').trim() && phys.get(r.id) > 0) e.inStock++
+        map.set(n, e)
+      }
+    }
+    setCats([...map.values()].sort((a, b) => b.inStock - a.inStock || a.name.localeCompare(b.name, 'he')))
+    setExcluded(new Set((ex.data || []).map(x => x.name)))
+  }
+  useEffect(() => { load() }, [])
+  async function toggle(name) {
+    setBusy(name); setErr('')
+    const on = excluded.has(name)
+    const { error } = on
+      ? await supabase.from('cmp_excluded_categories').delete().eq('name', name)
+      : await supabase.from('cmp_excluded_categories').insert({ name, created_by: user?.email || '' })
+    setBusy('')
+    if (error) { setErr(error.message); return }
+    setExcluded(s => { const n = new Set(s); on ? n.delete(name) : n.add(name); return n })
+    onChanged?.()
+  }
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal">
+        <h2>⚙️ הגדרות השוואת מחירים</h2>
+        <div className="settings-readonly">
+          בהשוואה נכללים רק מוצרים <b>שיש מהם במלאי</b> ו<b>שיש להם מק״ט</b>. כאן בוחרים אילו קטגוריות נכללות.
+          קטגוריה מסומנת = בהשוואה. מוצר בקטגוריה שהוסר ממנה הסימון לא יוצג כאן, לא ייסרק אוטומטית ולא יישלח לסוכן המחקר.
+        </div>
+        {err && <div className="err-inline">{err}</div>}
+        {cats === null ? <div className="loading">טוען קטגוריות...</div> : (
+          <div className="scope-list">
+            {cats.map(c => (
+              <label key={c.name} className={`scope-row${excluded.has(c.name) ? ' off' : ''}`}>
+                <input type="checkbox" checked={!excluded.has(c.name)} disabled={busy === c.name} onChange={() => toggle(c.name)} />
+                <span className="scope-name">{c.name}</span>
+                <span className="cmp-sub">{c.inStock} במלאי עם מק״ט · {c.total} באתר</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="modal-actions"><button className="btn btn-primary" onClick={onClose}>סגירה</button></div>
+      </div>
+    </div>
+  )
+}
+
 function ComparisonView({ onChanged }) {
   const [stores, setStores] = useState(null)       // חנויות פעילות (עמודות בטבלה)
   const [allStores, setAllStores] = useState([])   // כולל לא פעילות, לניהול
@@ -140,12 +208,14 @@ function ComparisonView({ onChanged }) {
   const [loadedAt, setLoadedAt] = useState(null)
   const [f, setF] = useState({ q: '', cat: '', sub: '', store: '', pricier: false, noCost: false, exact: false, withOffers: false, state: '', sort: 'name' })
   const [openId, setOpenId] = useState(null)
+  const [scopeOpen, setScopeOpen] = useState(false)   // הגדרות היקף ההשוואה (קטגוריות)
+  const [scopeInfo, setScopeInfo] = useState(null)    // { total, inScope }
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
   const open = openId ? (rows || []).find(r => r.id === openId) : null
 
   async function load() {
     setError('')
-    const [m, s, p, pr, sa, st, mg] = await Promise.all([
+    const [m, s, p, pr, sa, st, mg, sc] = await Promise.all([
       supabase.from('v_competitor_matrix').select('*'),
       supabase.from('competitor_stores').select('id, name, domain, enabled, priority').order('priority'),
       supabase.from('products').select('id, cost, cost_with_vat, extra_expenses, price, profit, margin_percent, wc_product_id, wc_parent_id, supplier_url, image_url, status, stock_status, wc_removed_at'),
@@ -155,7 +225,10 @@ function ComparisonView({ onChanged }) {
       // המלאי שלי לכל מוצר: stock = פנוי אחרי הזמנות פתוחות, reserved = שמור להזמנות פתוחות. מוצר שאוחד למוצר אחר מציג את המלאי של המוצר שאליו אוחד
       supabase.from('product_stock').select('product_id, stock, reserved'),
       supabase.from('product_merges').select('from_product_id, into_product_id'),
+      // היקף ההשוואה: רק מוצרים עם מק"ט, שיש מהם במחסן, ובקטגוריות שלא הוחרגו (v_cmp_scope)
+      supabase.from('v_cmp_scope').select('id'),
     ])
+    const inScope = new Set((sc.data || []).map(x => x.id))
     const stockOf = new Map((st.data || []).map(x => [x.product_id, x]))
     const mergedInto = new Map((mg.data || []).map(x => [x.from_product_id, x.into_product_id]))
     const pendingResearch = new Set((pr.data || []).map(x => x.id))
@@ -200,7 +273,9 @@ function ComparisonView({ onChanged }) {
     }
     // מוצר שהוסר מהאתר, לא מפורסם (טיוטה) או שאזל מהמלאי לא מוצג בהשוואה
     const hidden = id => { const x = prodById.get(id); return !x || x.wc_removed_at || x.status !== 'פעיל' || x.stock_status === 'outofstock' }
-    const list = [...byProduct.values()].filter(r => !hidden(r.id) && (!parents.has(r.wc_product_id) || r.offers.length))
+    const all = [...byProduct.values()].filter(r => !hidden(r.id) && (!parents.has(r.wc_product_id) || r.offers.length))
+    const list = sc.error ? all : all.filter(r => inScope.has(r.id))
+    setScopeInfo({ total: all.length, inScope: list.length })
     list.forEach(withLowest)
     setRows(list)
     setLoadedAt(new Date())
@@ -289,12 +364,21 @@ function ComparisonView({ onChanged }) {
       <div className="cmp-toolbar">
         <div className="cmp-head-meta">
           {loadedAt && <span>עודכן בתצוגה {loadedAt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>}
+          <button className="btn-add btn-outline" onClick={() => setScopeOpen(true)}>⚙️ הגדרות השוואה</button>
           <button className="btn-add btn-outline" onClick={() => setManagingStores(true)}>ניהול מתחרים</button>
           <button className="btn-add btn-outline" onClick={() => setAddingStore(true)}>+ הוספת מתחרה</button>
           <button className="btn-add btn-outline" onClick={load}>רענון</button>
         </div>
       </div>
       {error && <div className="err-inline">{error}</div>}
+      {scopeInfo && (
+        <div className="cmp-sub" style={{ margin: '0 0 10px' }}>
+          בהשוואה: <b>{scopeInfo.inScope}</b> מוצרים, רק מה שיש במלאי, עם מק״ט ובקטגוריות שנבחרו
+          {scopeInfo.total > scopeInfo.inScope ? ` · ${scopeInfo.total - scopeInfo.inScope} מוצרים מחוץ להשוואה` : ''}
+          {' · '}<button type="button" className="link-btn" onClick={() => setScopeOpen(true)}>שינוי קטגוריות</button>
+        </div>
+      )}
+      {scopeOpen && <ScopeSettings onClose={() => setScopeOpen(false)} onChanged={load} />}
 
       <JobStatusBox pendingMatches={awaiting.length} onSynced={load} />
       <StoreCandidates onApproved={st => storeSaved(st)} />
