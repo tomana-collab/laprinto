@@ -990,9 +990,9 @@ function OrderBreakdown({ order }) {
       {c.discount > 0 && row(`הנחת קופון${order.coupons ? ` (${order.coupons})` : ''}`, `−₪${c.discount}`, 'neg')}
       {row('תשלום בפועל על המוצרים (אחרי קופון, בלי משלוח)', `₪${c.sale}`)}
       {hr}
-      {row('עלות המוצרים כולל מע"מ והוצאות נלוות', c.cost === null ? `חסרה עלות: ${c.missing.join(', ')}` : `−₪${c.cost}`, c.cost === null ? '' : 'neg')}
+      {row('עלות המוצרים כולל מע"מ והוצאות נלוות (מחיר קנייה ביום המכירה)', c.cost === null ? `חסרה עלות: ${c.missing.join(', ')}` : `−₪${c.cost}`, c.cost === null ? '' : 'neg')}
       {row(`עמלת סליקה (0.75% + מע"מ מ-₪${c.paid})`, `−₪${c.fee}`, 'neg')}
-      {row(order.shipping_company ? `עלות משלוח (${order.shipping_company})` : ships ? 'עלות משלוח (מההגדרות, לא נבחרה חברת משלוחים)' : 'עלות משלוח (איסוף עצמי)', c.shipCost ? `−₪${c.shipCost}` : '₪0', c.shipCost ? 'neg' : '')}
+      {row(order.shipping_company ? `עלות משלוח (${order.shipping_company})` : ships ? 'עלות משלוח (לא נבחרה חברת שליחויות: לא מחושב)' : 'עלות משלוח (איסוף עצמי)', c.shipCost ? `−₪${c.shipCost}` : '₪0', c.shipCost ? 'neg' : '')}
       {hr}
       {row('רווח כולל מע"מ', c.promoOnly ? '🎁 קד״מ: לא נספר ברווח' : c.profit === null ? '—' : `₪${c.profit}`, c.promoOnly || c.profit === null ? '' : (c.profit >= 0 ? 'pos' : 'neg'), true)}
       {c.giveCost > 0 && <div className="cmp-sub" style={{ marginTop: 4 }}>🎁 מתנה / קד״מ בהזמנה: עלות ₪{c.giveCost}. לא נכלל ברווח ההזמנה, ונספר בדשבורד ב"עלות מוצרים בפחת וקד״מ".</div>}

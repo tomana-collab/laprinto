@@ -24,11 +24,11 @@ const COMPANY_COST = { freddy: 50, hovalot: 45, us: 0 }
 export const setCompanyCost = (key, n) => { if (n !== undefined && n !== null) COMPANY_COST[key] = Number(n) || 0 }
 export const getCompanyCost = key => COMPANY_COST[key] ?? 0
 const companyKey = label => SHIPPING_COMPANIES.find(c => c.label === label)?.key
-// עלות המשלוח שלי להזמנה: לפי חברת המשלוח אם נבחרה, אחרת העלות הכללית להזמנה שנשלחת (איסוף עצמי = 0)
+// עלות המשלוח שלי להזמנה: רק אם סומנה חברת שליחויות בהזמנה (פרדי / הובלות / אנחנו, המחירים בהגדרות).
+// בלי חברה (או איסוף עצמי) — לא מחשבים עלות משלוח
 export const orderShipCost = order => {
   const k = companyKey(order.shipping_company)
-  if (k) return COMPANY_COST[k]
-  return orderShips(order) ? SHIPPING_COST : 0
+  return k ? COMPANY_COST[k] : 0
 }
 
 export function calcProduct({ cost, supplier_discount_percent, extra_expenses, price }) {
@@ -47,15 +47,21 @@ export function calcProduct({ cost, supplier_discount_percent, extra_expenses, p
 }
 
 // עלות שורת פריט אחת (עלות כולל מע"מ + הוצאות נלוות, כפול כמות), או null אם חסרה עלות.
-// העלות נלקחת מהמוצר כפי שהיא היום (cost_with_vat מחושב ב-DB אחרי הנחת ספק) — לא עלות היסטורית.
+// העלות ליחידה = מחיר הקנייה שנשמר בשורה ביום המכירה (cost_at_sale, כולל מע"מ אחרי הנחת ספק).
+// אם לא נשמר (למוצר לא הייתה עלות אז) — העלות הנוכחית של המוצר (cost_with_vat).
 // שורה שסומנה "לא לספק" (למשל מוצר שהוחלף) לא יוצאת מהמלאי, ולכן אין לה עלות.
 export function lineCost(line) {
   if (line.not_supplied) return 0
   // שורה שנוספה ידנית בטקסט חופשי ("אחר"), בלי מוצר מקושר: אין לה עלות
   if (line.manual_line && !line.product_id) return 0
   const p = line.products
-  if (!p || !(Number(p.cost_with_vat) > 0)) return null
-  return r2((Number(p.cost_with_vat) + (Number(p.extra_expenses) || 0)) * (Number(line.quantity) || 0))
+  const unit = unitCostAtSale(line)
+  if (!p || !(unit > 0)) return null
+  return r2((unit + (Number(p.extra_expenses) || 0)) * (Number(line.quantity) || 0))
+}
+// מחיר קנייה ליחידה (כולל מע"מ) נכון ליום המכירה, או העלות הנוכחית אם לא נשמר
+export function unitCostAtSale(line) {
+  return Number(line.cost_at_sale) > 0 ? Number(line.cost_at_sale) : Number(line.products?.cost_with_vat) || 0
 }
 
 // רווחיות להזמנה שלמה (order.lines = כל שורות הפריט; בלי lines — שורה בודדת).
