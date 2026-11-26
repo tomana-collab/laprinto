@@ -302,6 +302,8 @@ export default function Receipts() {
 
       {editing && (
         <ReceiptModal
+          key={editing.id || 'new'}
+          onOpenReceipt={id => { const r = receipts.find(x => x.id === id); if (r) { setError(''); setEditing(r) } }}
           initial={editing} products={products} suppliers={suppliers} error={error} receipts={receipts}
           onCancel={() => setEditing(null)} onSave={handleSave}
           onDelete={editing.id ? () => handleDelete(editing.id) : null}
@@ -311,7 +313,7 @@ export default function Receipts() {
   )
 }
 
-function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, onDelete, receipts = [] }) {
+function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, onDelete, receipts = [], onOpenReceipt }) {
   const [updateCost, setUpdateCost] = useState(true)
   // המחיר הזול ביותר (לפני מע״מ, אחרי הנחה) שבו המוצר התקבל בתעודות אחרות — להערה אדומה אם בתעודה הזו יקר יותר
   const cheapest = new Map()
@@ -321,7 +323,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
       const n = netCost(i)
       if (!(n > 0)) continue
       const c = cheapest.get(i.product_id)
-      if (!c || n < c.price) cheapest.set(i.product_id, { price: n, doc: r.doc_number, date: r.doc_date, supplier: r.suppliers?.name })
+      if (!c || n < c.price) cheapest.set(i.product_id, { price: n, doc: r.doc_number, date: r.doc_date, supplier: r.suppliers?.name, id: r.id })
     }
   }
   // אם אין תעודה זולה יותר — משווים גם למחיר הקנייה שמעודכן במוצר (לפני מע״מ, אחרי הנחת ספק)
@@ -333,7 +335,11 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
     const sys = p && Number(p.cost) > 0 ? Number(p.cost) * (1 - (Number(p.supplier_discount_percent) || 0) / 100) : 0
     // בעריכת התעודה שממנה נקבע המחיר במוצר — לא משווים אותה לעצמה
     const own = initial.id && (initial.stock_receipt_items || []).some(i => i.product_id === it.product_id && Math.abs(netCost(i) - sys) < 0.005)
-    return sys > 0 && !own && netCost(it) - sys > 0.005 ? { price: sys, system: true } : null
+    if (!(sys > 0) || own || !(netCost(it) - sys > 0.005)) return null
+    // התעודה שממנה הגיע המחיר שבמוצר (אותו מחיר, האחרונה)
+    const src = receipts.filter(r => r.id !== initial.id && (r.stock_receipt_items || []).some(i => i.product_id === it.product_id && Math.abs(netCost(i) - sys) < 0.005))
+      .sort((a, b) => String(b.doc_date || '').localeCompare(String(a.doc_date || '')))[0]
+    return { price: sys, system: true, id: src?.id, doc: src?.doc_number, date: src?.doc_date, supplier: src?.suppliers?.name }
   }
   const [supplierId, setSupplierId] = useState(initial.supplier_id || '')
   const [docNumber, setDocNumber] = useState(initial.doc_number || '')
@@ -409,7 +415,9 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
                     onChange={e => pick(idx, e.target.value)} style={{ width: '100%' }} />
                   {it.text && !it.product_id && <small className="neg">לא נמצא מוצר — בחר מהרשימה</small>}
                   {cheaperElsewhere(it) && (() => { const c = cheaperElsewhere(it); return (
-                    <div className="cheaper-note">⚠ {c.system ? 'מחיר הקנייה שמעודכן במוצר זול יותר' : 'קיבלת כבר את המוצר הזה ביותר זול'}: {money(c.price)} לפני מע״מ{c.doc ? ` בתעודה ${c.doc}` : ''}{c.date ? ` (${formatDate(c.date)})` : ''}{c.supplier ? ` · ${c.supplier}` : ''} · כאן {money(netCost(it))}, יקר ב-{money(netCost(it) - c.price)}</div>
+                    <div className={`cheaper-note${c.id ? ' clickable' : ''}`} role={c.id ? 'button' : undefined}
+                      title={c.id ? 'לחיצה פותחת את התעודה הזו' : undefined}
+                      onClick={() => { if (c.id && window.confirm(`לפתוח את תעודה ${c.doc || ''}? שינויים שלא נשמרו בתעודה הנוכחית יאבדו.`)) onOpenReceipt?.(c.id) }}>⚠ {c.system ? 'מחיר הקנייה שמעודכן במוצר זול יותר' : 'קיבלת כבר את המוצר הזה ביותר זול'}: {money(c.price)} לפני מע״מ{c.doc ? ` בתעודה ${c.doc}` : ''}{c.date ? ` (${formatDate(c.date)})` : ''}{c.supplier ? ` · ${c.supplier}` : ''} · כאן {money(netCost(it))}, יקר ב-{money(netCost(it) - c.price)}{c.id ? ' · לחץ לפתיחת התעודה ←' : ''}</div>
                   ) })()}
                   {it.hidden && <small className="neg">מוצר ראשי שפוצל לוריאציות — לא נספר במלאי. בחר את הוריאציה (לפי מק״ט).</small>}
                 </td>
