@@ -419,7 +419,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
                   {cheaperElsewhere(it) && (() => { const c = cheaperElsewhere(it); return (
                     <div className={`cheaper-note${c.id ? ' clickable' : ''}`} role={c.id ? 'button' : undefined}
                       title={c.id ? 'לחיצה פותחת את התעודה הזו' : undefined}
-                      onClick={() => { if (c.id && window.confirm(`לפתוח את תעודה ${c.doc || ''}? שינויים שלא נשמרו בתעודה הנוכחית יאבדו.`)) onOpenReceipt?.(c.id) }}>⚠ {c.system ? 'מחיר הקנייה שמעודכן במוצר זול יותר' : 'קיבלת כבר את המוצר הזה ביותר זול'}: {money(c.price)} לפני מע״מ{c.doc ? ` בתעודה ${c.doc}` : ''}{c.date ? ` (${formatDate(c.date)})` : ''}{c.supplier ? ` · ${c.supplier}` : ''} · כאן {money(netCost(it))}, יקר ב-{money(netCost(it) - c.price)}{c.id ? ' · לחץ לפתיחת התעודה ←' : ''}</div>
+                      onClick={() => { if (c.id && window.confirm(`לפתוח את תעודה ${c.doc || ''}? שינויים שלא נשמרו בתעודה הנוכחית יאבדו.`)) onOpenReceipt?.(c.id) }}>⚠ {c.system ? 'מחיר הקנייה שמעודכן במוצר זול יותר' : 'קיבלת כבר את המוצר הזה ביותר זול'}: {money(c.price)} אחרי הנחה, לפני מע״מ{c.doc ? ` בתעודה ${c.doc}` : ''}{c.date ? ` (${formatDate(c.date)})` : ''}{c.supplier ? ` · ${c.supplier}` : ''} · כאן אחרי הנחה {money(netCost(it))}, יקר ב-{money(netCost(it) - c.price)}{c.id ? ' · לחץ לפתיחת התעודה ←' : ''}</div>
                   ) })()}
                   {it.hidden && <small className="neg">מוצר ראשי שפוצל לוריאציות — לא נספר במלאי. בחר את הוריאציה (לפי מק״ט).</small>}
                 </td>
