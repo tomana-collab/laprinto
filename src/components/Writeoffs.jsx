@@ -15,6 +15,7 @@ const ils = n => `₪${(Math.round(n * 100) / 100).toLocaleString('he-IL')}`
 // kind: 'פחת' (הפסד לפי עלות) או 'נלקח בעלות' (לקחנו מהמלאי ושילמנו מחיר עלות: יורד מהמלאי ונספר כהכנסה ברווח)
 export const TAKEN = 'נלקח בעלות'
 const TAKEN_REASONS = ['לשימוש אישי', 'מתנה', 'לעסק']
+export const TAKERS = ['אמיר', 'רועי', 'נטלי', 'לינוי', 'שונות']
 
 export default function Writeoffs({ onCount, kind = 'פחת' }) {
   const taken = kind === TAKEN
@@ -28,6 +29,7 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
   const [picked, setPicked] = useState(null)
   const [qty, setQty] = useState(1)
   const [reason, setReason] = useState('')
+  const [takenBy, setTakenBy] = useState('') // נלקח בעלות: מי לקח
   const [price, setPrice] = useState('') // נלקח בעלות: כמה שולם ליחידה (ברירת מחדל: העלות)
   const [busy, setBusy] = useState(false)
   const [sort, onSort] = useSort({ key: 'date', dir: 'desc' })
@@ -55,6 +57,7 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
     if (!(n > 0)) { setError('כמות חייבת להיות גדולה מ-0'); return }
     if (n > picked.stock) { setError(`במלאי יש רק ${picked.stock} יחידות של המוצר הזה`); return }
     if (!taken && !reason.trim()) { setError('כתוב סיבה'); return }
+    if (taken && !takenBy) { setError('בחר מי לקח'); return }
     if (taken && price !== '' && !(Number(price) >= 0)) { setError('המחיר ששולם לא תקין'); return }
     setBusy(true)
     // עלות ליחידה ברגע הרישום (כולל מע"מ, אחרי הנחת ספק), כדי ששווי ההפסד לא ישתנה אם המחיר יתעדכן אחר כך
@@ -62,11 +65,11 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
     const { error: e } = await supabase.from('stock_writeoffs').insert({
       product_id: picked.product_id, quantity: n, reason: reason.trim(), kind,
       unit_cost: Number(p?.cost_with_vat) || 0, created_by: user?.email || '',
-      ...(taken ? { unit_price: price !== '' ? Number(price) : (Number(p?.cost_with_vat) || 0) } : {}),
+      ...(taken ? { taken_by: takenBy, unit_price: price !== '' ? Number(price) : (Number(p?.cost_with_vat) || 0) } : {}),
     })
     setBusy(false)
     if (e) { setError(e.message); return }
-    setOpen(false); setPicked(null); setQ(''); setQty(1); setReason(''); setPrice('')
+    setOpen(false); setPicked(null); setQ(''); setQty(1); setReason(''); setPrice(''); setTakenBy('')
     load()
   }
   async function remove(r) {
@@ -83,7 +86,7 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
   const units = rows.reduce((a, r) => a + Number(r.quantity), 0)
   const sorted = sortRows(rows, {
     date: r => r.created_at, name: r => r.products?.name || '', qty: r => Number(r.quantity),
-    reason: r => r.reason, value: valueOf,
+    reason: r => r.reason, value: valueOf, who: r => r.taken_by || '',
   }, sort)
 
   return (
@@ -97,6 +100,17 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
         </div>
         {!open && <button className="btn-add" onClick={() => setOpen(true)}>{taken ? '➕ הוסף מוצר שנלקח' : '➕ הוסף לפחת'}</button>}
       </div>
+
+      {taken && rows.length > 0 && (
+        <div className="debt-suppliers">
+          <span className="cmp-sub">לפי מי לקח:</span>
+          {TAKERS.concat(rows.some(r => !r.taken_by) ? ['לא צוין'] : []).map(who => {
+            const list = rows.filter(r => (r.taken_by || 'לא צוין') === who)
+            if (!list.length) return null
+            return <span key={who} className="taker-chip">{who} · {list.reduce((a, r) => a + Number(r.quantity), 0)} יח׳ <b>{ils(list.reduce((a, r) => a + paidOf(r), 0))}</b></span>
+          })}
+        </div>
+      )}
 
       {open && (
         <div className="free-add">
@@ -117,7 +131,12 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
               {needle && matches.length === 0 && <div className="cmp-sub">לא נמצא מוצר במלאי</div>}
             </>
           )}
-          <div className="free-field">{taken ? 'למה / למי (לא חובה)' : 'סיבה'}
+          {taken && <div className="free-field">מי לקח
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {TAKERS.map(x => <button key={x} type="button" className={`cmp-tool ${takenBy === x ? 'ready-on' : ''}`} onClick={() => setTakenBy(x)}>{x}</button>)}
+            </div>
+          </div>}
+          <div className="free-field">{taken ? 'הערה (לא חובה)' : 'סיבה'}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {(taken ? TAKEN_REASONS : REASONS).map(x => <button key={x} type="button" className={`cmp-tool ${reason === x ? 'ready-on' : ''}`} onClick={() => setReason(x)}>{x}</button>)}
             </div>
@@ -138,6 +157,7 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
             <SortTh k="date" sort={sort} onSort={onSort}>תאריך</SortTh>
             <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
             <SortTh k="qty" sort={sort} onSort={onSort}>כמות</SortTh>
+            {taken && <SortTh k="who" sort={sort} onSort={onSort}>מי לקח</SortTh>}
             <SortTh k="reason" sort={sort} onSort={onSort}>{taken ? 'הערה' : 'סיבה'}</SortTh>
             <th title="עלות ליחידה כולל מע״מ, אחרי הנחת ספק, ברגע הרישום">עלות ליחידה</th>
             {taken && <th>שולם ליחידה</th>}
@@ -146,12 +166,13 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
             <th></th>
           </tr></thead>
           <tbody>
-            {sorted.length === 0 && <tr><td className="empty-col" colSpan={taken ? 9 : 8}>{taken ? 'אין מוצרים שנלקחו' : 'אין פחת'}</td></tr>}
+            {sorted.length === 0 && <tr><td className="empty-col" colSpan={taken ? 10 : 8}>{taken ? 'אין מוצרים שנלקחו' : 'אין פחת'}</td></tr>}
             {sorted.map(r => (
               <tr key={r.id} style={{ cursor: 'default' }}>
                 <td>{formatDateDots(r.created_at)}</td>
                 <td><a href="#" onClick={e => { e.preventDefault(); openRecord('products', r.product_id) }}>{r.products?.name || '—'}</a>{r.products?.sku && <div className="cmp-sub">{r.products.sku}</div>}</td>
                 <td>{Number(r.quantity)}</td>
+                {taken && <td><b>{r.taken_by || '—'}</b></td>}
                 <td>{r.reason || '—'}</td>
                 <td>{Number(r.unit_cost) ? ils(Number(r.unit_cost)) : <span title="לא הוזנה עלות למוצר">—</span>}</td>
                 {taken && <td>{ils(r.unit_price != null ? Number(r.unit_price) : Number(r.unit_cost))}</td>}
