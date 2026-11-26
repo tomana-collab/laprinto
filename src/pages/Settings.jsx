@@ -140,20 +140,17 @@ export default function Settings() {
         <div className="settings-section">
           <h3>עלות משלוח</h3>
           <div className="settings-readonly">
-            כמה עולה לך משלוח של הזמנה אחת (₪), לפי חברת המשלוחים שנבחרה בהזמנה. הסכום יורד מהרווח של ההזמנה.
-            הזמנה שלא נבחרה לה חברה: העלות הכללית, אם היא נשלחת ללקוח (כולל משלוח חינם). באיסוף עצמי לא יורד כלום.
+            כמה עולה לך משלוח של הזמנה אחת (₪), לפי חברת השליחויות שנבחרה בהזמנה. הסכום יורד מהרווח של ההזמנה.
+            "אנחנו" = ללא עלות. הזמנה שלא נבחרה לה חברה, או איסוף עצמי: לא יורד כלום.
           </div>
           <form onSubmit={saveShipCost}>
-            {SHIPPING_COMPANIES.map(c => (
+            {SHIPPING_COMPANIES.filter(c => !c.free).map(c => (
               <div className="field" key={c.key}>
                 <label>{c.label} (₪ למשלוח)</label>
                 <input type="number" min="0" step="0.01" value={companyCosts[c.key]} onChange={e => setCompanyCosts(x => ({ ...x, [c.key]: e.target.value }))} />
               </div>
             ))}
-            <div className="field">
-              <label>עלות כללית להזמנה שלא נבחרה לה חברה (₪)</label>
-              <input type="number" min="0" step="0.01" value={shipCost} onChange={e => setShipCostInput(e.target.value)} />
-            </div>
+            <div className="settings-readonly">אנחנו: ללא עלות (קבוע)</div>
             <button className="btn btn-primary" type="submit">שמירה</button>
             {shipMsg && <div className={`settings-msg ${shipMsg.type}`}>{shipMsg.text}</div>}
           </form>

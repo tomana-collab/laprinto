@@ -18,17 +18,17 @@ export const orderShips = order => !!order.wc_order_id && !/איסוף/.test(ord
 export const SHIPPING_COMPANIES = [
   { key: 'freddy', label: 'פרדי' },
   { key: 'hovalot', label: 'הובלות' },
-  { key: 'us', label: 'אנחנו' },
+  { key: 'us', label: 'אנחנו', free: true }, // אנחנו מוסרים בעצמנו: ללא עלות, לא יורד מהרווח
 ]
 const COMPANY_COST = { freddy: 50, hovalot: 45, us: 0 }
 export const setCompanyCost = (key, n) => { if (n !== undefined && n !== null) COMPANY_COST[key] = Number(n) || 0 }
-export const getCompanyCost = key => COMPANY_COST[key] ?? 0
+export const getCompanyCost = key => SHIPPING_COMPANIES.find(c => c.key === key)?.free ? 0 : (COMPANY_COST[key] ?? 0)
 const companyKey = label => SHIPPING_COMPANIES.find(c => c.label === label)?.key
 // עלות המשלוח שלי להזמנה: רק אם סומנה חברת שליחויות בהזמנה (פרדי / הובלות / אנחנו, המחירים בהגדרות).
 // בלי חברה (או איסוף עצמי) — לא מחשבים עלות משלוח
 export const orderShipCost = order => {
   const k = companyKey(order.shipping_company)
-  return k ? COMPANY_COST[k] : 0
+  return k ? getCompanyCost(k) : 0
 }
 
 export function calcProduct({ cost, supplier_discount_percent, extra_expenses, price }) {
