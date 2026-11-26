@@ -179,7 +179,7 @@ export default function Dashboard() {
           <div className="summary-card"><span>רווח על ההזמנות (מכר פחות עלות מוצרים ומשלוחים)</span><b className={grossProfit >= 0 ? 'pos' : 'neg'}>{ils(grossProfit)}</b></div>
           <div className="summary-card"><span>עמלות סליקה (0.75% + מע״מ)</span><b className="neg">−{ils(fees)}</b></div>
           <div className="summary-card"><span>עלות מוצרים בפחת וקד״מ (כולל מע״מ) · פחת {writeoffUnits} יח׳ {ils(writeoffCost)} · קד״מ / ללא חיוב {giveUnits} יח׳ {ils(giveCost)}{giveMissing ? ` · ${giveMissing} בלי עלות` : ''}</span><b className="neg">−{ils(writeoffCost + giveCost)}</b></div>
-          <div className="summary-card"><span>מוצרים שנלקחו מהמלאי בתשלום עלות ({takenUnits} יח׳, כולל מע״מ)</span><b className="pos">+{ils(takenPaid)}</b></div>
+          <div className="summary-card"><span>מוצרים שנלקחו מהמלאי בתשלום עלות ({takenUnits} יח׳, ללא מע״מ)</span><b className="pos">+{ils(takenPaid)}</b></div>
           <div className="summary-card"><span>רווח סופי (אחרי עמלות סליקה, פחת וקד״מ, כולל מה ששולם על מוצרים שנלקחו)</span><b className={finalProfit >= 0 ? 'pos' : 'neg'}>{ils(finalProfit)}</b></div>
         </div>
         {missingCost > 0 && (

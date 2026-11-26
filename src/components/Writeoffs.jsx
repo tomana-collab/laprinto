@@ -6,6 +6,10 @@ import { useNav } from '../contexts/NavContext'
 import { formatDateDots } from '../lib/format'
 import { useSort, sortRows, SortTh } from '../lib/sort'
 import { loadSimpleStock } from './SimpleStock'
+import { VAT_RATE } from '../lib/pricing'
+
+// נלקח בעלות: הכל ללא מע״מ (עלות ליחידה אחרי הנחת ספק, לפני מע״מ)
+const noVat = n => Math.round((Number(n) || 0) / (1 + VAT_RATE) * 100) / 100
 
 // פחת: מוצר שנשבר / נפל / נפגם / אבד. כל רישום יורד מהמלאי (בכל המסכים, דרך product_stock ו"במלאי"),
 // ושווי ההפסד נשמר לפי עלות המוצר כולל מע"מ ברגע הרישום. מחיקת רישום מחזירה את היחידות למלאי.
@@ -64,8 +68,8 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
     const { data: p } = await supabase.from('products').select('cost_with_vat').eq('id', picked.product_id).maybeSingle()
     const { error: e } = await supabase.from('stock_writeoffs').insert({
       product_id: picked.product_id, quantity: n, reason: reason.trim(), kind,
-      unit_cost: Number(p?.cost_with_vat) || 0, created_by: user?.email || '',
-      ...(taken ? { taken_by: takenBy, unit_price: price !== '' ? Number(price) : (Number(p?.cost_with_vat) || 0) } : {}),
+      unit_cost: taken ? noVat(p?.cost_with_vat) : (Number(p?.cost_with_vat) || 0), created_by: user?.email || '',
+      ...(taken ? { taken_by: takenBy, unit_price: price !== '' ? Number(price) : noVat(p?.cost_with_vat) } : {}),
     })
     setBusy(false)
     if (e) { setError(e.message); return }
@@ -95,7 +99,7 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         <div className="cmp-sub">
           {taken
-            ? <>מוצרים שלקחנו מהמלאי ושילמנו עליהם מחיר עלות. כל רישום יורד מהמלאי, והתשלום נספר כהכנסה ברווח בדשבורד. {units} יח׳ · שולם: <b className={total ? 'pos' : ''}>{ils(total)}</b></>
+            ? <>מוצרים שלקחנו מהמלאי ושילמנו עליהם מחיר עלות. כל רישום יורד מהמלאי, והתשלום (ללא מע״מ) נספר כהכנסה ברווח בדשבורד. {units} יח׳ · שולם ללא מע״מ: <b className={total ? 'pos' : ''}>{ils(total)}</b></>
             : <>מוצר שנשבר, נפל, נפגם או אבד. כל רישום יורד מהמלאי ומהשווי בכל המערכת. {units} יח׳ בפחת · הפסד לפי עלות (כולל מע״מ): <b className={total ? 'neg' : ''}>{ils(total)}</b></>}
         </div>
         {!open && <button className="btn-add" onClick={() => setOpen(true)}>{taken ? '➕ הוסף מוצר שנלקח' : '➕ הוסף לפחת'}</button>}
@@ -124,7 +128,7 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
             <>
               <input autoFocus placeholder="חפש מוצר שבמלאי לפי שם או מק״ט" value={q} onChange={e => setQ(e.target.value)} />
               {matches.map(m => (
-                <button key={m.sku || m.product_id} type="button" className="free-option" onClick={() => { setPicked(m); setPrice(m.cost ? String(m.cost) : '') }}>
+                <button key={m.sku || m.product_id} type="button" className="free-option" onClick={() => { setPicked(m); setPrice(m.cost ? String(noVat(m.cost)) : '') }}>
                   {m.name} <span className="cmp-sub">{m.sku} · במלאי {m.stock}</span>
                 </button>
               ))}
@@ -144,7 +148,7 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
           </div>
           <div className="free-row">
             <label>כמות <input type="number" min="1" style={{ width: 80 }} value={qty} onChange={e => setQty(e.target.value)} /></label>
-            {taken && <label title="ברירת מחדל: עלות המוצר כולל מע״מ">שולם ליחידה (₪, כולל מע״מ) <input type="number" min="0" step="0.01" style={{ width: 100 }} value={price} placeholder="עלות" onChange={e => setPrice(e.target.value)} /></label>}
+            {taken && <label title="ברירת מחדל: עלות המוצר ללא מע״מ (אחרי הנחת ספק)">שולם ליחידה (₪, ללא מע״מ) <input type="number" min="0" step="0.01" style={{ width: 100 }} value={price} placeholder="עלות" onChange={e => setPrice(e.target.value)} /></label>}
             <button type="button" className="btn-add" disabled={busy} onClick={add}>{busy ? 'שומר…' : taken ? 'הוסף' : 'הוסף לפחת'}</button>
             <button type="button" className="cmp-tool" onClick={() => { setOpen(false); setPicked(null); setQ(''); setError('') }}>ביטול</button>
           </div>
@@ -159,8 +163,8 @@ export default function Writeoffs({ onCount, kind = 'פחת' }) {
             <SortTh k="qty" sort={sort} onSort={onSort}>כמות</SortTh>
             {taken && <SortTh k="who" sort={sort} onSort={onSort}>מי לקח</SortTh>}
             <SortTh k="reason" sort={sort} onSort={onSort}>{taken ? 'הערה' : 'סיבה'}</SortTh>
-            <th title="עלות ליחידה כולל מע״מ, אחרי הנחת ספק, ברגע הרישום">עלות ליחידה</th>
-            {taken && <th>שולם ליחידה</th>}
+            <th title={taken ? 'עלות ליחידה ללא מע״מ, אחרי הנחת ספק, ברגע הרישום' : 'עלות ליחידה כולל מע״מ, אחרי הנחת ספק, ברגע הרישום'}>{taken ? 'עלות ליחידה (ללא מע״מ)' : 'עלות ליחידה'}</th>
+            {taken && <th>שולם ליחידה (ללא מע״מ)</th>}
             <SortTh k="value" sort={sort} onSort={onSort}>{taken ? 'שולם (הכנסה)' : 'הפסד'}</SortTh>
             <th>נרשם ע״י</th>
             <th></th>
