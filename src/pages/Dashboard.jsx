@@ -5,6 +5,7 @@ import { calcOrder, receiptsTotalWithVat, getShippingCost } from '../lib/pricing
 import { groupOrders } from '../lib/orders'
 import { loadSimpleStock } from '../components/SimpleStock'
 import { useNav } from '../contexts/NavContext'
+import { useLiveReload } from '../lib/useLive'
 
 const OPEN_TASK_STATUSES = ['לביצוע', 'בתהליך']
 const CLOSED_OPP_STATUSES = ['סגור-הצלחה', 'סגור-נכשל']
@@ -31,10 +32,13 @@ export default function Dashboard() {
   const [customTo, setCustomTo] = useState(() => ymd(new Date()))
   const [stock, setStock] = useState(null) // שווי הסחורה שבמלאי (חלון "במלאי")
   const [writeoffs, setWriteoffs] = useState([]) // פחת
+  const loadWriteoffs = () => supabase.from('stock_writeoffs').select('quantity, unit_cost, unit_price, kind, created_at').then(({ data }) => setWriteoffs(data || []))
   useEffect(() => {
     loadSimpleStock().then(setStock).catch(() => setStock([]))
-    supabase.from('stock_writeoffs').select('quantity, unit_cost, unit_price, kind, created_at').then(({ data }) => setWriteoffs(data || []))
+    loadWriteoffs()
   }, [])
+  // פחת / נלקח בעלות שנרשמו בזמן שהדשבורד פתוח — מתעדכנים מיד, בלי רענון
+  useLiveReload(loadWriteoffs, ['stock_writeoffs'])
 
   useEffect(() => {
     async function load() {
