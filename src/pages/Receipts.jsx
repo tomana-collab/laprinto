@@ -16,6 +16,8 @@ const pct = (g, n) => g > 0 ? `${Math.round((1 - n / g) * 1000) / 10}%` : '—'
 const netCost = i => (Number(i.unit_cost) || 0) * (1 - (Number(i.discount_percent) || 0) / 100)
 const withVat = n => n * (1 + VAT_RATE)
 const PAY = ['לא שולם', 'שולם חלקית', 'שולם']
+// הערת "היה זול יותר": רק בהפרש של יותר משקל ליחידה (הפרש קטן הוא בדרך כלל עיגול אגורות)
+const MIN_GAP = 1
 // מי שילם לספק
 const PAYERS = ['רועי שילם', 'אמיר שילם', 'לפרינטו שילמה']
 const payClass = st => st === 'שולם' ? 'pay-paid' : st === 'שולם חלקית' ? 'pay-partial' : st === 'לא שולם' ? 'pay-unpaid' : 'pay-none'
@@ -330,12 +332,12 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
   const cheaperElsewhere = it => {
     if (!it.product_id || !(netCost(it) > 0)) return null
     const c = cheapest.get(it.product_id)
-    if (c && netCost(it) - c.price > 0.005) return c
+    if (c && netCost(it) - c.price > MIN_GAP) return c
     const p = products.find(x => x.id === it.product_id)
     const sys = p && Number(p.cost) > 0 ? Number(p.cost) * (1 - (Number(p.supplier_discount_percent) || 0) / 100) : 0
     // בעריכת התעודה שממנה נקבע המחיר במוצר — לא משווים אותה לעצמה
     const own = initial.id && (initial.stock_receipt_items || []).some(i => i.product_id === it.product_id && Math.abs(netCost(i) - sys) < 0.005)
-    if (!(sys > 0) || own || !(netCost(it) - sys > 0.005)) return null
+    if (!(sys > 0) || own || !(netCost(it) - sys > MIN_GAP)) return null
     // התעודה שממנה הגיע המחיר שבמוצר (אותו מחיר, האחרונה)
     const src = receipts.filter(r => r.id !== initial.id && (r.stock_receipt_items || []).some(i => i.product_id === it.product_id && Math.abs(netCost(i) - sys) < 0.005))
       .sort((a, b) => String(b.doc_date || '').localeCompare(String(a.doc_date || '')))[0]
