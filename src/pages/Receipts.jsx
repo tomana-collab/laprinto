@@ -49,7 +49,7 @@ export default function Receipts() {
   }
   useEffect(() => { load() }, [])
 
-  async function handleSave({ supplier_id, doc_number, doc_date, notes, status, payment_status, paid_amount, paid_at, paid_by, items }) {
+  async function handleSave({ supplier_id, doc_number, doc_date, notes, status, payment_status, paid_amount, paid_at, paid_by, items, updateCost = true }) {
     // לא מדלגים בשקט על שורות בעייתיות — עוצרים ומראים איזו שורה לא תקינה
     const filled = items.map((i, n) => ({ ...i, n: n + 1 })).filter(i => i.text || i.product_id || Number(i.quantity) > 0)
     const bad = filled.find(i => !i.product_id)
@@ -87,7 +87,8 @@ export default function Receipts() {
     }
     // תעודה שסופקה מעדכנת את מחיר הקנייה של המוצר (עלות ליחידה לפני מע"מ + הנחת ספק) — רק אם זו התעודה האחרונה של המוצר,
     // כדי שעריכת תעודה ישנה לא תדרוס מחיר עדכני יותר. העלות במוצר משמשת לחישוב הרווח בהזמנות ובמוצרים
-    if (status === 'סופק') {
+    // updateCost=false: המחיר נשמר רק בתעודה הזו, בלי לשנות את מחיר הקנייה במוצר
+    if (status === 'סופק' && updateCost) {
       const newerExists = pid => receipts.some(r => r.id !== editing?.id && (r.status || 'סופק') === 'סופק'
         && String(r.doc_date || '') > String(doc_date || '') && r.stock_receipt_items.some(i => i.product_id === pid))
       const updates = clean.filter(i => Number(i.unit_cost) > 0 && !newerExists(i.product_id)).map(i => {
@@ -301,7 +302,7 @@ export default function Receipts() {
 
       {editing && (
         <ReceiptModal
-          initial={editing} products={products} suppliers={suppliers} error={error}
+          initial={editing} products={products} suppliers={suppliers} error={error} receipts={receipts}
           onCancel={() => setEditing(null)} onSave={handleSave}
           onDelete={editing.id ? () => handleDelete(editing.id) : null}
         />
@@ -310,7 +311,23 @@ export default function Receipts() {
   )
 }
 
-function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, onDelete }) {
+function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, onDelete, receipts = [] }) {
+  const [updateCost, setUpdateCost] = useState(true)
+  // המחיר הזול ביותר (לפני מע״מ, אחרי הנחה) שבו המוצר התקבל בתעודות אחרות — להערה אדומה אם בתעודה הזו יקר יותר
+  const cheapest = new Map()
+  for (const r of receipts) {
+    if (r.id === initial.id) continue
+    for (const i of r.stock_receipt_items || []) {
+      const n = netCost(i)
+      if (!(n > 0)) continue
+      const c = cheapest.get(i.product_id)
+      if (!c || n < c.price) cheapest.set(i.product_id, { price: n, doc: r.doc_number, date: r.doc_date, supplier: r.suppliers?.name })
+    }
+  }
+  const cheaperElsewhere = it => {
+    const c = it.product_id && cheapest.get(it.product_id)
+    return c && netCost(it) > 0 && netCost(it) - c.price > 0.005 ? c : null
+  }
   const [supplierId, setSupplierId] = useState(initial.supplier_id || '')
   const [docNumber, setDocNumber] = useState(initial.doc_number || '')
   const [docDate, setDocDate] = useState(initial.doc_date || today())
@@ -384,6 +401,9 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
                   <input type="text" list="receipt-products" value={it.text} placeholder="הקלד מק״ט או שם"
                     onChange={e => pick(idx, e.target.value)} style={{ width: '100%' }} />
                   {it.text && !it.product_id && <small className="neg">לא נמצא מוצר — בחר מהרשימה</small>}
+                  {cheaperElsewhere(it) && (() => { const c = cheaperElsewhere(it); return (
+                    <div className="cheaper-note">⚠ קיבלת כבר את המוצר הזה ביותר זול: {money(c.price)} לפני מע״מ{c.doc ? ` בתעודה ${c.doc}` : ''}{c.date ? ` (${formatDate(c.date)})` : ''}{c.supplier ? ` · ${c.supplier}` : ''} · כאן {money(netCost(it))}, יקר ב-{money(netCost(it) - c.price)}</div>
+                  ) })()}
                   {it.hidden && <small className="neg">מוצר ראשי שפוצל לוריאציות — לא נספר במלאי. בחר את הוריאציה (לפי מק״ט).</small>}
                 </td>
                 <td><input type="number" min="0" value={it.quantity} onChange={e => setItem(idx, { quantity: e.target.value })} style={{ width: 80 }} /></td>
@@ -411,11 +431,17 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
           <div className="summary-card"><span>סה״כ כולל מע״מ (להשוואה לחשבונית)</span><b>{money(withVat(total))}</b></div>
           {payStatus === 'שולם חלקית' && <div className="summary-card"><span>נותר לתשלום</span><b className="neg">{money(Math.max(0, withVat(total) - (Number(paidAmount) || 0)))}</b></div>}
         </div>
+        {status === 'סופק' && (
+          <label className="cmp-check" style={{ marginTop: 12 }}>
+            <input type="checkbox" checked={updateCost} onChange={e => setUpdateCost(e.target.checked)} />
+            לעדכן את מחיר הקנייה במוצרים לפי התעודה הזו {updateCost ? '' : <span className="cmp-sub">(כבוי: המחיר נשמר רק בתעודה הזו, מחיר הקנייה במוצר לא משתנה)</span>}
+          </label>
+        )}
         {error && <div className="err-inline" style={{ marginTop: 12 }}>{error}</div>}
         <div className="modal-actions">
           {onDelete && <button className="btn btn-danger" onClick={onDelete}>מחיקת תעודה</button>}
           <button className="btn btn-ghost" onClick={onCancel}>ביטול</button>
-          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, status, payment_status: payStatus, paid_amount: paidAmount, paid_at: paidAt, paid_by: payStatus && payStatus !== 'לא שולם' ? paidBy : '', items })}>{initial.id ? 'שמירת שינויים' : status === 'סופק' ? 'קליטה למלאי' : 'שמירת הזמנה'}</button>
+          <button className="btn btn-primary" onClick={() => onSave({ supplier_id: supplierId, doc_number: docNumber, doc_date: docDate, notes, status, payment_status: payStatus, paid_amount: paidAmount, paid_at: paidAt, paid_by: payStatus && payStatus !== 'לא שולם' ? paidBy : '', items, updateCost })}>{initial.id ? 'שמירת שינויים' : status === 'סופק' ? 'קליטה למלאי' : 'שמירת הזמנה'}</button>
         </div>
       </div>
     </div>
