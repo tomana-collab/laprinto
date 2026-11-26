@@ -33,7 +33,7 @@ export default function Dashboard() {
   const [writeoffs, setWriteoffs] = useState([]) // פחת
   useEffect(() => {
     loadSimpleStock().then(setStock).catch(() => setStock([]))
-    supabase.from('stock_writeoffs').select('quantity, unit_cost, created_at').then(({ data }) => setWriteoffs(data || []))
+    supabase.from('stock_writeoffs').select('quantity, unit_cost, unit_price, kind, created_at').then(({ data }) => setWriteoffs(data || []))
   }, [])
 
   useEffect(() => {
@@ -111,7 +111,12 @@ export default function Dashboard() {
   const giveMissing = giveLines.filter(l => l.product_id && lineCostOf(l) === null).length
   const giveUnits = giveLines.reduce((a, l) => a + (Number(l.quantity) || 0), 0)
   // פחת בתקופה: כמות × עלות ליחידה ברגע הרישום
-  const periodWriteoffs = writeoffs.filter(w => { const d = String(w.created_at || '').slice(0, 10); return d >= from && (!to || d < to) })
+  const periodAll = writeoffs.filter(w => { const d = String(w.created_at || '').slice(0, 10); return d >= from && (!to || d < to) })
+  const periodWriteoffs = periodAll.filter(w => (w.kind || 'פחת') === 'פחת')
+  // נלקח בעלות: מוצרים שלקחנו מהמלאי ושילמנו עליהם עלות — התשלום נספר כהכנסה (פלוס ברווח)
+  const periodTaken = periodAll.filter(w => w.kind === 'נלקח בעלות')
+  const takenPaid = periodTaken.reduce((a, w) => a + Number(w.quantity) * (w.unit_price != null ? Number(w.unit_price) : Number(w.unit_cost)), 0)
+  const takenUnits = periodTaken.reduce((a, w) => a + Number(w.quantity), 0)
   const writeoffCost = periodWriteoffs.reduce((a, w) => a + Number(w.quantity) * Number(w.unit_cost), 0)
   const writeoffUnits = periodWriteoffs.reduce((a, w) => a + Number(w.quantity), 0)
   // לפי הזמנה (שורות של אותה הזמנה מאוחדות; מוצר שהוחלף לא נספר פעמיים)
@@ -136,7 +141,7 @@ export default function Dashboard() {
   const periodExpenses = (data.receipts || []).filter(r => { const d = String(r.doc_date || r.created_at || '').slice(0, 10); return !to || d < to })
     .reduce((a, r) => a + receiptsTotalWithVat([r], from), 0)
   const periodBalance = periodIncome - periodExpenses
-  const finalProfit = grossProfit - fees - writeoffCost - giveCost
+  const finalProfit = grossProfit - fees - writeoffCost - giveCost + takenPaid
   const periodLabel = P.key === 'custom' ? 'מותאם אישית' : P.label
   // סחורה שבמלאי ולא נמכרה (נקלט − נמכר − פחת, לפי מק"ט) — לא תלוי בתקופה
   const inStock = (stock || []).filter(r => r.stock > 0)
@@ -174,7 +179,8 @@ export default function Dashboard() {
           <div className="summary-card"><span>רווח על ההזמנות (מכר פחות עלות מוצרים ומשלוחים)</span><b className={grossProfit >= 0 ? 'pos' : 'neg'}>{ils(grossProfit)}</b></div>
           <div className="summary-card"><span>עמלות סליקה (0.75% + מע״מ)</span><b className="neg">−{ils(fees)}</b></div>
           <div className="summary-card"><span>עלות מוצרים בפחת וקד״מ (כולל מע״מ) · פחת {writeoffUnits} יח׳ {ils(writeoffCost)} · קד״מ / ללא חיוב {giveUnits} יח׳ {ils(giveCost)}{giveMissing ? ` · ${giveMissing} בלי עלות` : ''}</span><b className="neg">−{ils(writeoffCost + giveCost)}</b></div>
-          <div className="summary-card"><span>רווח סופי (אחרי עמלות סליקה, פחת וקד״מ)</span><b className={finalProfit >= 0 ? 'pos' : 'neg'}>{ils(finalProfit)}</b></div>
+          <div className="summary-card"><span>מוצרים שנלקחו מהמלאי בתשלום עלות ({takenUnits} יח׳, כולל מע״מ)</span><b className="pos">+{ils(takenPaid)}</b></div>
+          <div className="summary-card"><span>רווח סופי (אחרי עמלות סליקה, פחת וקד״מ, כולל מה ששולם על מוצרים שנלקחו)</span><b className={finalProfit >= 0 ? 'pos' : 'neg'}>{ils(finalProfit)}</b></div>
         </div>
         {missingCost > 0 && (
           <div className="cmp-sub" style={{ margin: '-4px 0 10px' }}>

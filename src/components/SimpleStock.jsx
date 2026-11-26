@@ -115,7 +115,7 @@ export default function SimpleStock({ q = '', category = '', onCount, all = fals
             <SortTh k="received" sort={sort} onSort={onSort}>נקלט בתעודות</SortTh>
             <SortTh k="saleValue" sort={sort} onSort={onSort} title="מחיר המוצר באתר (כולל מע״מ) × יחידות במלאי">שווי במכירה</SortTh>
             <SortTh k="costValue" sort={sort} onSort={onSort} title="עלות המוצר כולל מע״מ, אחרי הנחת ספק × יחידות במלאי">שווי בקנייה</SortTh>
-            {hasWriteoff && <SortTh k="writeoff" sort={sort} onSort={onSort} title="נשבר / נפל / אבד (חלון פחת)">פחת</SortTh>}
+            {hasWriteoff && <SortTh k="writeoff" sort={sort} onSort={onSort} title="פחת (נשבר / נפל / אבד) ומוצרים שנלקחו בעלות">פחת / נלקח</SortTh>}
             {hasAdjust && <SortTh k="adjust" sort={sort} onSort={onSort} title="ההפרש שנשמר בספירת מלאי">תיקון ספירה</SortTh>}
             <SortTh k="sku" sort={sort} onSort={onSort}>מק״ט</SortTh>
             {all && <SortTh k="stock" sort={sort} onSort={onSort}>מצב</SortTh>}

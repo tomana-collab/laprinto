@@ -33,6 +33,7 @@ export default function Inventory() {
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('instock')
   const [writeoffUnits, setWriteoffUnits] = useState(null) // יחידות שנרשמו כפחת
+  const [takenUnits, setTakenUnits] = useState(null) // יחידות שנלקחו בעלות
   const [allCount, setAllCount] = useState(null) // מוצרים בחלון "כל המוצרים"
   const [simpleCount, setSimpleCount] = useState(null) // מספר המוצרים בחלון "במלאי" (חישוב פשוט לפי מק"ט)
   const [q, setQ] = useState('')
@@ -110,6 +111,7 @@ export default function Inventory() {
     { key: 'unsold', label: 'במלאי, אף פעם לא נמכר', test: r => r.stock > 0 && r.sold_total === 0 },
     { key: 'low', label: 'מלאי נמוך (פחות מ-2)', test: r => r.stock > 0 && status(r).key === 'low' },
     { key: 'writeoff', label: 'פחת', test: () => false },
+    { key: 'taken', label: 'נלקח בעלות', test: () => false },
   ]
   // קטגוריה וחיפוש חלים על הכול, כך שגם המספרים על הכפתורים מתעדכנים
   const base = useMemo(() => (rows || []).filter(r => {
@@ -170,12 +172,12 @@ export default function Inventory() {
       <div className="status-filter">
         {FILTERS.map(f => (
           <button key={f.key} className={filter === f.key ? 'active' : ''} onClick={() => setFilter(f.key)}>
-            {f.label} <span style={{ opacity: 0.6 }}>({f.key === 'instock' && simpleCount !== null ? `${simpleCount} יח׳` : f.key === 'all' ? (allCount ?? '…') : f.key === 'writeoff' ? `${writeoffUnits ?? rows.reduce((t, r) => t + r.writeoff, 0)} יח׳` : base.filter(f.test).length})</span>
+            {f.label} <span style={{ opacity: 0.6 }}>({f.key === 'instock' && simpleCount !== null ? `${simpleCount} יח׳` : f.key === 'all' ? (allCount ?? '…') : f.key === 'writeoff' ? `${writeoffUnits ?? '…'} יח׳` : f.key === 'taken' ? `${takenUnits ?? '…'} יח׳` : base.filter(f.test).length})</span>
           </button>
         ))}
       </div>
 
-      {filter === 'writeoff' && !countMode ? <Writeoffs onCount={setWriteoffUnits} /> : filter === 'instock' && !countMode ? <SimpleStock q={q} category={category} onCount={(n, units) => setSimpleCount(units)} />
+      {filter === 'writeoff' && !countMode ? <Writeoffs onCount={setWriteoffUnits} /> : filter === 'taken' && !countMode ? <Writeoffs kind="נלקח בעלות" onCount={setTakenUnits} /> : filter === 'instock' && !countMode ? <SimpleStock q={q} category={category} onCount={(n, units) => setSimpleCount(units)} />
         : filter === 'all' && !countMode ? <SimpleStock all q={q} category={category} onCount={n => setAllCount(n)} /> : (
       <div className="table-wrap">
         <table className="data-table">

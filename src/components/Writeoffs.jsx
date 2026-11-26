@@ -12,7 +12,12 @@ import { loadSimpleStock } from './SimpleStock'
 const REASONS = ['נשבר', 'נפל', 'פגום מהספק', 'אבד', 'שימוש עצמי / מתנה']
 const ils = n => `₪${(Math.round(n * 100) / 100).toLocaleString('he-IL')}`
 
-export default function Writeoffs({ onCount }) {
+// kind: 'פחת' (הפסד לפי עלות) או 'נלקח בעלות' (לקחנו מהמלאי ושילמנו מחיר עלות: יורד מהמלאי ונספר כהכנסה ברווח)
+export const TAKEN = 'נלקח בעלות'
+const TAKEN_REASONS = ['לשימוש אישי', 'מתנה', 'לעסק']
+
+export default function Writeoffs({ onCount, kind = 'פחת' }) {
+  const taken = kind === TAKEN
   const { user } = useAuth()
   const { openRecord } = useNav()
   const [rows, setRows] = useState(null)
@@ -23,12 +28,13 @@ export default function Writeoffs({ onCount }) {
   const [picked, setPicked] = useState(null)
   const [qty, setQty] = useState(1)
   const [reason, setReason] = useState('')
+  const [price, setPrice] = useState('') // נלקח בעלות: כמה שולם ליחידה (ברירת מחדל: העלות)
   const [busy, setBusy] = useState(false)
   const [sort, onSort] = useSort({ key: 'date', dir: 'desc' })
 
   async function load() {
     const [w, st] = await Promise.all([
-      supabase.from('stock_writeoffs').select('*, products(name, sku)').order('created_at', { ascending: false }),
+      supabase.from('stock_writeoffs').select('*, products(name, sku)').eq('kind', kind).order('created_at', { ascending: false }),
       loadSimpleStock().catch(() => []),
     ])
     if (w.error) { setError(w.error.message); setRows([]); return }
@@ -48,32 +54,36 @@ export default function Writeoffs({ onCount }) {
     if (!picked) { setError('בחר מוצר'); return }
     if (!(n > 0)) { setError('כמות חייבת להיות גדולה מ-0'); return }
     if (n > picked.stock) { setError(`במלאי יש רק ${picked.stock} יחידות של המוצר הזה`); return }
-    if (!reason.trim()) { setError('כתוב סיבה'); return }
+    if (!taken && !reason.trim()) { setError('כתוב סיבה'); return }
+    if (taken && price !== '' && !(Number(price) >= 0)) { setError('המחיר ששולם לא תקין'); return }
     setBusy(true)
     // עלות ליחידה ברגע הרישום (כולל מע"מ, אחרי הנחת ספק), כדי ששווי ההפסד לא ישתנה אם המחיר יתעדכן אחר כך
     const { data: p } = await supabase.from('products').select('cost_with_vat').eq('id', picked.product_id).maybeSingle()
     const { error: e } = await supabase.from('stock_writeoffs').insert({
-      product_id: picked.product_id, quantity: n, reason: reason.trim(),
+      product_id: picked.product_id, quantity: n, reason: reason.trim(), kind,
       unit_cost: Number(p?.cost_with_vat) || 0, created_by: user?.email || '',
+      ...(taken ? { unit_price: price !== '' ? Number(price) : (Number(p?.cost_with_vat) || 0) } : {}),
     })
     setBusy(false)
     if (e) { setError(e.message); return }
-    setOpen(false); setPicked(null); setQ(''); setQty(1); setReason('')
+    setOpen(false); setPicked(null); setQ(''); setQty(1); setReason(''); setPrice('')
     load()
   }
   async function remove(r) {
-    if (!window.confirm(`למחוק את רישום הפחת של "${r.products?.name}"? ${r.quantity} יח׳ יחזרו למלאי.`)) return
+    if (!window.confirm(`למחוק את הרישום של "${r.products?.name}"? ${r.quantity} יח׳ יחזרו למלאי.`)) return
     const { error: e } = await supabase.from('stock_writeoffs').delete().eq('id', r.id)
     if (e) { setError(e.message); return }
     load()
   }
 
-  if (rows === null) return <div className="loading">טוען פחת...</div>
-  const total = rows.reduce((a, r) => a + Number(r.quantity) * Number(r.unit_cost), 0)
+  if (rows === null) return <div className="loading">טוען...</div>
+  const paidOf = r => Number(r.quantity) * (r.unit_price != null ? Number(r.unit_price) : Number(r.unit_cost))
+  const valueOf = r => taken ? paidOf(r) : Number(r.quantity) * Number(r.unit_cost)
+  const total = rows.reduce((a, r) => a + valueOf(r), 0)
   const units = rows.reduce((a, r) => a + Number(r.quantity), 0)
   const sorted = sortRows(rows, {
     date: r => r.created_at, name: r => r.products?.name || '', qty: r => Number(r.quantity),
-    reason: r => r.reason, value: r => Number(r.quantity) * Number(r.unit_cost),
+    reason: r => r.reason, value: valueOf,
   }, sort)
 
   return (
@@ -81,14 +91,16 @@ export default function Writeoffs({ onCount }) {
       {error && <div className="err-inline">{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         <div className="cmp-sub">
-          מוצר שנשבר, נפל, נפגם או אבד. כל רישום יורד מהמלאי ומהשווי בכל המערכת. {units} יח׳ בפחת · הפסד לפי עלות (כולל מע״מ): <b className={total ? 'neg' : ''}>{ils(total)}</b>
+          {taken
+            ? <>מוצרים שלקחנו מהמלאי ושילמנו עליהם מחיר עלות. כל רישום יורד מהמלאי, והתשלום נספר כהכנסה ברווח בדשבורד. {units} יח׳ · שולם: <b className={total ? 'pos' : ''}>{ils(total)}</b></>
+            : <>מוצר שנשבר, נפל, נפגם או אבד. כל רישום יורד מהמלאי ומהשווי בכל המערכת. {units} יח׳ בפחת · הפסד לפי עלות (כולל מע״מ): <b className={total ? 'neg' : ''}>{ils(total)}</b></>}
         </div>
-        {!open && <button className="btn-add" onClick={() => setOpen(true)}>➕ הוסף לפחת</button>}
+        {!open && <button className="btn-add" onClick={() => setOpen(true)}>{taken ? '➕ הוסף מוצר שנלקח' : '➕ הוסף לפחת'}</button>}
       </div>
 
       {open && (
         <div className="free-add">
-          <b>הוספה לפחת</b>
+          <b>{taken ? 'מוצר שנלקח מהמלאי בתשלום עלות' : 'הוספה לפחת'}</b>
           {picked ? (
             <div className="free-picked">
               <span>{picked.name}{picked.sku ? ` · ${picked.sku}` : ''} <span className="cmp-sub">(במלאי: {picked.stock})</span></span>
@@ -98,22 +110,23 @@ export default function Writeoffs({ onCount }) {
             <>
               <input autoFocus placeholder="חפש מוצר שבמלאי לפי שם או מק״ט" value={q} onChange={e => setQ(e.target.value)} />
               {matches.map(m => (
-                <button key={m.sku || m.product_id} type="button" className="free-option" onClick={() => setPicked(m)}>
+                <button key={m.sku || m.product_id} type="button" className="free-option" onClick={() => { setPicked(m); setPrice(m.cost ? String(m.cost) : '') }}>
                   {m.name} <span className="cmp-sub">{m.sku} · במלאי {m.stock}</span>
                 </button>
               ))}
               {needle && matches.length === 0 && <div className="cmp-sub">לא נמצא מוצר במלאי</div>}
             </>
           )}
-          <div className="free-field">סיבה
+          <div className="free-field">{taken ? 'למה / למי (לא חובה)' : 'סיבה'}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {REASONS.map(x => <button key={x} type="button" className={`cmp-tool ${reason === x ? 'ready-on' : ''}`} onClick={() => setReason(x)}>{x}</button>)}
+              {(taken ? TAKEN_REASONS : REASONS).map(x => <button key={x} type="button" className={`cmp-tool ${reason === x ? 'ready-on' : ''}`} onClick={() => setReason(x)}>{x}</button>)}
             </div>
-            <input value={reason} placeholder="או כתוב סיבה אחרת" onChange={e => setReason(e.target.value)} />
+            <input value={reason} placeholder={taken ? 'או כתוב הערה' : 'או כתוב סיבה אחרת'} onChange={e => setReason(e.target.value)} />
           </div>
           <div className="free-row">
             <label>כמות <input type="number" min="1" style={{ width: 80 }} value={qty} onChange={e => setQty(e.target.value)} /></label>
-            <button type="button" className="btn-add" disabled={busy} onClick={add}>{busy ? 'שומר…' : 'הוסף לפחת'}</button>
+            {taken && <label title="ברירת מחדל: עלות המוצר כולל מע״מ">שולם ליחידה (₪, כולל מע״מ) <input type="number" min="0" step="0.01" style={{ width: 100 }} value={price} placeholder="עלות" onChange={e => setPrice(e.target.value)} /></label>}
+            <button type="button" className="btn-add" disabled={busy} onClick={add}>{busy ? 'שומר…' : taken ? 'הוסף' : 'הוסף לפחת'}</button>
             <button type="button" className="cmp-tool" onClick={() => { setOpen(false); setPicked(null); setQ(''); setError('') }}>ביטול</button>
           </div>
         </div>
@@ -125,14 +138,15 @@ export default function Writeoffs({ onCount }) {
             <SortTh k="date" sort={sort} onSort={onSort}>תאריך</SortTh>
             <SortTh k="name" sort={sort} onSort={onSort}>מוצר</SortTh>
             <SortTh k="qty" sort={sort} onSort={onSort}>כמות</SortTh>
-            <SortTh k="reason" sort={sort} onSort={onSort}>סיבה</SortTh>
+            <SortTh k="reason" sort={sort} onSort={onSort}>{taken ? 'הערה' : 'סיבה'}</SortTh>
             <th title="עלות ליחידה כולל מע״מ, אחרי הנחת ספק, ברגע הרישום">עלות ליחידה</th>
-            <SortTh k="value" sort={sort} onSort={onSort}>הפסד</SortTh>
+            {taken && <th>שולם ליחידה</th>}
+            <SortTh k="value" sort={sort} onSort={onSort}>{taken ? 'שולם (הכנסה)' : 'הפסד'}</SortTh>
             <th>נרשם ע״י</th>
             <th></th>
           </tr></thead>
           <tbody>
-            {sorted.length === 0 && <tr><td className="empty-col" colSpan={8}>אין פחת</td></tr>}
+            {sorted.length === 0 && <tr><td className="empty-col" colSpan={taken ? 9 : 8}>{taken ? 'אין מוצרים שנלקחו' : 'אין פחת'}</td></tr>}
             {sorted.map(r => (
               <tr key={r.id} style={{ cursor: 'default' }}>
                 <td>{formatDateDots(r.created_at)}</td>
@@ -140,7 +154,10 @@ export default function Writeoffs({ onCount }) {
                 <td>{Number(r.quantity)}</td>
                 <td>{r.reason || '—'}</td>
                 <td>{Number(r.unit_cost) ? ils(Number(r.unit_cost)) : <span title="לא הוזנה עלות למוצר">—</span>}</td>
-                <td className="neg">{Number(r.unit_cost) ? `−${ils(Number(r.quantity) * Number(r.unit_cost))}` : '—'}</td>
+                {taken && <td>{ils(r.unit_price != null ? Number(r.unit_price) : Number(r.unit_cost))}</td>}
+                {taken
+                  ? <td className="pos">+{ils(paidOf(r))}</td>
+                  : <td className="neg">{Number(r.unit_cost) ? `−${ils(Number(r.quantity) * Number(r.unit_cost))}` : '—'}</td>}
                 <td className="cmp-sub">{r.created_by || '—'}</td>
                 <td><button type="button" className="cmp-tool" title="מחיקת הרישום: היחידות חוזרות למלאי" onClick={() => remove(r)}>🗑</button></td>
               </tr>
