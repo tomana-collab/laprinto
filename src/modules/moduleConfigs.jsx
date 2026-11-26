@@ -414,9 +414,26 @@ export const MODULES = {
       } },
       { key: 'customer_name', label: 'מזמין', render: row => <>{row.customer_name || '—'}{row.merged_orders && <span className="merge-tag" title={`הזמנה מאוחדת: ${row.merged_orders.join(' + ')}`}>🔗 {row.merged_orders.length}</span>}</> },
       // שיטת משלוח בקיצור (המלא במעבר עכבר). בהזמנה עם איסוף עצמי אין עיר
-      { key: 'shipping_method', label: 'משלוח', sortValue: row => shipShort(row.shipping_method), render: row => row.shipping_method
-        ? <span title={row.shipping_method + (row.shipping_company ? ` · ${row.shipping_company}` : '')} className={`ship-badge ${/איסוף/.test(row.shipping_method) ? 'ship-pickup' : 'ship-delivery'}`}>{shipShort(row.shipping_method)}{row.shipping_company ? ` · ${row.shipping_company}` : ''}</span>
-        : '—' },
+      // שיטת המשלוח מהאתר (תג) + חברת השליחויות (ב-CRM בלבד), ניתנת לשינוי ישר מהרשימה. קובעת את עלות המשלוח ברווח
+      { key: 'shipping_method', label: 'משלוח', sortValue: row => `${shipShort(row.shipping_method)} ${row.shipping_company || ''}`, render: (row, nav, extra, ui) => (
+        <div className="ship-cell">
+          {row.shipping_method
+            ? <span title={row.shipping_method} className={`ship-badge ${/איסוף/.test(row.shipping_method) ? 'ship-pickup' : 'ship-delivery'}`}>{shipShort(row.shipping_method)}</span>
+            : <span>—</span>}
+          {!/איסוף/.test(row.shipping_method || '') && (
+            <select className="ship-company-select" value={row.shipping_company || ''} title="חברת שליחויות (ב-CRM בלבד). קובעת את עלות המשלוח ברווח"
+              onClick={e => e.stopPropagation()}
+              onChange={async e => {
+                const { error } = await supabase.from('orders').update({ shipping_company: e.target.value }).in('id', row.line_ids || [row.id])
+                if (error) ui?.setError?.(error.message)
+                ui?.reload?.()
+              }}>
+              <option value="">חברת שליחויות…</option>
+              {SHIPPING_COMPANIES.map(c => <option key={c.key} value={c.label}>{c.label}</option>)}
+            </select>
+          )}
+        </div>
+      ) },
       { key: 'shipping_city', label: 'עיר', sortValue: row => cityOf(row), render: row => /איסוף/.test(row.shipping_method || '') ? '—' : (cityOf(row) || '—') },
       {
         // הזמנה עם מוצר אחד: שם המוצר. עם כמה מוצרים: "3 מוצרים", ולחיצה עליהם פותחת פירוט (עם מלאי) מתחת לשורה

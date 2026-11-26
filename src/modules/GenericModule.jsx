@@ -397,7 +397,7 @@ export default function GenericModule({ config, focusId = null }) {
                   <Fragment key={row.id}>
                   <tr onClick={() => setEditing(row)}>
                     {bulk && <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} /></td>}
-                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav, extra, { expanded: expanded.has(row.id), toggle: () => toggleExpand(row.id) }) : (row[c.key] ?? '—')}</td>)}
+                    {config.columns.map(c => <td key={c.key}>{c.render ? c.render(row, nav, extra, { expanded: expanded.has(row.id), toggle: () => toggleExpand(row.id), reload: load, setError }) : (row[c.key] ?? '—')}</td>)}
                     {config.statusField && (
                       <td onClick={e => e.stopPropagation()}>
                         <select value={row[config.statusField]} onChange={e => handleStatusChange(row.id, e.target.value)}>

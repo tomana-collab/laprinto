@@ -888,3 +888,8 @@ button.sidebar-brand:active{ transform:scale(.97); }
 :root[data-theme="dark"] .cheaper-note{ color:#FF9A88; }
 .cheaper-note.clickable{ cursor:pointer; text-decoration:underline; text-underline-offset:3px; text-decoration-color:color-mix(in srgb, currentColor 40%, transparent); }
 .cheaper-note.clickable:hover{ background:color-mix(in srgb, var(--coral) 22%, var(--paper)); }
+
+/* הזמנות: עמודת משלוח — תג שיטת המשלוח + בחירת חברת שליחויות */
+.ship-cell{ display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.data-table select.ship-company-select{ font-size:12px; padding:3px 6px; border-radius:6px; max-width:120px; font-weight:600; }
+@media (max-width:860px){ .ship-cell{ flex-direction:row; align-items:center; } }
