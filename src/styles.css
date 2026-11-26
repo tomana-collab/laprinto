@@ -880,3 +880,4 @@ button.sidebar-brand:active{ transform:scale(.97); }
 @media (max-width:860px){ .dt-time{ display:none; } }
 .taker-chip{ background:var(--paper); border:1px solid color-mix(in srgb, var(--teal) 30%, var(--line)); border-radius:999px; padding:4px 12px; font-size:13px; }
 .taker-chip b{ color:var(--teal); font-variant-numeric:tabular-nums; margin-inline-start:4px; }
+.dash-subhead{ font-size:14px !important; color:var(--ink-soft); margin:18px 0 10px !important; }

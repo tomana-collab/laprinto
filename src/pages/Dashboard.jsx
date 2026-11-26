@@ -199,11 +199,16 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+        {/* הכנסות · הוצאות · רווח בתקופה: הכנסות = מכירות באתר + מה ששולם על מוצרים שנלקחו בעלות; הוצאות = קליטת תעודות */}
+        <h3 className="dash-subhead">הכנסות · הוצאות · רווח</h3>
+        <div className="summary-row">
+          <div className="summary-card"><span>הכנסות: מכירות באתר {ils(ordersIncome)}{takenPaid ? ` + נלקח בעלות (ללא מע״מ) ${ils(takenPaid)}` : ' + נלקח בעלות ₪0'}</span><b className="pos">{ils(periodIncome)}</b></div>
+          <div className="summary-card"><span>הוצאות: קליטת תעודות בתקופה (כולל מע״מ)</span><b className="neg">−{ils(periodExpenses)}</b></div>
+          <div className="summary-card"><span>רווח: הכנסות פחות הוצאות</span><b className={periodBalance >= 0 ? 'pos' : 'neg'}>{ils(periodBalance)}</b></div>
+        </div>
         <div className="summary-row wide" style={{ marginBottom: 0 }}>
           <div className="summary-card"><span>סחורה במלאי שלא נמכרה — לפי עלות קנייה (כולל מע״מ){stockNoCost ? ` · ${stockNoCost} מוצרים בלי עלות` : ''}</span><b>{stock ? ils(stockCost) : '…'}</b></div>
           <div className="summary-card"><span>אותה סחורה לפי מחיר באתר</span><b>{stock ? ils(stockSale) : '…'}</b></div>
-          <div className="summary-card"><span>קליטת תעודות בתקופה (כולל מע״מ)</span><b className="neg">{ils(periodExpenses)}</b></div>
-          <div className="summary-card"><span>ששולם פחות קליטת תעודות</span><b className={periodBalance >= 0 ? 'pos' : 'neg'}>{ils(periodBalance)}</b></div>
         </div>
       </div>
 
