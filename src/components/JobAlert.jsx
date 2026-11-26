@@ -17,7 +17,9 @@ export default function JobAlert() {
         for (const r of data || []) if (!latest[r.job_type]) latest[r.job_type] = r
         const list = []
         const health = latest.health_check
-        if (health?.status === 'failed') for (const e of health.errors || []) list.push({ key: health.id + e.error, text: e.error, at: health.started_at })
+        // תקלה מבדיקת התקינות לא מוצגת אם המשימה רצה בהצלחה אחרי הבדיקה (למשל סנכרון ידני שהצליח)
+        const fixedSince = job => latest[job]?.status === 'success' && latest[job].started_at > health.started_at
+        if (health?.status === 'failed') for (const e of health.errors || []) if (!fixedSince(e.job)) list.push({ key: health.id + e.error, text: e.error, at: health.started_at })
         for (const t of ['wc_sync', 'price_scan']) {
           const r = latest[t]
           // כישלון חדש יותר מבדיקת התקינות האחרונה (או שעוד לא הייתה בדיקה)
