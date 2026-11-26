@@ -881,3 +881,6 @@ button.sidebar-brand:active{ transform:scale(.97); }
 .taker-chip{ background:var(--paper); border:1px solid color-mix(in srgb, var(--teal) 30%, var(--line)); border-radius:999px; padding:4px 12px; font-size:13px; }
 .taker-chip b{ color:var(--teal); font-variant-numeric:tabular-nums; margin-inline-start:4px; }
 .dash-subhead{ font-size:14px !important; color:var(--ink-soft); margin:18px 0 10px !important; }
+.head-month{ display:inline-flex; align-items:center; gap:8px; }
+.head-month input{ border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-family:'Assistant',sans-serif; font-size:13px; color:var(--ink); background:var(--paper); box-shadow:var(--shadow-sm); min-height:34px; }
+.head-month .link-btn{ font-size:12.5px; white-space:nowrap; }

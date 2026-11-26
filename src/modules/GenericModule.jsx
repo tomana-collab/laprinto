@@ -257,7 +257,14 @@ export default function GenericModule({ config, focusId = null }) {
     <div>
       <div className="module-head">
         <h2>{config.icon} {config.label}</h2>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* בחירת חודש: למעלה, ליד כפתור הייצוא */}
+          {(config.filters || []).filter(f => f.type === 'month').map(f => (
+            <span key={f.key} className="head-month">
+              <input type="month" title={f.label} value={filterValues[f.key] || ''} onChange={e => setFilter(f.key, e.target.value)} />
+              {filterValues[f.key] && <button type="button" className="link-btn" onClick={() => setFilter(f.key, '')}>{f.label}</button>}
+            </span>
+          ))}
           {config.isOrder && <ExportButtons sets={[
             { name: 'horaot', title: 'הזמנות', label: 'כל ההזמנות המוצגות', getData: () => ({
             headers: ['מס׳ הזמנה', 'תאריך כניסה', 'לקוח', 'טלפון', 'מוצר', 'מק״ט', 'כמות', 'מחיר ליחידה', 'סה״כ שורה', 'סטטוס הזמנה', 'סטטוס טיפול', 'לא לספק', 'כתובת משלוח', 'הערות'],
@@ -340,13 +347,6 @@ export default function GenericModule({ config, focusId = null }) {
                   <option key={v} value={v}>{f.labels?.[v] || v}</option>
                 ))}
               </select>
-            ) : f.type === 'month' ? (
-              <input
-                key={f.key}
-                type="month"
-                value={filterValues[f.key] || ''}
-                onChange={e => setFilter(f.key, e.target.value)}
-              />
             ) : null
           ))}
         </div>
