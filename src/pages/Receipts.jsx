@@ -324,9 +324,16 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
       if (!c || n < c.price) cheapest.set(i.product_id, { price: n, doc: r.doc_number, date: r.doc_date, supplier: r.suppliers?.name })
     }
   }
+  // אם אין תעודה זולה יותר — משווים גם למחיר הקנייה שמעודכן במוצר (לפני מע״מ, אחרי הנחת ספק)
   const cheaperElsewhere = it => {
-    const c = it.product_id && cheapest.get(it.product_id)
-    return c && netCost(it) > 0 && netCost(it) - c.price > 0.005 ? c : null
+    if (!it.product_id || !(netCost(it) > 0)) return null
+    const c = cheapest.get(it.product_id)
+    if (c && netCost(it) - c.price > 0.005) return c
+    const p = products.find(x => x.id === it.product_id)
+    const sys = p && Number(p.cost) > 0 ? Number(p.cost) * (1 - (Number(p.supplier_discount_percent) || 0) / 100) : 0
+    // בעריכת התעודה שממנה נקבע המחיר במוצר — לא משווים אותה לעצמה
+    const own = initial.id && (initial.stock_receipt_items || []).some(i => i.product_id === it.product_id && Math.abs(netCost(i) - sys) < 0.005)
+    return sys > 0 && !own && netCost(it) - sys > 0.005 ? { price: sys, system: true } : null
   }
   const [supplierId, setSupplierId] = useState(initial.supplier_id || '')
   const [docNumber, setDocNumber] = useState(initial.doc_number || '')
@@ -402,7 +409,7 @@ function ReceiptModal({ initial, products, suppliers, error, onCancel, onSave, o
                     onChange={e => pick(idx, e.target.value)} style={{ width: '100%' }} />
                   {it.text && !it.product_id && <small className="neg">לא נמצא מוצר — בחר מהרשימה</small>}
                   {cheaperElsewhere(it) && (() => { const c = cheaperElsewhere(it); return (
-                    <div className="cheaper-note">⚠ קיבלת כבר את המוצר הזה ביותר זול: {money(c.price)} לפני מע״מ{c.doc ? ` בתעודה ${c.doc}` : ''}{c.date ? ` (${formatDate(c.date)})` : ''}{c.supplier ? ` · ${c.supplier}` : ''} · כאן {money(netCost(it))}, יקר ב-{money(netCost(it) - c.price)}</div>
+                    <div className="cheaper-note">⚠ {c.system ? 'מחיר הקנייה שמעודכן במוצר זול יותר' : 'קיבלת כבר את המוצר הזה ביותר זול'}: {money(c.price)} לפני מע״מ{c.doc ? ` בתעודה ${c.doc}` : ''}{c.date ? ` (${formatDate(c.date)})` : ''}{c.supplier ? ` · ${c.supplier}` : ''} · כאן {money(netCost(it))}, יקר ב-{money(netCost(it) - c.price)}</div>
                   ) })()}
                   {it.hidden && <small className="neg">מוצר ראשי שפוצל לוריאציות — לא נספר במלאי. בחר את הוריאציה (לפי מק״ט).</small>}
                 </td>
