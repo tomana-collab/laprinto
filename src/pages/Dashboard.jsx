@@ -136,7 +136,9 @@ export default function Dashboard() {
   const grossProfit = paidKnown - cogs - shipCosts                            // מכר פחות עלות מוצרים ומשלוחים
   const fees = known.reduce((a, c) => a + c.fee, 0)                           // עמלת סליקה
   // רווח סופי (finalProfit, למטה): אחרי עמלות סליקה, ופחות עלות הפחת והקד"מ בתקופה
-  const periodIncome = periodOrders.reduce((a, c) => a + c.paid, 0)           // כל מה ששולם (כולל משלוח)
+  const ordersIncome = periodOrders.reduce((a, c) => a + c.paid, 0)           // כל מה ששולם בהזמנות (כולל משלוח)
+  // הכנסות = הזמנות + מה ששולם על מוצרים שנלקחו מהמלאי במחיר עלות (ללא מע״מ). ברווח הסופי זה נספר בנפרד (takenPaid), לא דרך כאן
+  const periodIncome = ordersIncome + takenPaid
   // הוצאות = קליטת תעודות ספק (כולל מע"מ) בתקופה
   const periodExpenses = (data.receipts || []).filter(r => { const d = String(r.doc_date || r.created_at || '').slice(0, 10); return !to || d < to })
     .reduce((a, r) => a + receiptsTotalWithVat([r], from), 0)
@@ -173,7 +175,7 @@ export default function Dashboard() {
           </div>
         )}
         <div className="summary-row wide">
-          <div className="summary-card"><span>סה״כ מכר: כל מה שהלקוחות שילמו ({periodOrders.length} הזמנות, כולל משלוח ומע״מ)</span><b className="pos">{ils(periodIncome)}</b></div>
+          <div className="summary-card"><span>סה״כ מכר: כל מה שהלקוחות שילמו ({periodOrders.length} הזמנות, כולל משלוח ומע״מ){takenPaid ? ` + נלקח בעלות ${ils(takenPaid)}` : ''}</span><b className="pos">{ils(periodIncome)}</b></div>
           <div className="summary-card"><span>עלות המוצרים שבהזמנות (כולל מע״מ, אחרי הנחת ספק)</span><b className="neg">−{ils(cogs)}</b></div>
           <div className="summary-card"><span>עלות משלוחים (לפי חברת המשלוחים; בלי חברה ₪{getShippingCost()})</span><b className="neg">−{ils(shipCosts)}</b></div>
           <div className="summary-card"><span>רווח על ההזמנות (מכר פחות עלות מוצרים ומשלוחים)</span><b className={grossProfit >= 0 ? 'pos' : 'neg'}>{ils(grossProfit)}</b></div>
